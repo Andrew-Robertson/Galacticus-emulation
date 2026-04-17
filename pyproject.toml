@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "galacticus-emu"
+version = "0.1.0"
+description = "Thin orchestration and emulation tooling for Galacticus."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["emcee", "matplotlib", "numpy", "pandas", "scikit-learn", "scipy"]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

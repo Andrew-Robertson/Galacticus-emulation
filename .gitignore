@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+.venv/
+venv/
+
+# Local config
+config/paths.toml
+
+# External repositories used during development
+Galacticus-dust-modelling/
+Galacticus-ParameterFiles/
+
+# Generated data
+data/manifests/*.json
+data/summaries/*.json
+runs/*
+!runs/.gitkeep
+*.hdf5
+.mplconfig/
+build/
+dist/
+*.egg-info/
+
+# macOS
+.DS_Store
