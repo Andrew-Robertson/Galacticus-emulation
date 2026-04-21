@@ -66,6 +66,7 @@ The top-level `scripts/` directory is intended to contain the main workflow entr
   - `generate_lhs_campaign.py`
   - `generate_trinity_lhs_campaign.py`
 - summary extraction:
+  - `extract_campaign_hdf5_groups.py`
   - `extract_shmr_summary.py`
   - `extract_trinity_summary.py`
   - `extract_trinity_mass_metallicity_summary.py`
@@ -83,6 +84,19 @@ The top-level `scripts/` directory is intended to contain the main workflow entr
 
 Plotting helpers now live under `scripts/plotting/`, and exploratory diagnostics such as mass-metallicity, `M-\sigma`, and Faber-Jackson checks live under `scripts/playground/`.
 Older or superseded workflow helpers that are not the recommended starting point live under `scripts/legacy/`.
+
+## HPC HDF5 Reduction
+
+For expensive Galacticus campaigns, the full `/Outputs` tree in each HDF5 file can be too large to copy back from an HPC. To mirror a campaign while excluding `/Outputs` and retaining lightweight top-level groups such as `/Build`, `/Parameters`, `/Version`, and `/analyses`, run:
+
+```bash
+python scripts/extract_campaign_hdf5_groups.py \
+  runs/campaigns/disk_feedback_velocity_1d_mass_function-mMax1e14_32 \
+  --output-root runs/campaigns/disk_feedback_velocity_1d_mass_function-mMax1e14_32_reduced \
+  --copy-sidecars
+```
+
+Add `--overwrite` to replace previously reduced files. The reduced campaign directory is the one intended to transfer back for emulator-building and plotting when the raw Galacticus outputs are too large.
 
 ## Quick Start
 
