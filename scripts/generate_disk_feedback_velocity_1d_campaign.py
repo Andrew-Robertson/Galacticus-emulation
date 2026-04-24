@@ -274,9 +274,17 @@ def main() -> None:
                     )
                     + "\n"
                 )
+                run_lines.extend(
+                    [
+                        'if [ -z "${GALACTICUS_EMU_ROOT:-}" ]; then',
+                        '  echo "GALACTICUS_EMU_ROOT is not set; needed for Halpha dust post-processing." >&2',
+                        "  exit 1",
+                        "fi",
+                    ]
+                )
                 dust_command_parts = [
                     "python",
-                    os.path.relpath(REPO_ROOT / "scripts" / "process_halpha_dust_evaluation.py", campaign_root),
+                    '"$GALACTICUS_EMU_ROOT/scripts/process_halpha_dust_evaluation.py"',
                     str(output_hdf5.relative_to(campaign_root)),
                     "--evaluation-id",
                     evaluation_id,
@@ -396,6 +404,9 @@ sbatch submit_slurm_array.sh
 Each task writes into its own directory under `evaluations/`.
 
 Halpha dust-LF post-processing is {("enabled" if args.enable_halpha_dust_postprocess else "disabled")} for this campaign.
+
+If Halpha dust post-processing is enabled, `run_eval.sh` expects `$GALACTICUS_EMU_ROOT` to point to the
+Galacticus-emulation repo root so it can find `scripts/process_halpha_dust_evaluation.py`.
 
 If you need your custom `galacticStructureSolver-Fixed.xml`, either regenerate this campaign with `--include-galactic-structure-solver-fixed` or place your preferred file in this campaign root and append it to the commands before `--output-processed-parameters`.
 """
