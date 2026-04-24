@@ -86,6 +86,26 @@ def parse_args() -> argparse.Namespace:
             "Can be supplied multiple times."
         ),
     )
+    parser.add_argument(
+        "--enable-halpha-dust-postprocess",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Run Halpha dust-LF post-processing at the end of each evaluation script.",
+    )
+    parser.add_argument("--halpha-dust-draws", type=int, default=32, help="Number of dust draws per evaluation.")
+    parser.add_argument(
+        "--halpha-dust-scatter-mode",
+        choices=["draw", "expected"],
+        default="expected",
+        help="How to treat attenuation scatter in the Halpha dust post-processing.",
+    )
+    parser.add_argument("--halpha-dust-base-seed", type=int, default=12345)
+    parser.add_argument("--halpha-dust-z-pivot", type=float, default=1.0)
+    parser.add_argument(
+        "--halpha-dust-output-dir-name",
+        default="halpha_dust",
+        help="Per-evaluation output directory name for Halpha dust post-processing products.",
+    )
     return parser.parse_args()
 
 
@@ -236,17 +256,48 @@ def main() -> None:
                 command_parts.append("galacticStructureSolver-Fixed.xml")
             command_parts.extend(["--output-processed-parameters", str(params_output.relative_to(campaign_root))])
             command = " ".join(command_parts)
-            run_script.write_text(
-                "\n".join(
-                    [
-                        "#!/bin/bash",
-                        "set -euo pipefail",
-                        'cd "$(dirname "$0")/../.."',
-                        command,
-                        "",
-                    ]
+            run_lines = [
+                "#!/bin/bash",
+                "set -euo pipefail",
+                'cd "$(dirname "$0")/../.."',
+                command,
+            ]
+            if args.enable_halpha_dust_postprocess:
+                dust_input_json = evaluation_dir / "dust_input_values.json"
+                dust_input_json.write_text(
+                    json.dumps(
+                        {
+                            "prior_quantile": float(quantile),
+                            "diskVelocityCharacteristic": float(velocity),
+                        },
+                        indent=2,
+                    )
+                    + "\n"
                 )
-            )
+                dust_command_parts = [
+                    "python",
+                    "scripts/process_halpha_dust_evaluation.py",
+                    str(output_hdf5.relative_to(campaign_root)),
+                    "--evaluation-id",
+                    evaluation_id,
+                    "--output-dir",
+                    str((evaluation_dir / args.halpha_dust_output_dir_name).relative_to(campaign_root)),
+                    "--n-dust-draws",
+                    str(args.halpha_dust_draws),
+                    "--base-seed",
+                    str(args.halpha_dust_base_seed),
+                    "--evaluation-index",
+                    str(index),
+                    "--scatter-mode",
+                    args.halpha_dust_scatter_mode,
+                    "--z-pivot",
+                    str(args.halpha_dust_z_pivot),
+                    "--input-json",
+                    str(dust_input_json.relative_to(campaign_root)),
+                ]
+                run_lines.append(" ".join(dust_command_parts))
+            run_lines.append("")
+            run_script.write_text("\n".join(run_lines))
             _make_executable(run_script)
             commands.append(f"bash {run_script.relative_to(campaign_root)}")
             writer.writerow([evaluation_id, f"{quantile:.17g}", f"{float(velocity):.17g}"])
@@ -297,6 +348,18 @@ def main() -> None:
                     },
                 },
                 "run_definition_changes": run_definition_changes,
+                "halpha_dust_postprocess": (
+                    {
+                        "enabled": True,
+                        "n_dust_draws": args.halpha_dust_draws,
+                        "scatter_mode": args.halpha_dust_scatter_mode,
+                        "base_seed": args.halpha_dust_base_seed,
+                        "z_pivot": args.halpha_dust_z_pivot,
+                        "output_dir_name": args.halpha_dust_output_dir_name,
+                    }
+                    if args.enable_halpha_dust_postprocess
+                    else {"enabled": False}
+                ),
                 "subsets": [size for size in (8, 16, args.n_eval) if size <= args.n_eval],
                 "notes": (
                     "Mass-function emulator-demo campaign centered on the gas-phase MZR+Mstar+Mbh MAP model. "
@@ -331,6 +394,8 @@ sbatch submit_slurm_array.sh
 ```
 
 Each task writes into its own directory under `evaluations/`.
+
+Halpha dust-LF post-processing is {("enabled" if args.enable_halpha_dust_postprocess else "disabled")} for this campaign.
 
 If you need your custom `galacticStructureSolver-Fixed.xml`, either regenerate this campaign with `--include-galactic-structure-solver-fixed` or place your preferred file in this campaign root and append it to the commands before `--output-processed-parameters`.
 """
