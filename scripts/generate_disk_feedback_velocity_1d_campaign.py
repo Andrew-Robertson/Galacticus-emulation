@@ -263,8 +263,8 @@ def main() -> None:
                 command,
             ]
             if args.enable_halpha_dust_postprocess:
-                dust_input_json = evaluation_dir / "dust_input_values.json"
-                dust_input_json.write_text(
+                galacticus_input_json = evaluation_dir / "galacticus_input_values.json"
+                galacticus_input_json.write_text(
                     json.dumps(
                         {
                             "prior_quantile": float(quantile),
@@ -293,7 +293,7 @@ def main() -> None:
                     "--z-pivot",
                     str(args.halpha_dust_z_pivot),
                     "--input-json",
-                    str(dust_input_json.relative_to(campaign_root)),
+                    str(galacticus_input_json.relative_to(campaign_root)),
                 ]
                 run_lines.append(" ".join(dust_command_parts))
             run_lines.append("")
