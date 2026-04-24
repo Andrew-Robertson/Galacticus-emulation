@@ -1,4 +1,4 @@
-"""GalacticusEmu package."""
+"""GalacticEmu package."""
 
 from .config import PathsConfig, load_paths_config
 from .campaign import CampaignDefinition, SlurmArrayDefinition, write_campaign

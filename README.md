@@ -1,4 +1,8 @@
-# GalacticusEmu
+<p align="center">
+  <img src="assets/galacticemu_logo.png" alt="GalacticEmu logo" width="520">
+</p>
+
+# GalacticEmu
 
 Thin orchestration and emulation tooling for running Galacticus model evaluations one parameter vector at a time.
 
@@ -6,7 +10,7 @@ Thin orchestration and emulation tooling for running Galacticus model evaluation
 
 This repository is intended to stay lightweight:
 
-- `GalacticusEmu` owns experiment state, manifests, summaries, emulator training, and adaptive model selection.
+- `GalacticEmu` owns experiment state, manifests, summaries, emulator training, and adaptive model selection.
 - `Galacticus-dust-modelling` remains the home for Galacticus-facing helper code, existing calibration workflows, and post-processing utilities.
 - `Galacticus-ParameterFiles` remains a separate repository of reusable Galacticus parameter files.
 
