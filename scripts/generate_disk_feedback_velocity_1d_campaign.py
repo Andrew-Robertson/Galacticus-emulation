@@ -276,7 +276,7 @@ def main() -> None:
                 )
                 dust_command_parts = [
                     "python",
-                    "scripts/process_halpha_dust_evaluation.py",
+                    os.path.relpath(REPO_ROOT / "scripts" / "process_halpha_dust_evaluation.py", campaign_root),
                     str(output_hdf5.relative_to(campaign_root)),
                     "--evaluation-id",
                     evaluation_id,
