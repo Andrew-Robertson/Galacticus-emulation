@@ -256,7 +256,12 @@ def main() -> None:
             continue
 
         eval_rng = np.random.default_rng(np.random.SeedSequence([args.base_seed, evaluation_index]))
+        print(f"[{processed + 1}/{len(evaluation_dirs)} evals] starting {evaluation_id}")
         for dust_draw_index in range(args.n_dust_draws):
+            print(
+                f"[{processed + 1}/{len(evaluation_dirs)} evals] "
+                f"{evaluation_id} dust draw {dust_draw_index + 1}/{args.n_dust_draws}"
+            )
             dust_params = _sample_dust_params(
                 priors,
                 z_pivot=args.z_pivot,
@@ -301,7 +306,7 @@ def main() -> None:
             table_rows.append(wide_row)
 
         processed += 1
-        print(f"[{processed}/{len(evaluation_dirs)}] processed {evaluation_id}")
+        print(f"[{processed}/{len(evaluation_dirs)} evals] finished {evaluation_id}")
 
     if not table_rows:
         raise FileNotFoundError(f"No readable {args.hdf5_filename} files found under {campaign_root / 'evaluations'}")
