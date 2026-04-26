@@ -17,8 +17,18 @@ import matplotlib.pyplot as plt
 import numpy as np
 import yaml
 
-SED_REPO_ROOT = REPO_ROOT.parent / "galacticus_sed_calculator"
-sys.path.insert(0, str(SED_REPO_ROOT / "galacticus_sed_calculator"))
+SED_REPO_ROOT = (
+    Path(os.environ["GALACTICUS_DUST_ROOT"]).expanduser().resolve()
+    if "GALACTICUS_DUST_ROOT" in os.environ
+    else (REPO_ROOT.parent / "galacticus_sed_calculator").resolve()
+)
+SED_PACKAGE_ROOT = SED_REPO_ROOT / "galacticus_sed_calculator"
+if not SED_PACKAGE_ROOT.exists():
+    raise FileNotFoundError(
+        "Could not find galacticus_sed_calculator package directory. "
+        "Set GALACTICUS_DUST_ROOT to the repo root containing galacticus_sed_calculator/."
+    )
+sys.path.insert(0, str(SED_PACKAGE_ROOT))
 
 from dust_attenuation import dust_attenuation_gb10_generalised  # type: ignore
 
