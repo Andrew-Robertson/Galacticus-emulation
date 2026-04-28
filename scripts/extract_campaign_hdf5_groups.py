@@ -14,6 +14,9 @@ DEFAULT_SIDECARS = (
     "commands.txt",
     "commands.sh",
     "submit_slurm_array.sh",
+    "commands_postprocess.txt",
+    "submit_slurm_array_postprocess.sh",
+    "postprocess_rescue_manifest.json",
     "subset_train_ids_n8.txt",
     "subset_train_ids_n16.txt",
     "subset_train_ids_n32.txt",
@@ -184,6 +187,16 @@ def _copy_if_present(source: Path, destination: Path, *, dry_run: bool) -> bool:
     return True
 
 
+def _copy_tree_if_present(source: Path, destination: Path, *, dry_run: bool) -> bool:
+    if not source.exists() or not source.is_dir():
+        return False
+    if dry_run:
+        return True
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(source, destination, dirs_exist_ok=True)
+    return True
+
+
 def _copy_sidecars(campaign_root: Path, output_root: Path, *, dry_run: bool) -> int:
     copied = 0
     for name in DEFAULT_SIDECARS:
@@ -200,6 +213,10 @@ def _copy_sidecars(campaign_root: Path, output_root: Path, *, dry_run: bool) -> 
             destination = output_root / "evaluations" / evaluation_dir.name / sidecar_name
             if _copy_if_present(source, destination, dry_run=dry_run):
                 copied += 1
+        halpha_dust_source = evaluation_dir / "halpha_dust"
+        halpha_dust_destination = output_root / "evaluations" / evaluation_dir.name / "halpha_dust"
+        if _copy_tree_if_present(halpha_dust_source, halpha_dust_destination, dry_run=dry_run):
+            copied += 1
     return copied
 
 
