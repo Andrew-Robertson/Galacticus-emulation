@@ -14,11 +14,25 @@ from .interactive_smf import bundle_meta as smf_bundle_meta
 from .interactive_smf import load_smf_bundle, predict_smf_bundle
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_SMF_BUNDLE_PATH = REPO_ROOT / "playing" / "interactive_smf_demo" / "smf_demo_bundle.joblib"
-DEFAULT_SMF_HTML_PATH = REPO_ROOT / "assets" / "interactive_smf_demo" / "index.html"
-DEFAULT_HALPHA_BUNDLE_PATH = REPO_ROOT / "playing" / "interactive_halpha_demo" / "halpha_demo_bundle_8draws.joblib"
-DEFAULT_HALPHA_HTML_PATH = REPO_ROOT / "assets" / "interactive_halpha_demo" / "index.html"
+def _default_project_root() -> Path:
+    candidates = []
+    env_root = os.environ.get("GALACTICUS_EMU_PROJECT_ROOT")
+    if env_root:
+        candidates.append(Path(env_root).expanduser())
+    candidates.append(Path.cwd())
+    candidates.append(Path(__file__).resolve().parents[2])
+    for candidate in candidates:
+        resolved = candidate.resolve()
+        if (resolved / "assets").exists() and (resolved / "playing").exists():
+            return resolved
+    return Path.cwd().resolve()
+
+
+PROJECT_ROOT = _default_project_root()
+DEFAULT_SMF_BUNDLE_PATH = PROJECT_ROOT / "playing" / "interactive_smf_demo" / "smf_demo_bundle.joblib"
+DEFAULT_SMF_HTML_PATH = PROJECT_ROOT / "assets" / "interactive_smf_demo" / "index.html"
+DEFAULT_HALPHA_BUNDLE_PATH = PROJECT_ROOT / "playing" / "interactive_halpha_demo" / "halpha_demo_bundle_8draws.joblib"
+DEFAULT_HALPHA_HTML_PATH = PROJECT_ROOT / "assets" / "interactive_halpha_demo" / "index.html"
 
 
 def _env_path(name: str, default: Path) -> Path:
