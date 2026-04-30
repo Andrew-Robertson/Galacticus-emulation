@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Interactive SMF Demo</title>
+  <style>
+    :root {
+      --bg: #f6f1e8;
+      --panel: #fffaf2;
+      --ink: #1f2a33;
+      --muted: #6f7a80;
+      --accent: #1f6f8b;
+      --accent-soft: rgba(31, 111, 139, 0.18);
+      --target: #111111;
+      --training: rgba(31, 42, 51, 0.10);
+      --grid: rgba(31, 42, 51, 0.14);
+      --border: rgba(31, 42, 51, 0.18);
+    }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at top left, #fff8ef 0%, var(--bg) 60%);
+      color: var(--ink);
+      font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+    }
+    .page {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 32px 24px 40px;
+    }
+    h1 {
+      font-size: 28px;
+      margin: 0 0 8px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+    .subhead {
+      color: var(--muted);
+      margin: 0 0 24px;
+      max-width: 760px;
+      line-height: 1.5;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      box-shadow: 0 10px 28px rgba(31, 42, 51, 0.06);
+    }
+    .controls {
+      padding: 20px 18px;
+      position: sticky;
+      top: 18px;
+    }
+    .plot-panel {
+      padding: 16px 16px 8px;
+    }
+    .slider-block + .slider-block {
+      margin-top: 18px;
+    }
+    .slider-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .slider-name {
+      font-size: 15px;
+      font-weight: 700;
+    }
+    .slider-value {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 13px;
+      color: var(--accent);
+    }
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+    .range-meta {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+    .meta-box {
+      margin-top: 18px;
+      padding: 14px 12px;
+      border-radius: 14px;
+      background: rgba(31, 111, 139, 0.05);
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--muted);
+    }
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      padding: 8px 6px 10px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .swatch {
+      width: 24px;
+      height: 3px;
+      border-radius: 999px;
+      background: var(--ink);
+    }
+    .swatch.training { background: rgba(31, 42, 51, 0.25); }
+    .swatch.target { background: var(--target); }
+    .swatch.prediction { background: var(--accent); }
+    .swatch.band {
+      height: 10px;
+      background: var(--accent-soft);
+      border: 1px solid rgba(31, 111, 139, 0.28);
+    }
+    #plot {
+      width: 100%;
+      aspect-ratio: 1.35 / 1;
+      display: block;
+    }
+    .footer {
+      font-size: 12px;
+      color: var(--muted);
+      padding: 0 6px 10px;
+    }
+    @media (max-width: 940px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+      .controls {
+        position: static;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1>Interactive Stellar Mass Function Demo</h1>
+    <p class="subhead">
+      A tiny proof-of-concept viewer for the 1D Galacticus GP emulator. Drag the slider and the
+      stellar mass function updates in real time using the saved Gaussian-process bundle.
+    </p>
+    <div class="layout">
+      <section class="panel controls">
+        <div id="sliders"></div>
+        <div class="meta-box" id="meta-box">Loading emulator metadata…</div>
+      </section>
+      <section class="panel plot-panel">
+        <svg id="plot" viewBox="0 0 860 620" preserveAspectRatio="xMidYMid meet"></svg>
+        <div class="legend">
+          <span class="legend-item"><span class="swatch training"></span> training SMFs</span>
+          <span class="legend-item"><span class="swatch target"></span> target SMF</span>
+          <span class="legend-item"><span class="swatch band"></span> GP 1σ band</span>
+          <span class="legend-item"><span class="swatch prediction"></span> GP prediction</span>
+        </div>
+        <div class="footer" id="status">Loading…</div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = window.API_BASE || "";
+    const svg = document.getElementById("plot");
+    const slidersContainer = document.getElementById("sliders");
+    const metaBox = document.getElementById("meta-box");
+    const statusEl = document.getElementById("status");
+    const NS = "http://www.w3.org/2000/svg";
+    const plotRect = { left: 84, right: 28, top: 32, bottom: 58 };
+    let meta = null;
+    let pendingTimer = null;
+    let latestRequestId = 0;
+
+    function createSvgElement(tag, attrs = {}) {
+      const node = document.createElementNS(NS, tag);
+      for (const [key, value] of Object.entries(attrs)) {
+        node.setAttribute(key, value);
+      }
+      return node;
+    }
+
+    function clear(node) {
+      while (node.firstChild) {
+        node.removeChild(node.firstChild);
+      }
+    }
+
+    function linePath(xs, ys, xScale, yScale) {
+      return xs.map((x, i) => `${i === 0 ? "M" : "L"} ${xScale(x).toFixed(2)} ${yScale(ys[i]).toFixed(2)}`).join(" ");
+    }
+
+    function bandPath(xs, lower, upper, xScale, yScale) {
+      const upperPath = xs.map((x, i) => `${i === 0 ? "M" : "L"} ${xScale(x).toFixed(2)} ${yScale(upper[i]).toFixed(2)}`).join(" ");
+      const lowerPath = xs.slice().reverse().map((x, i) => `L ${xScale(x).toFixed(2)} ${yScale(lower[lower.length - 1 - i]).toFixed(2)}`).join(" ");
+      return `${upperPath} ${lowerPath} Z`;
+    }
+
+    function drawPlot(prediction) {
+      clear(svg);
+      const width = svg.viewBox.baseVal.width;
+      const height = svg.viewBox.baseVal.height;
+      const innerWidth = width - plotRect.left - plotRect.right;
+      const innerHeight = height - plotRect.top - plotRect.bottom;
+      const xValues = meta.mass_bins_log10;
+      const yMin = meta.y_plot_min;
+      const yMax = meta.y_plot_max;
+      const xMin = Math.min(...xValues);
+      const xMax = Math.max(...xValues);
+
+      const xScale = (x) => plotRect.left + ((x - xMin) / (xMax - xMin)) * innerWidth;
+      const yScale = (y) => plotRect.top + ((yMax - y) / (yMax - yMin)) * innerHeight;
+
+      const background = createSvgElement("rect", {
+        x: plotRect.left,
+        y: plotRect.top,
+        width: innerWidth,
+        height: innerHeight,
+        fill: "#fffdf8",
+        stroke: "rgba(31,42,51,0.12)",
+        "stroke-width": "1",
+        rx: "14",
+      });
+      svg.appendChild(background);
+
+      for (let i = 0; i <= 5; i += 1) {
+        const yVal = yMin + ((yMax - yMin) * i) / 5;
+        const y = yScale(yVal);
+        svg.appendChild(createSvgElement("line", {
+          x1: plotRect.left,
+          y1: y,
+          x2: width - plotRect.right,
+          y2: y,
+          stroke: "rgba(31,42,51,0.12)",
+          "stroke-width": "1",
+        }));
+        const label = createSvgElement("text", {
+          x: plotRect.left - 12,
+          y: y + 4,
+          "text-anchor": "end",
+          "font-size": "12",
+          fill: "#6f7a80",
+        });
+        label.textContent = yVal.toFixed(1);
+        svg.appendChild(label);
+      }
+
+      const xTicks = xValues;
+      xTicks.forEach((xVal) => {
+        const x = xScale(xVal);
+        svg.appendChild(createSvgElement("line", {
+          x1: x,
+          y1: plotRect.top,
+          x2: x,
+          y2: height - plotRect.bottom,
+          stroke: "rgba(31,42,51,0.08)",
+          "stroke-width": "1",
+        }));
+        const label = createSvgElement("text", {
+          x: x,
+          y: height - plotRect.bottom + 22,
+          "text-anchor": "middle",
+          "font-size": "12",
+          fill: "#6f7a80",
+        });
+        label.textContent = xVal.toFixed(1);
+        svg.appendChild(label);
+      });
+
+      meta.y_train_log10.forEach((curve) => {
+        svg.appendChild(createSvgElement("path", {
+          d: linePath(xValues, curve, xScale, yScale),
+          fill: "none",
+          stroke: "rgba(31,42,51,0.10)",
+          "stroke-width": "1.1",
+        }));
+      });
+
+      const lower = prediction.y_pred_log10.map((v, i) => v - prediction.y_std_log10[i]);
+      const upper = prediction.y_pred_log10.map((v, i) => v + prediction.y_std_log10[i]);
+      svg.appendChild(createSvgElement("path", {
+        d: bandPath(xValues, lower, upper, xScale, yScale),
+        fill: "rgba(31, 111, 139, 0.18)",
+        stroke: "none",
+      }));
+
+      svg.appendChild(createSvgElement("path", {
+        d: linePath(xValues, meta.target_log10, xScale, yScale),
+        fill: "none",
+        stroke: "#111111",
+        "stroke-width": "2.2",
+        "stroke-dasharray": "8 6",
+      }));
+
+      svg.appendChild(createSvgElement("path", {
+        d: linePath(xValues, prediction.y_pred_log10, xScale, yScale),
+        fill: "none",
+        stroke: "#1f6f8b",
+        "stroke-width": "3",
+        "stroke-linecap": "round",
+      }));
+
+      const xAxis = createSvgElement("text", {
+        x: plotRect.left + innerWidth / 2,
+        y: height - 12,
+        "text-anchor": "middle",
+        "font-size": "14",
+        fill: "#1f2a33",
+      });
+      xAxis.textContent = meta.x_axis_label;
+      svg.appendChild(xAxis);
+
+      const yAxis = createSvgElement("text", {
+        x: 22,
+        y: plotRect.top + innerHeight / 2,
+        transform: `rotate(-90 22 ${plotRect.top + innerHeight / 2})`,
+        "text-anchor": "middle",
+        "font-size": "14",
+        fill: "#1f2a33",
+      });
+      yAxis.textContent = meta.y_axis_label;
+      svg.appendChild(yAxis);
+
+      const title = createSvgElement("text", {
+        x: plotRect.left,
+        y: 18,
+        "font-size": "16",
+        "font-weight": "700",
+        fill: "#1f2a33",
+      });
+      title.textContent = meta.observable_label;
+      svg.appendChild(title);
+    }
+
+    function currentParams() {
+      const params = {};
+      meta.input_columns.forEach((column) => {
+        const input = document.getElementById(`slider-${column}`);
+        params[column] = Number(input.value);
+      });
+      return params;
+    }
+
+    function refreshSliderLabels() {
+      meta.input_columns.forEach((column) => {
+        const input = document.getElementById(`slider-${column}`);
+        const label = document.getElementById(`value-${column}`);
+        label.textContent = Number(input.value).toFixed(3);
+      });
+    }
+
+    async function fetchPrediction() {
+      const params = currentParams();
+      const search = new URLSearchParams();
+      Object.entries(params).forEach(([key, value]) => search.set(key, String(value)));
+      const requestId = ++latestRequestId;
+      statusEl.textContent = "Updating prediction…";
+      const response = await fetch(`${API_BASE}/api/predict?${search.toString()}`);
+      const prediction = await response.json();
+      if (requestId !== latestRequestId) {
+        return;
+      }
+      drawPlot(prediction);
+      statusEl.textContent = `${meta.input_columns[0]} = ${prediction.params[meta.input_columns[0]].toFixed(3)}`;
+    }
+
+    function schedulePrediction() {
+      refreshSliderLabels();
+      if (pendingTimer !== null) {
+        clearTimeout(pendingTimer);
+      }
+      pendingTimer = setTimeout(() => {
+        fetchPrediction().catch((error) => {
+          statusEl.textContent = `Prediction failed: ${error}`;
+        });
+      }, 40);
+    }
+
+    function buildControls() {
+      clear(slidersContainer);
+      meta.input_columns.forEach((column) => {
+        const range = meta.input_ranges[column];
+        const wrapper = document.createElement("div");
+        wrapper.className = "slider-block";
+        wrapper.innerHTML = `
+          <div class="slider-head">
+            <span class="slider-name">${column}</span>
+            <span class="slider-value" id="value-${column}">${range.default.toFixed(3)}</span>
+          </div>
+          <input id="slider-${column}" type="range" min="${range.min}" max="${range.max}" step="${(range.max - range.min) / 400}" value="${range.default}">
+          <div class="range-meta">
+            <span>${range.min.toFixed(3)}</span>
+            <span>${range.max.toFixed(3)}</span>
+          </div>
+        `;
+        slidersContainer.appendChild(wrapper);
+        wrapper.querySelector("input").addEventListener("input", schedulePrediction);
+      });
+      metaBox.textContent = `${meta.observable_label}. ${meta.input_columns.length} slider(s), ${meta.y_train_log10.length} training SMFs, ${meta.mass_bins_log10.length} SMF bins.`;
+    }
+
+    async function bootstrap() {
+      const response = await fetch(`${API_BASE}/api/meta`);
+      meta = await response.json();
+      buildControls();
+      await fetchPrediction();
+    }
+
+    bootstrap().catch((error) => {
+      statusEl.textContent = `Failed to load demo: ${error}`;
+      metaBox.textContent = "Could not load emulator metadata.";
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: galacticus-emu-demo
+    runtime: python
+    plan: free
+    buildCommand: pip install .
+    startCommand: uvicorn galacticus_emu.interactive_fastapi:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: INTERACTIVE_SMF_BUNDLE_PATH
+        value: /opt/render/project/src/playing/interactive_smf_demo/smf_demo_bundle.joblib
