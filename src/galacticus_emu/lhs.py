@@ -28,6 +28,66 @@ class UniformPrior:
 
 
 @dataclass(frozen=True)
+class NormalPrior:
+    mean: float
+    sigma: float
+
+    def cdf(self, value: np.ndarray) -> np.ndarray:
+        z = (np.asarray(value, dtype=float) - self.mean) / self.sigma
+        return np.vectorize(_standard_normal_cdf)(z)
+
+    def inverse_cdf(self, quantile: np.ndarray) -> np.ndarray:
+        quantile = np.asarray(quantile, dtype=float)
+        z = np.array([_standard_normal_ppf(value) for value in quantile])
+        return self.mean + self.sigma * z
+
+    def logpdf(self, value: np.ndarray) -> np.ndarray:
+        value = np.asarray(value, dtype=float)
+        z = (value - self.mean) / self.sigma
+        return -math.log(self.sigma) - 0.5 * math.log(2.0 * math.pi) - 0.5 * z**2
+
+
+@dataclass(frozen=True)
+class TruncatedNormalPrior:
+    mean: float
+    sigma: float
+    lower: float
+    upper: float = math.inf
+
+    def cdf(self, value: np.ndarray) -> np.ndarray:
+        lower_cdf = _standard_normal_cdf((self.lower - self.mean) / self.sigma)
+        upper_cdf = _standard_normal_cdf((self.upper - self.mean) / self.sigma)
+        z = (np.asarray(value, dtype=float) - self.mean) / self.sigma
+        raw_cdf = np.vectorize(_standard_normal_cdf)(z)
+        return (raw_cdf - lower_cdf) / (upper_cdf - lower_cdf)
+
+    def inverse_cdf(self, quantile: np.ndarray) -> np.ndarray:
+        lower_cdf = _standard_normal_cdf((self.lower - self.mean) / self.sigma)
+        upper_cdf = _standard_normal_cdf((self.upper - self.mean) / self.sigma)
+        mapped = lower_cdf + np.asarray(quantile, dtype=float) * (upper_cdf - lower_cdf)
+        z = np.array([_standard_normal_ppf(value) for value in mapped])
+        return self.mean + self.sigma * z
+
+    def logpdf(self, value: np.ndarray) -> np.ndarray:
+        value = np.asarray(value, dtype=float)
+        lower_cdf = _standard_normal_cdf((self.lower - self.mean) / self.sigma)
+        upper_cdf = _standard_normal_cdf((self.upper - self.mean) / self.sigma)
+        norm = upper_cdf - lower_cdf
+        result = np.full_like(value, -np.inf, dtype=float)
+        mask = np.logical_and(value >= self.lower, value <= self.upper)
+        safe_value = value[mask]
+        if safe_value.size > 0:
+            z = (safe_value - self.mean) / self.sigma
+            result[mask] = (
+                -math.log(self.sigma)
+                - 0.5 * math.log(2.0 * math.pi)
+                - 0.5 * z**2
+                - math.log(norm)
+            )
+        return result
+
+
+@dataclass(frozen=True)
 class TruncatedLogNormalPrior:
     lower: float
     upper: float
@@ -75,7 +135,7 @@ class TruncatedLogNormalPrior:
 class ParameterSpec:
     path: str
     short_name: str
-    prior: UniformPrior | TruncatedLogNormalPrior
+    prior: UniformPrior | NormalPrior | TruncatedNormalPrior | TruncatedLogNormalPrior
 
 
 def _standard_normal_cdf(value: float) -> float:
