@@ -645,6 +645,7 @@ def train_observables_bundle(
             else "interactive_observables_bin_by_bin_gp"
         ),
         "campaign_root": str(campaign_root.resolve()),
+        "best_fit_params": _default_best_fit_params(campaign_root),
         "input_columns": list(INPUT_COLUMNS),
         "input_ranges": input_ranges,
         "evaluation_ids": samples["evaluation_id"].tolist(),
