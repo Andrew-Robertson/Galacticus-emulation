@@ -1,0 +1,664 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Interactive Multi-Observable Demo</title>
+  <script>
+    window.MathJax = {
+      tex: { inlineMath: [['\\(', '\\)'], ['$', '$']] },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+  <style>
+    :root {
+      --bg: #f4efe6;
+      --panel: #fffaf2;
+      --ink: #1d2630;
+      --muted: #69737c;
+      --accent: #a54b22;
+      --accent-soft: rgba(165, 75, 34, 0.15);
+      --target: #111111;
+      --training: rgba(29, 38, 48, 0.08);
+      --grid: rgba(29, 38, 48, 0.12);
+      --border: rgba(29, 38, 48, 0.14);
+    }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top right, #fff7eb 0%, rgba(255, 247, 235, 0) 34%),
+        linear-gradient(180deg, #f8f1e6 0%, #f3eee7 100%);
+      font-family: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+    }
+    .page {
+      max-width: 1460px;
+      margin: 0 auto;
+      padding: 24px 20px 34px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 30px;
+      letter-spacing: 0.01em;
+    }
+    .subhead {
+      margin: 0 0 20px;
+      max-width: 980px;
+      color: var(--muted);
+      line-height: 1.58;
+      font-size: 15px;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: 370px 1fr;
+      gap: 18px;
+      align-items: start;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      box-shadow: 0 14px 34px rgba(29, 38, 48, 0.06);
+    }
+    .controls {
+      padding: 18px 18px 14px;
+      position: sticky;
+      top: 14px;
+      max-height: calc(100vh - 36px);
+      overflow: auto;
+    }
+    .plots {
+      padding: 15px 14px 10px;
+    }
+    .plot-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    .plot-card {
+      border: 1px solid rgba(29, 38, 48, 0.10);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.35);
+      padding: 10px 10px 8px;
+    }
+    .plot-title {
+      font-size: 14px;
+      font-weight: 700;
+      margin: 2px 4px 6px;
+      color: var(--ink);
+    }
+    .plot-shell {
+      position: relative;
+    }
+    .axis-label-x {
+      position: absolute;
+      left: 66px;
+      right: 18px;
+      bottom: 0;
+      text-align: center;
+      font-size: 12px;
+      color: var(--ink);
+      pointer-events: none;
+    }
+    .axis-label-y {
+      position: absolute;
+      left: -8px;
+      top: 26px;
+      bottom: 44px;
+      width: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transform: rotate(-90deg);
+      transform-origin: center center;
+      font-size: 12px;
+      color: var(--ink);
+      pointer-events: none;
+    }
+    .slider-block + .slider-block {
+      margin-top: 16px;
+    }
+    .slider-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: baseline;
+      margin-bottom: 7px;
+    }
+    .slider-name {
+      font-weight: 700;
+      font-size: 14px;
+    }
+    .slider-value {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      color: var(--accent);
+    }
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+    .range-meta {
+      margin-top: 4px;
+      display: flex;
+      justify-content: space-between;
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .toggle-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin: 2px 0 18px;
+      padding: 12px 12px;
+      border-radius: 14px;
+      background: rgba(165, 75, 34, 0.06);
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .button-row {
+      display: flex;
+      gap: 10px;
+      margin: 0 0 16px;
+    }
+    .action-button {
+      appearance: none;
+      border: 1px solid rgba(165, 75, 34, 0.24);
+      background: rgba(165, 75, 34, 0.10);
+      color: var(--ink);
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .action-button:hover {
+      background: rgba(165, 75, 34, 0.16);
+    }
+    .action-button:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+    .meta-box {
+      margin-top: 18px;
+      padding: 12px 12px;
+      border-radius: 14px;
+      background: rgba(29, 38, 48, 0.05);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      padding: 10px 4px 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .swatch {
+      width: 24px;
+      height: 3px;
+      border-radius: 999px;
+      background: #333;
+    }
+    .swatch.training { background: rgba(29, 38, 48, 0.20); }
+    .swatch.target { background: var(--target); }
+    .swatch.prediction { background: var(--accent); }
+    .swatch.band {
+      height: 10px;
+      background: var(--accent-soft);
+      border: 1px solid rgba(165, 75, 34, 0.28);
+    }
+    svg {
+      width: 100%;
+      aspect-ratio: 1.17 / 1;
+      display: block;
+    }
+    .footer {
+      color: var(--muted);
+      font-size: 12px;
+      padding: 2px 4px 6px;
+    }
+    @media (max-width: 1080px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+      .controls {
+        position: static;
+        max-height: none;
+      }
+      .plot-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1>Interactive Multi-Observable Galacticus Demo</h1>
+    <p class="subhead">
+      A live view of the Sobol 19-parameter emulator trained on several low-redshift observables at once:
+      two stellar mass functions, star-forming and quiescent size relations, the Blanc mass-metallicity
+      relation, and the Robotham star-formation-rate function.
+    </p>
+    <div class="layout">
+      <section class="panel controls">
+        <div class="toggle-row">
+          <input id="toggle-uncertainty" type="checkbox" checked>
+          <label for="toggle-uncertainty">Show emulator uncertainty bands</label>
+        </div>
+        <div class="button-row">
+          <button class="action-button" id="best-fit-button" type="button" disabled>Set to combined best-fit</button>
+        </div>
+        <div id="sliders"></div>
+        <div class="meta-box" id="meta-box">Loading emulator metadata…</div>
+      </section>
+      <section class="panel plots">
+        <div class="plot-grid" id="plot-grid"></div>
+        <div class="legend">
+          <span class="legend-item"><span class="swatch training"></span> training preview</span>
+          <span class="legend-item"><span class="swatch target"></span> target data</span>
+          <span class="legend-item"><span class="swatch band"></span> GP 1σ band</span>
+          <span class="legend-item"><span class="swatch prediction"></span> GP prediction</span>
+        </div>
+        <div class="footer" id="status">Loading…</div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = window.API_BASE || "";
+    const NS = "http://www.w3.org/2000/svg";
+    const slidersContainer = document.getElementById("sliders");
+    const plotGrid = document.getElementById("plot-grid");
+    const metaBox = document.getElementById("meta-box");
+    const statusEl = document.getElementById("status");
+    const uncertaintyToggle = document.getElementById("toggle-uncertainty");
+    const bestFitButton = document.getElementById("best-fit-button");
+    const plotRect = { left: 66, right: 18, top: 26, bottom: 44 };
+    let meta = null;
+    let latestRequestId = 0;
+    let pendingTimer = null;
+    let lastPrediction = null;
+
+    function createSvgElement(tag, attrs = {}) {
+      const node = document.createElementNS(NS, tag);
+      for (const [key, value] of Object.entries(attrs)) {
+        node.setAttribute(key, value);
+      }
+      return node;
+    }
+
+    function clear(node) {
+      while (node.firstChild) node.removeChild(node.firstChild);
+    }
+
+    function mathWrap(texLike) {
+      let value = String(texLike || "").trim();
+      if (value.startsWith("log10(") && value.endsWith(")")) {
+        let inner = value.slice(6, -1).trim();
+        if (inner.startsWith("$") && inner.endsWith("$")) {
+          inner = inner.slice(1, -1);
+        }
+        value = `\\log_{10}\\left(${inner}\\right)`;
+      } else if (value.startsWith("$") && value.endsWith("$")) {
+        value = value.slice(1, -1);
+      }
+      return `\\(${value}\\)`;
+    }
+
+    function typesetMath(node) {
+      if (window.MathJax && window.MathJax.typesetPromise) {
+        window.MathJax.typesetPromise([node]).catch((error) => console.error(error));
+      }
+    }
+
+    function linePath(xs, ys, xScale, yScale) {
+      return xs.map((x, i) => `${i === 0 ? "M" : "L"} ${xScale(x).toFixed(2)} ${yScale(ys[i]).toFixed(2)}`).join(" ");
+    }
+
+    function bandPath(xs, lower, upper, xScale, yScale) {
+      const upperPath = xs.map((x, i) => `${i === 0 ? "M" : "L"} ${xScale(x).toFixed(2)} ${yScale(upper[i]).toFixed(2)}`).join(" ");
+      const lowerPath = xs.slice().reverse().map((x, i) => `L ${xScale(x).toFixed(2)} ${yScale(lower[lower.length - 1 - i]).toFixed(2)}`).join(" ");
+      return `${upperPath} ${lowerPath} Z`;
+    }
+
+    function currentParams() {
+      const params = {};
+      meta.input_columns.forEach((column) => {
+        const slider = document.getElementById(`slider-${column}`);
+        params[column] = actualFromSlider(column, Number(slider.value));
+      });
+      return params;
+    }
+
+    function sliderScale(column) {
+      return meta.input_ranges[column].scale || "linear";
+    }
+
+    function actualFromSlider(column, sliderValue) {
+      if (sliderScale(column) === "log") {
+        return 10 ** sliderValue;
+      }
+      return sliderValue;
+    }
+
+    function sliderFromActual(column, actualValue) {
+      if (sliderScale(column) === "log") {
+        return Math.log10(actualValue);
+      }
+      return actualValue;
+    }
+
+    function formatParamValue(value) {
+      const absValue = Math.abs(value);
+      if ((absValue > 0 && absValue < 1.0e-3) || absValue >= 1.0e4) {
+        return value.toExponential(2);
+      }
+      if (absValue >= 100) return value.toFixed(1);
+      if (absValue >= 10) return value.toFixed(2);
+      return value.toFixed(3);
+    }
+
+    function refreshSliderLabels() {
+      meta.input_columns.forEach((column) => {
+        const slider = document.getElementById(`slider-${column}`);
+        document.getElementById(`value-${column}`).textContent = formatParamValue(actualFromSlider(column, Number(slider.value)));
+      });
+    }
+
+    function applyParams(params) {
+      meta.input_columns.forEach((column) => {
+        if (Object.prototype.hasOwnProperty.call(params, column)) {
+          document.getElementById(`slider-${column}`).value = sliderFromActual(column, Number(params[column]));
+        }
+      });
+      refreshSliderLabels();
+      schedulePrediction();
+    }
+
+    function drawSinglePlot(svg, observableKey, prediction) {
+      clear(svg);
+      const width = svg.viewBox.baseVal.width;
+      const height = svg.viewBox.baseVal.height;
+      const innerWidth = width - plotRect.left - plotRect.right;
+      const innerHeight = height - plotRect.top - plotRect.bottom;
+      const metaBlock = meta.observables[observableKey];
+      const xValues = metaBlock.x_plot;
+      const xMin = Math.min(...xValues);
+      const xMax = Math.max(...xValues);
+      const yMin = metaBlock.y_plot_min;
+      const yMax = metaBlock.y_plot_max;
+      const xScale = (x) => plotRect.left + ((x - xMin) / (xMax - xMin)) * innerWidth;
+      const yScale = (y) => plotRect.top + ((yMax - y) / (yMax - yMin)) * innerHeight;
+      const clipId = `clip-${observableKey}`;
+
+      svg.appendChild(createSvgElement("rect", {
+        x: plotRect.left,
+        y: plotRect.top,
+        width: innerWidth,
+        height: innerHeight,
+        fill: "rgba(255,255,255,0.7)",
+        stroke: "rgba(29,38,48,0.08)"
+      }));
+
+      for (let i = 0; i <= 4; i += 1) {
+        const y = plotRect.top + (i / 4) * innerHeight;
+        svg.appendChild(createSvgElement("line", {
+          x1: plotRect.left,
+          x2: width - plotRect.right,
+          y1: y,
+          y2: y,
+          stroke: "rgba(29,38,48,0.10)",
+          "stroke-width": 1
+        }));
+      }
+      for (let i = 0; i <= 4; i += 1) {
+        const x = plotRect.left + (i / 4) * innerWidth;
+        svg.appendChild(createSvgElement("line", {
+          x1: x,
+          x2: x,
+          y1: plotRect.top,
+          y2: height - plotRect.bottom,
+          stroke: "rgba(29,38,48,0.08)",
+          "stroke-width": 1
+        }));
+      }
+
+      const defs = createSvgElement("defs");
+      const clipPath = createSvgElement("clipPath", { id: clipId });
+      clipPath.appendChild(createSvgElement("rect", {
+        x: plotRect.left,
+        y: plotRect.top,
+        width: innerWidth,
+        height: innerHeight
+      }));
+      defs.appendChild(clipPath);
+      svg.appendChild(defs);
+
+      const clippedGroup = createSvgElement("g", { "clip-path": `url(#${clipId})` });
+      svg.appendChild(clippedGroup);
+
+      metaBlock.y_train_preview.forEach((curve) => {
+        clippedGroup.appendChild(createSvgElement("path", {
+          d: linePath(xValues, curve, xScale, yScale),
+          fill: "none",
+          stroke: "rgba(29,38,48,0.12)",
+          "stroke-width": 1.1
+        }));
+      });
+
+      if (uncertaintyToggle.checked) {
+        const lower = prediction.y_pred_plot.map((value, index) => value - prediction.y_std_plot[index]);
+        const upper = prediction.y_pred_plot.map((value, index) => value + prediction.y_std_plot[index]);
+        clippedGroup.appendChild(createSvgElement("path", {
+          d: bandPath(xValues, lower, upper, xScale, yScale),
+          fill: "rgba(165,75,34,0.16)",
+          stroke: "none"
+        }));
+      }
+
+      clippedGroup.appendChild(createSvgElement("path", {
+        d: linePath(xValues, prediction.y_pred_plot, xScale, yScale),
+        fill: "none",
+        stroke: "#a54b22",
+        "stroke-width": 2.2
+      }));
+
+      clippedGroup.appendChild(createSvgElement("path", {
+        d: linePath(xValues, metaBlock.target_plot, xScale, yScale),
+        fill: "none",
+        stroke: "#111111",
+        "stroke-width": 2.0
+      }));
+
+      if (metaBlock.target_sigma_plot) {
+        metaBlock.target_plot.forEach((value, index) => {
+          const sigma = metaBlock.target_sigma_plot[index];
+          const cx = xScale(xValues[index]);
+          const yLow = yScale(value - sigma);
+          const yHigh = yScale(value + sigma);
+          clippedGroup.appendChild(createSvgElement("line", {
+            x1: cx,
+            x2: cx,
+            y1: yLow,
+            y2: yHigh,
+            stroke: "#111111",
+            "stroke-width": 1.2
+          }));
+        });
+      }
+      metaBlock.target_plot.forEach((value, index) => {
+        clippedGroup.appendChild(createSvgElement("circle", {
+          cx: xScale(xValues[index]),
+          cy: yScale(value),
+          r: 2.7,
+          fill: "#111111"
+        }));
+      });
+
+      for (let i = 0; i <= 4; i += 1) {
+        const frac = i / 4;
+        const xValue = xMin + frac * (xMax - xMin);
+        const yValue = yMin + frac * (yMax - yMin);
+
+        const xLabel = createSvgElement("text", {
+          x: plotRect.left + frac * innerWidth,
+          y: height - 12,
+          "text-anchor": i === 0 ? "start" : (i === 4 ? "end" : "middle"),
+          "font-size": "11",
+          fill: "#69737c"
+        });
+        xLabel.textContent = xValue.toFixed(2);
+        svg.appendChild(xLabel);
+
+        const yLabel = createSvgElement("text", {
+          x: 58,
+          y: plotRect.top + (1 - frac) * innerHeight + 4,
+          "text-anchor": "end",
+          "font-size": "11",
+          fill: "#69737c"
+        });
+        yLabel.textContent = yValue.toFixed(2);
+        svg.appendChild(yLabel);
+      }
+
+      const card = svg.closest(".plot-card");
+      if (card) {
+        const xLabelNode = card.querySelector(".axis-label-x");
+        const yLabelNode = card.querySelector(".axis-label-y");
+        if (xLabelNode) xLabelNode.innerHTML = mathWrap(metaBlock.x_axis_label);
+        if (yLabelNode) yLabelNode.innerHTML = mathWrap(metaBlock.y_axis_label);
+      }
+    }
+
+    function drawPlots(predictionPayload) {
+      meta.observable_keys.forEach((observableKey) => {
+        const svg = document.getElementById(`plot-${observableKey}`);
+        drawSinglePlot(svg, observableKey, predictionPayload.predictions[observableKey]);
+      });
+      typesetMath(plotGrid);
+    }
+
+    function renderControls() {
+      clear(slidersContainer);
+      meta.input_columns.forEach((column) => {
+        const range = meta.input_ranges[column];
+        const minSlider = sliderFromActual(column, range.min);
+        const maxSlider = sliderFromActual(column, range.max);
+        const defaultSlider = sliderFromActual(column, range.default);
+        const sliderStep = (maxSlider - minSlider) / 400;
+        const block = document.createElement("div");
+        block.className = "slider-block";
+        block.innerHTML = `
+          <div class="slider-head">
+            <div class="slider-name">${column}</div>
+            <div class="slider-value" id="value-${column}">${formatParamValue(range.default)}</div>
+          </div>
+          <input id="slider-${column}" type="range" min="${minSlider}" max="${maxSlider}" step="${sliderStep}" value="${defaultSlider}">
+          <div class="range-meta">
+            <span>${formatParamValue(range.min)}</span>
+            <span>${formatParamValue(range.max)}</span>
+          </div>
+        `;
+        slidersContainer.appendChild(block);
+      });
+
+      metaBox.innerHTML = `
+        <strong>${meta.observable_keys.length}</strong> observables from the 19D Sobol campaign.<br>
+        Prediction latency: ${meta.prediction_benchmark ? meta.prediction_benchmark.milliseconds_per_prediction.toFixed(2) + " ms" : "n/a"} per request.<br>
+        Training noise model: known per-bin variances passed through the GP <code>alpha</code> term.
+      `;
+      bestFitButton.disabled = !meta.best_fit_params;
+
+      meta.input_columns.forEach((column) => {
+        document.getElementById(`slider-${column}`).addEventListener("input", () => {
+          refreshSliderLabels();
+          schedulePrediction();
+        });
+        document.getElementById(`slider-${column}`).addEventListener("dblclick", () => {
+          if (meta.best_fit_params && Object.prototype.hasOwnProperty.call(meta.best_fit_params, column)) {
+            document.getElementById(`slider-${column}`).value = sliderFromActual(column, Number(meta.best_fit_params[column]));
+            refreshSliderLabels();
+            schedulePrediction();
+          }
+        });
+      });
+    }
+
+    function renderPlotsSkeleton() {
+      clear(plotGrid);
+      meta.observable_keys.forEach((observableKey) => {
+        const card = document.createElement("div");
+        card.className = "plot-card";
+        card.innerHTML = `
+          <div class="plot-title">${meta.observables[observableKey].label}</div>
+          <div class="plot-shell">
+            <div class="axis-label-y"></div>
+            <svg id="plot-${observableKey}" viewBox="0 0 430 340" aria-label="${meta.observables[observableKey].label}"></svg>
+            <div class="axis-label-x"></div>
+          </div>
+        `;
+        plotGrid.appendChild(card);
+      });
+    }
+
+    async function fetchPrediction() {
+      if (!meta) return;
+      const requestId = ++latestRequestId;
+      const params = new URLSearchParams(currentParams());
+      statusEl.textContent = "Updating prediction…";
+      const response = await fetch(`${API_BASE}/api/predict?${params.toString()}`);
+      const payload = await response.json();
+      if (requestId !== latestRequestId) return;
+      lastPrediction = payload;
+      drawPlots(payload);
+      statusEl.textContent = "Prediction updated.";
+    }
+
+    function schedulePrediction() {
+      if (pendingTimer !== null) {
+        window.clearTimeout(pendingTimer);
+      }
+      pendingTimer = window.setTimeout(() => {
+        fetchPrediction().catch((error) => {
+          console.error(error);
+          statusEl.textContent = `Prediction failed: ${error}`;
+        });
+      }, 70);
+    }
+
+    uncertaintyToggle.addEventListener("change", () => {
+      if (lastPrediction) drawPlots(lastPrediction);
+    });
+
+    bestFitButton.addEventListener("click", () => {
+      if (meta && meta.best_fit_params) {
+        applyParams(meta.best_fit_params);
+      }
+    });
+
+    async function init() {
+      const response = await fetch(`${API_BASE}/api/meta`);
+      meta = await response.json();
+      renderControls();
+      renderPlotsSkeleton();
+      refreshSliderLabels();
+      await fetchPrediction();
+    }
+
+    init().catch((error) => {
+      console.error(error);
+      statusEl.textContent = `Failed to initialize: ${error}`;
+      metaBox.textContent = "Could not load bundle metadata.";
+    });
+  </script>
+</body>
+</html>

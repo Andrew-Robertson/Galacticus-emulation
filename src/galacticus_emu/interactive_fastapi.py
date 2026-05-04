@@ -5,11 +5,13 @@ import html
 import os
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from .interactive_halpha import bundle_meta as halpha_bundle_meta
 from .interactive_halpha import load_halpha_bundle, predict_halpha_bundle
+from .interactive_observables import bundle_meta as observables_bundle_meta
+from .interactive_observables import load_observables_bundle, predict_observables_bundle
 from .interactive_smf import bundle_meta as smf_bundle_meta
 from .interactive_smf import load_smf_bundle, predict_smf_bundle
 
@@ -33,6 +35,8 @@ DEFAULT_SMF_BUNDLE_PATH = PROJECT_ROOT / "playing" / "interactive_smf_demo" / "s
 DEFAULT_SMF_HTML_PATH = PROJECT_ROOT / "assets" / "interactive_smf_demo" / "index.html"
 DEFAULT_HALPHA_BUNDLE_PATH = PROJECT_ROOT / "playing" / "interactive_halpha_demo" / "halpha_demo_bundle_8draws.joblib"
 DEFAULT_HALPHA_HTML_PATH = PROJECT_ROOT / "assets" / "interactive_halpha_demo" / "index.html"
+DEFAULT_OBSERVABLES_BUNDLE_PATH = PROJECT_ROOT / "playing" / "interactive_observables_demo" / "observables_demo_bundle.joblib"
+DEFAULT_OBSERVABLES_HTML_PATH = PROJECT_ROOT / "assets" / "interactive_observables_demo" / "index.html"
 
 
 def _env_path(name: str, default: Path) -> Path:
@@ -74,6 +78,16 @@ def halpha_html_path() -> Path:
 
 
 @lru_cache(maxsize=1)
+def observables_bundle_path() -> Path:
+    return _env_path("INTERACTIVE_OBSERVABLES_BUNDLE_PATH", DEFAULT_OBSERVABLES_BUNDLE_PATH)
+
+
+@lru_cache(maxsize=1)
+def observables_html_path() -> Path:
+    return _env_path("INTERACTIVE_OBSERVABLES_HTML_PATH", DEFAULT_OBSERVABLES_HTML_PATH)
+
+
+@lru_cache(maxsize=1)
 def get_smf_bundle() -> dict:
     path = smf_bundle_path()
     if not path.exists():
@@ -90,6 +104,14 @@ def get_halpha_bundle() -> dict:
 
 
 @lru_cache(maxsize=1)
+def get_observables_bundle() -> dict:
+    path = observables_bundle_path()
+    if not path.exists():
+        raise FileNotFoundError(path)
+    return load_observables_bundle(path)
+
+
+@lru_cache(maxsize=1)
 def get_smf_html() -> str:
     return _inject_api_base(smf_html_path().read_text(), "/smf")
 
@@ -99,10 +121,16 @@ def get_halpha_html() -> str:
     return _inject_api_base(halpha_html_path().read_text(), "/halpha")
 
 
+@lru_cache(maxsize=1)
+def get_observables_html() -> str:
+    return _inject_api_base(observables_html_path().read_text(), "/observables")
+
+
 def _enabled_demos() -> dict[str, bool]:
     return {
         "smf": _bundle_enabled(smf_bundle_path()),
         "halpha": _bundle_enabled(halpha_bundle_path()),
+        "observables": _bundle_enabled(observables_bundle_path()),
     }
 
 
@@ -127,12 +155,21 @@ def _landing_page() -> str:
             </a>
             """
         )
+    if demos["observables"]:
+        cards.append(
+            """
+            <a class="card" href="/observables">
+              <h2>Interactive Observable Suite</h2>
+              <p>Nineteen Galacticus sliders and live predictions for stellar mass functions, size relations, the MZR, and the SFR function.</p>
+            </a>
+            """
+        )
     if not cards:
         cards.append(
             """
             <div class="card disabled">
               <h2>No demo bundles found</h2>
-              <p>Set <code>INTERACTIVE_SMF_BUNDLE_PATH</code> or <code>INTERACTIVE_HALPHA_BUNDLE_PATH</code> to a saved bundle before starting the app.</p>
+              <p>Set one of <code>INTERACTIVE_SMF_BUNDLE_PATH</code>, <code>INTERACTIVE_HALPHA_BUNDLE_PATH</code>, or <code>INTERACTIVE_OBSERVABLES_BUNDLE_PATH</code> to a saved bundle before starting the app.</p>
             </div>
             """
         )
@@ -252,6 +289,7 @@ def create_app() -> FastAPI:
             "enabled_demos": _enabled_demos(),
             "smf_bundle_path": str(smf_bundle_path()),
             "halpha_bundle_path": str(halpha_bundle_path()),
+            "observables_bundle_path": str(observables_bundle_path()),
         }
 
     @app.get("/smf")
@@ -327,6 +365,47 @@ def create_app() -> FastAPI:
                     "y_std_log10": payload["y_std_log10"].tolist(),
                 }
                 for sobral_label, payload in prediction.items()
+            },
+        }
+
+    @app.get("/observables")
+    @app.get("/observables/", include_in_schema=False)
+    def observables_page():
+        if not _bundle_enabled(observables_bundle_path()):
+            raise HTTPException(status_code=404, detail="Observables demo bundle not available.")
+        return HTMLResponse(get_observables_html())
+
+    @app.get("/observables/api/meta")
+    def observables_meta():
+        try:
+            return JSONResponse(observables_bundle_meta(get_observables_bundle()))
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=f"Observables bundle not found: {exc}") from exc
+
+    @app.get("/observables/api/predict")
+    def observables_predict(request: Request):
+        try:
+            bundle = get_observables_bundle()
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=f"Observables bundle not found: {exc}") from exc
+
+        params = {}
+        for column in bundle["input_columns"]:
+            value = request.query_params.get(column)
+            if value is None:
+                raise HTTPException(status_code=422, detail=f"Missing required query parameter: {column}")
+            params[column] = float(value)
+
+        prediction = predict_observables_bundle(bundle, params)
+        return {
+            "params": params,
+            "predictions": {
+                observable_key: {
+                    "x_plot": payload["x_plot"].tolist(),
+                    "y_pred_plot": payload["y_pred_plot"].tolist(),
+                    "y_std_plot": payload["y_std_plot"].tolist(),
+                }
+                for observable_key, payload in prediction.items()
             },
         }
 
