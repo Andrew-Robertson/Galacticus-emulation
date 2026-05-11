@@ -63,6 +63,7 @@ FREE_PARAMETER_ORDER = [
     "barFractionAngularMomentumRetainedSpheroid",
     "BHefficiencyWind",
     "thinDiskMaximum",
+    "stellarPopulationMetalYield",
 ]
 
 
@@ -119,6 +120,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--time-limit", default="40:30:00")
     parser.add_argument("--partition", default="expansion")
     parser.add_argument("--qos", default="normal")
+    parser.add_argument(
+        "--galacticus-executable",
+        default="$GALACTICUS_EXEC_PATH/Galacticus.exe",
+        help="Galacticus executable path used in each generated run script.",
+    )
     parser.add_argument("--conda-env", default="galacticus-workspace")
     parser.add_argument(
         "--conda-profile",
@@ -158,6 +164,16 @@ def parse_args() -> argparse.Namespace:
         default="halpha_dust",
     )
     parser.add_argument(
+        "--enable-emission-line-dust-postprocess",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Run common-dust Halpha, [OII], and Hbeta+[OIII] LF post-processing at the end of each evaluation script.",
+    )
+    parser.add_argument(
+        "--emission-line-dust-output-dir-name",
+        default="emission_line_dust",
+    )
+    parser.add_argument(
         "--write-subset-command-scripts",
         action=argparse.BooleanOptionalAction,
         default=False,
@@ -175,7 +191,7 @@ def _free_parameter_specs(extra_fixed: list[str]) -> list[ParameterSpec]:
     if missing:
         raise ValueError(f"Unknown Galacticus parameter short_name(s) in FREE_PARAMETER_ORDER: {missing}")
     specs = [all_specs[name] for name in ordered_names]
-    expected_free = 24 - len(DEFAULT_FIXED_PARAMETERS) - len(set(extra_fixed))
+    expected_free = len(FREE_PARAMETER_ORDER) - len(fixed.intersection(FREE_PARAMETER_ORDER))
     if len(specs) != expected_free:
         raise ValueError(
             f"Expected {expected_free} free parameters after fixing {sorted(fixed)}, found {len(specs)}."
@@ -499,7 +515,7 @@ def main() -> None:
         _write_single_change(output_changes, "outputFileName", str(output_hdf5.relative_to(campaign_root)))
 
         command_parts = [
-            "$GALACTICUS_EXEC_PATH/Galacticus.exe",
+            args.galacticus_executable,
             *run_definition_changes,
             str(model_changes.relative_to(campaign_root)),
             str(output_changes.relative_to(campaign_root)),
@@ -513,8 +529,8 @@ def main() -> None:
             " ".join(command_parts),
         ]
 
-        if args.enable_halpha_dust_postprocess:
-            galacticus_input_json = evaluation_dir / "galacticus_input_values.json"
+        galacticus_input_json = evaluation_dir / "galacticus_input_values.json"
+        if args.enable_halpha_dust_postprocess or args.enable_emission_line_dust_postprocess:
             galacticus_input_json.write_text(
                 json.dumps(
                     {
@@ -526,6 +542,7 @@ def main() -> None:
                 )
                 + "\n"
             )
+        if args.enable_halpha_dust_postprocess:
             run_lines.extend(
                 [
                     'if [ -z "${GALACTICUS_EMU_ROOT:-}" ]; then',
@@ -541,6 +558,38 @@ def main() -> None:
                             evaluation_id,
                             "--output-dir",
                             str((evaluation_dir / args.halpha_dust_output_dir_name).relative_to(campaign_root)),
+                            "--n-dust-draws",
+                            str(args.halpha_dust_draws),
+                            "--base-seed",
+                            str(args.halpha_dust_base_seed),
+                            "--evaluation-index",
+                            str(index),
+                            "--scatter-mode",
+                            args.halpha_dust_scatter_mode,
+                            "--z-pivot",
+                            str(args.halpha_dust_z_pivot),
+                            "--input-json",
+                            str(galacticus_input_json.relative_to(campaign_root)),
+                        ]
+                    ),
+                ]
+            )
+        if args.enable_emission_line_dust_postprocess:
+            run_lines.extend(
+                [
+                    'if [ -z "${GALACTICUS_EMU_ROOT:-}" ]; then',
+                    '  echo "GALACTICUS_EMU_ROOT is not set; needed for emission-line dust post-processing." >&2',
+                    "  exit 1",
+                    "fi",
+                    " ".join(
+                        [
+                            "python",
+                            '"$GALACTICUS_EMU_ROOT/scripts/process_emission_line_dust_evaluation.py"',
+                            str(output_hdf5.relative_to(campaign_root)),
+                            "--evaluation-id",
+                            evaluation_id,
+                            "--output-dir",
+                            str((evaluation_dir / args.emission_line_dust_output_dir_name).relative_to(campaign_root)),
                             "--n-dust-draws",
                             str(args.halpha_dust_draws),
                             "--base-seed",
@@ -594,8 +643,12 @@ def main() -> None:
         "defaulted_template_parameter_short_names": [spec.short_name for spec in fixed_parameter_specs],
         "defaulted_template_parameters": [_parameter_spec_to_dict(spec) for spec in fixed_parameter_specs],
         "run_definition_changes": run_definition_changes,
+        "galacticus_executable": args.galacticus_executable,
         "halpha_dust_draws": args.halpha_dust_draws,
         "halpha_dust_scatter_mode": args.halpha_dust_scatter_mode,
+        "halpha_dust_postprocess_enabled": args.enable_halpha_dust_postprocess,
+        "emission_line_dust_postprocess_enabled": args.enable_emission_line_dust_postprocess,
+        "emission_line_dust_output_dir_name": args.emission_line_dust_output_dir_name,
     }
     (campaign_root / "campaign_design.json").write_text(json.dumps(campaign_summary, indent=2) + "\n")
     _write_command_log(campaign_root, args)
