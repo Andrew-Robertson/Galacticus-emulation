@@ -246,10 +246,11 @@ def _lf_from_expected_scatter(
     redshift: float,
     dust_params: dict[str, Any],
     log10_edges: np.ndarray,
-) -> np.ndarray:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     valid = np.isfinite(luminosities) & np.isfinite(stellar_mass) & np.isfinite(weights) & (luminosities > 0.0) & (stellar_mass > 0.0)
     if not np.any(valid):
-        return np.zeros(log10_edges.size - 1, dtype=float)
+        zeros = np.zeros(log10_edges.size - 1, dtype=float)
+        return zeros, zeros, zeros
 
     lum = luminosities[valid]
     mstar = stellar_mass[valid]
@@ -268,23 +269,42 @@ def _lf_from_expected_scatter(
         shifted = log10_lum - 0.4 * A0
         return _lf_from_luminosities(10.0 ** shifted, w, log10_edges)
 
-    probs = np.zeros(log10_edges.size - 1, dtype=float)
+    normalization = np.diff(log10_edges) * np.log(10.0)
+    counts = np.zeros(log10_edges.size - 1, dtype=float)
+    variance_conservative_counts = np.zeros_like(counts)
+    variance_smoothed_counts = np.zeros_like(counts)
     p_nonpos = _normal_cdf((-A0) / sigma_A)
 
     for bin_index, (lo, hi) in enumerate(zip(log10_edges[:-1], log10_edges[1:], strict=True)):
         # Point mass from the clipped A<=0 part: no attenuation, so luminosity remains intrinsic.
         point_mask = (log10_lum >= lo) & (log10_lum < hi)
-        contribution = np.sum(w[point_mask] * p_nonpos[point_mask])
+        p_bin = np.zeros_like(w)
+        p_bin[point_mask] += p_nonpos[point_mask]
 
         # Continuous part from A>0, mapped from attenuation magnitudes into observed-logL bins.
         lower_A = np.maximum(0.0, (log10_lum - hi) / 0.4)
         upper_A = np.maximum(0.0, (log10_lum - lo) / 0.4)
         cdf_upper = _normal_cdf((upper_A - A0) / sigma_A)
         cdf_lower = _normal_cdf((lower_A - A0) / sigma_A)
-        contribution += np.sum(w * np.maximum(cdf_upper - cdf_lower, 0.0))
-        probs[bin_index] = contribution
+        p_bin += np.maximum(cdf_upper - cdf_lower, 0.0)
+        p_bin = np.clip(p_bin, 0.0, 1.0)
 
-    return probs / (np.diff(log10_edges) * np.log(10.0))
+        weighted_probabilities = w * p_bin
+        counts[bin_index] = np.sum(weighted_probabilities)
+        variance_conservative_counts[bin_index] = np.sum((w**2) * p_bin)
+        variance_smoothed_counts[bin_index] = np.sum(weighted_probabilities**2)
+
+    return (
+        counts / normalization,
+        variance_conservative_counts / normalization**2,
+        variance_smoothed_counts / normalization**2,
+    )
+
+
+def _log10_std_from_linear(value: float, std: float) -> float:
+    if not np.isfinite(value) or not np.isfinite(std) or value <= 0.0:
+        return float("nan")
+    return float(std / (value * np.log(10.0)))
 
 
 def _sobral_bin_edges(log10_centers: np.ndarray) -> np.ndarray:
@@ -295,10 +315,13 @@ def _sobral_bin_edges(log10_centers: np.ndarray) -> np.ndarray:
     return edges
 
 
-def _lf_from_luminosities(luminosities: np.ndarray, weights: np.ndarray, log10_edges: np.ndarray) -> np.ndarray:
+def _lf_from_luminosities(luminosities: np.ndarray, weights: np.ndarray, log10_edges: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     valid = np.isfinite(luminosities) & np.isfinite(weights) & (luminosities > 0.0)
     counts, _ = np.histogram(np.log10(luminosities[valid]), bins=log10_edges, weights=weights[valid])
-    return counts / (np.diff(log10_edges) * np.log(10.0))
+    variance_counts, _ = np.histogram(np.log10(luminosities[valid]), bins=log10_edges, weights=weights[valid] ** 2)
+    normalization = np.diff(log10_edges) * np.log(10.0)
+    variance = variance_counts / normalization**2
+    return counts / normalization, variance, variance
 
 
 def _plot(results: list[dict[str, Any]], output_path: Path) -> None:
@@ -372,7 +395,7 @@ def main() -> None:
             case_lfs: dict[str, np.ndarray] = {}
             for case in cases:
                 if case.get("scatter_mode") == "expected":
-                    lf = _lf_from_expected_scatter(
+                    lf, variance_conservative, variance_smoothed = _lf_from_expected_scatter(
                         intrinsic_luminosity,
                         stellar_mass,
                         weights,
@@ -386,9 +409,13 @@ def main() -> None:
                         redshift,
                         case,
                     )
-                    lf = _lf_from_luminosities(lum, weights, log10_edges)
+                    lf, variance_conservative, variance_smoothed = _lf_from_luminosities(lum, weights, log10_edges)
                 case_lfs[case["label"]] = lf
-                for center, value in zip(log10_centers, lf, strict=True):
+                std_conservative = np.sqrt(np.clip(variance_conservative, 0.0, None))
+                std_smoothed = np.sqrt(np.clip(variance_smoothed, 0.0, None))
+                for bin_index, (center, value, sigma_conservative, sigma_smoothed) in enumerate(
+                    zip(log10_centers, lf, std_conservative, std_smoothed, strict=True)
+                ):
                     rows.append(
                         {
                             "output_name": output_name,
@@ -396,8 +423,19 @@ def main() -> None:
                             "redshift": redshift,
                             "analysis_name": analysis_name,
                             "dust_case": case["label"],
+                            "bin_index": int(bin_index),
                             "log10_luminosity_center": float(center),
                             "dn_dlnL_mpc3": float(value),
+                            "dn_dlnL_mpc3_shot_noise_std_conservative": float(sigma_conservative),
+                            "dn_dlnL_mpc3_shot_noise_std_smoothed_expectation": float(sigma_smoothed),
+                            "log10_dn_dlnL_shot_noise_std_conservative": _log10_std_from_linear(
+                                float(value),
+                                float(sigma_conservative),
+                            ),
+                            "log10_dn_dlnL_shot_noise_std_smoothed_expectation": _log10_std_from_linear(
+                                float(value),
+                                float(sigma_smoothed),
+                            ),
                         }
                     )
             plot_results.append(

@@ -22,6 +22,7 @@ from calculate_halpha_dust_lf_grid import (  # type: ignore
     _intrinsic_halpha,
     _lf_from_expected_scatter,
     _lf_from_luminosities,
+    _log10_std_from_linear,
     _sobral_bin_edges,
 )
 from process_halpha_dust_campaign import _load_dust_priors, _sample_dust_params  # type: ignore
@@ -91,7 +92,7 @@ def _compute_case_lfs(
             log10_edges = _sobral_bin_edges(log10_centers)
 
             if dust_case["scatter_mode"] == "expected":
-                lf = _lf_from_expected_scatter(
+                lf, variance_conservative, variance_smoothed = _lf_from_expected_scatter(
                     intrinsic_luminosity,
                     stellar_mass,
                     weights,
@@ -101,13 +102,16 @@ def _compute_case_lfs(
                 )
             else:
                 luminosity = _attenuated_halpha(output_group, redshift, dust_case)
-                lf = _lf_from_luminosities(luminosity, weights, log10_edges)
+                lf, variance_conservative, variance_smoothed = _lf_from_luminosities(luminosity, weights, log10_edges)
+
+            std_conservative = np.sqrt(np.clip(variance_conservative, 0.0, None))
+            std_smoothed = np.sqrt(np.clip(variance_smoothed, 0.0, None))
 
             target_lf = np.asarray(analysis_group["luminosityFunctionTarget"][...], dtype=float)
             target_cov = np.asarray(analysis_group["luminosityFunctionCovarianceTarget"][...], dtype=float)
             target_std = np.sqrt(np.clip(np.diag(target_cov), 0.0, None))
-            for bin_index, (center, value, target, target_sigma) in enumerate(
-                zip(log10_centers, lf, target_lf, target_std, strict=True)
+            for bin_index, (center, value, sigma_conservative, sigma_smoothed, target, target_sigma) in enumerate(
+                zip(log10_centers, lf, std_conservative, std_smoothed, target_lf, target_std, strict=True)
             ):
                 output_rows.append(
                     {
@@ -118,6 +122,16 @@ def _compute_case_lfs(
                         "bin_index": int(bin_index),
                         "log10_luminosity_center": float(center),
                         "dn_dlnL_mpc3": float(value),
+                        "dn_dlnL_mpc3_shot_noise_std_conservative": float(sigma_conservative),
+                        "dn_dlnL_mpc3_shot_noise_std_smoothed_expectation": float(sigma_smoothed),
+                        "log10_dn_dlnL_shot_noise_std_conservative": _log10_std_from_linear(
+                            float(value),
+                            float(sigma_conservative),
+                        ),
+                        "log10_dn_dlnL_shot_noise_std_smoothed_expectation": _log10_std_from_linear(
+                            float(value),
+                            float(sigma_smoothed),
+                        ),
                         "target_dn_dlnL_mpc3": float(target),
                         "target_std_dn_dlnL_mpc3": float(target_sigma),
                     }
@@ -183,6 +197,18 @@ def main() -> None:
             lf_rows.append(merged)
             output_column = f"halpha_sobral_{row['sobral_label'].lower()}_bin{row['bin_index']}"
             wide_row[output_column] = row["dn_dlnL_mpc3"]
+            wide_row[f"{output_column}_shot_noise_std_conservative"] = row[
+                "dn_dlnL_mpc3_shot_noise_std_conservative"
+            ]
+            wide_row[f"{output_column}_shot_noise_std_smoothed_expectation"] = row[
+                "dn_dlnL_mpc3_shot_noise_std_smoothed_expectation"
+            ]
+            wide_row[f"{output_column}_shot_noise_log10_std_conservative"] = row[
+                "log10_dn_dlnL_shot_noise_std_conservative"
+            ]
+            wide_row[f"{output_column}_shot_noise_log10_std_smoothed_expectation"] = row[
+                "log10_dn_dlnL_shot_noise_std_smoothed_expectation"
+            ]
             wide_row[f"{output_column}_target"] = row["target_dn_dlnL_mpc3"]
             wide_row[f"{output_column}_target_std"] = row["target_std_dn_dlnL_mpc3"]
         emulator_rows.append(wide_row)
