@@ -29,10 +29,10 @@ from calculate_halpha_dust_lf_grid import (  # type: ignore
 
 
 DEFAULT_DUST_PRIORS = {
-    "delta_0": {"distribution": "normal", "mean": 0.0, "sigma": 1.0},
-    "delta_z": {"distribution": "normal", "mean": 0.0, "sigma": 1.0},
-    "delta_M": {"distribution": "normal", "mean": 0.0, "sigma": 1.0},
-    "delta_Mz": {"distribution": "normal", "mean": 0.0, "sigma": 1.0},
+    "delta_0": {"distribution": "normal", "mean": 0.0, "sigma": 0.5},
+    "delta_z": {"distribution": "normal", "mean": 0.0, "sigma": 0.5},
+    "delta_M": {"distribution": "normal", "mean": 0.0, "sigma": 0.5},
+    "delta_Mz": {"distribution": "normal", "mean": 0.0, "sigma": 0.5},
     "attenuation_scatter": {"distribution": "truncated_normal", "mean": 0.25, "sigma": 0.1, "lower": 0.0},
 }
 
