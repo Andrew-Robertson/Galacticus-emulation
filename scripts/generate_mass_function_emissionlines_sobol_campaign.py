@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import argparse
 import csv
+from dataclasses import fields
 import json
 from math import log2
 from pathlib import Path
+import shlex
+import shutil
 import stat
 import sys
 import xml.etree.ElementTree as ET
@@ -83,22 +86,33 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--seed", type=int, default=42, help="Sobol scrambling seed.")
     parser.add_argument(
+        "--model-changes-template",
         "--base-model-changes",
+        dest="model_changes_template",
         default=(
             "runs/campaigns/lhs_trinity_moreparams_512/"
             "emulator_mcmc_four_mean_families_no1e11_mbh_plus_mzr_z0_upper_gas/"
             "maximum_a_posteriori_model_changes.xml"
         ),
-        help="Base model changes file, relative to the repo root unless absolute.",
+        help=(
+            "Template model changes XML, relative to the repo root unless absolute. "
+            "Sobol-varied paths are overwritten and defaulted template paths are removed."
+        ),
     )
     parser.add_argument(
         "--fixed-parameter",
         action="append",
         default=[],
         help=(
-            "Additional Galacticus parameter short_name to hold fixed at the base-model value. "
+            "Additional Galacticus parameter short_name to default by removing it from the template XML. "
             "Can be supplied multiple times."
         ),
+    )
+    parser.add_argument(
+        "--overwrite-campaign",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Delete an existing campaign directory before writing new artifacts.",
     )
     parser.add_argument("--cpus-per-task", type=int, default=16)
     parser.add_argument("--mem-per-cpu", default="8G")
@@ -142,6 +156,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--halpha-dust-output-dir-name",
         default="halpha_dust",
+    )
+    parser.add_argument(
+        "--write-subset-command-scripts",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Also write commands_first_N.{txt,sh} helper files for common training subset sizes.",
     )
     return parser.parse_args()
 
@@ -365,13 +385,63 @@ def _write_subset_command_scripts(campaign_root: Path, n_eval: int) -> None:
         _make_executable(subset_script)
 
 
+def _prior_to_dict(prior: object) -> dict[str, object]:
+    return {
+        "class": type(prior).__name__,
+        "parameters": {field.name: getattr(prior, field.name) for field in fields(prior)},
+    }
+
+
+def _parameter_spec_to_dict(spec: ParameterSpec) -> dict[str, object]:
+    return {
+        "short_name": spec.short_name,
+        "path": spec.path,
+        "prior": _prior_to_dict(spec.prior),
+    }
+
+
+def _write_command_log(campaign_root: Path, args: argparse.Namespace) -> None:
+    command_line = "python " + shlex.join(sys.argv)
+    lines = [
+        "# Command Log",
+        "",
+        f"Campaign: `{args.campaign_name}`",
+        "",
+        "## Build Command",
+        "",
+        "```bash",
+        f"cd {REPO_ROOT}",
+        command_line,
+        "```",
+        "",
+        "## Verification Commands",
+        "",
+        "```bash",
+        f"python -m json.tool runs/campaigns/{args.campaign_name}/campaign_design.json",
+        f"wc -l runs/campaigns/{args.campaign_name}/commands.txt",
+        f"find runs/campaigns/{args.campaign_name}/evaluations -mindepth 1 -maxdepth 1 -type d | wc -l",
+        f"find runs/campaigns/{args.campaign_name} -maxdepth 1 -name 'commands_first_*' -print",
+        f"sed -n '1,40p' runs/campaigns/{args.campaign_name}/evaluations/{args.campaign_name}-eval-0000/run_eval.sh",
+        "```",
+        "",
+        "## Metadata Notes",
+        "",
+        "- `model_changes_template` is the starting XML file for per-evaluation `model_changes.xml` files.",
+        "- `free_parameters` snapshots the short name, Galacticus XML path, and prior used to transform Sobol quantiles.",
+        "- `defaulted_template_parameters` lists template changes removed so Galacticus defaults are used.",
+        "- `run_definition_changes` lists the shared Galacticus parameter files supplied to every evaluation.",
+        "",
+    ]
+    (campaign_root / "COMMAND_LOG.md").write_text("\n".join(lines))
+
+
 def main() -> None:
     args = parse_args()
-    base_changes_path = Path(args.base_model_changes)
-    if not base_changes_path.is_absolute():
-        base_changes_path = REPO_ROOT / base_changes_path
-    if not base_changes_path.exists():
-        raise FileNotFoundError(base_changes_path)
+    template_changes_path = Path(args.model_changes_template)
+    if not template_changes_path.is_absolute():
+        template_changes_path = REPO_ROOT / template_changes_path
+    if not template_changes_path.exists():
+        raise FileNotFoundError(template_changes_path)
 
     parameter_specs = _free_parameter_specs(args.fixed_parameter)
     fixed_parameter_specs = _fixed_parameter_specs(args.fixed_parameter)
@@ -386,6 +456,13 @@ def main() -> None:
     ]
 
     campaign_root = REPO_ROOT / "runs" / "campaigns" / args.campaign_name
+    if campaign_root.exists():
+        if args.overwrite_campaign:
+            shutil.rmtree(campaign_root)
+        elif any(campaign_root.iterdir()):
+            raise FileExistsError(
+                f"{campaign_root} already exists and is not empty; rerun with --overwrite-campaign to replace it."
+            )
     evaluations_root = campaign_root / "evaluations"
     logs_root = campaign_root / "logs"
     evaluations_root.mkdir(parents=True, exist_ok=True)
@@ -418,7 +495,7 @@ def main() -> None:
         run_script = evaluation_dir / "run_eval.sh"
 
         updates = {spec.path: float(value) for spec, value in zip(parameter_specs, sample_row, strict=True)}
-        _update_change_values(base_changes_path, model_changes, updates, remove_paths=fixed_parameter_paths)
+        _update_change_values(template_changes_path, model_changes, updates, remove_paths=fixed_parameter_paths)
         _write_single_change(output_changes, "outputFileName", str(output_hdf5.relative_to(campaign_root)))
 
         command_parts = [
@@ -502,20 +579,26 @@ def main() -> None:
         conda_profile=args.conda_profile,
     )
     _write_validation_plots(campaign_root, quantiles, samples, parameter_specs)
-    _write_subset_command_scripts(campaign_root, args.n_eval)
+    if args.write_subset_command_scripts:
+        _write_subset_command_scripts(campaign_root, args.n_eval)
 
     campaign_summary = {
+        "schema_version": 2,
         "campaign_name": args.campaign_name,
         "n_eval": args.n_eval,
         "seed": args.seed,
-        "base_model_changes": str(base_changes_path),
+        "model_changes_template": str(template_changes_path),
+        "parameter_spec_registry": "galacticus_emu.specs.trinity_parameter_specs",
         "free_parameter_short_names": [spec.short_name for spec in parameter_specs],
-        "fixed_parameter_short_names": sorted(set(DEFAULT_FIXED_PARAMETERS).union(args.fixed_parameter)),
+        "free_parameters": [_parameter_spec_to_dict(spec) for spec in parameter_specs],
+        "defaulted_template_parameter_short_names": [spec.short_name for spec in fixed_parameter_specs],
+        "defaulted_template_parameters": [_parameter_spec_to_dict(spec) for spec in fixed_parameter_specs],
         "run_definition_changes": run_definition_changes,
         "halpha_dust_draws": args.halpha_dust_draws,
         "halpha_dust_scatter_mode": args.halpha_dust_scatter_mode,
     }
     (campaign_root / "campaign_design.json").write_text(json.dumps(campaign_summary, indent=2) + "\n")
+    _write_command_log(campaign_root, args)
 
     print(campaign_root)
 
