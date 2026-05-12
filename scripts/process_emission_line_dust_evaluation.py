@@ -52,6 +52,12 @@ LINE_GROUPS = {
         "components": ["Disk", "Spheroid"],
         "effective_wavelength": 3728.5,
     },
+    "oii_khostovan": {
+        "label": "[OII] Khostovan",
+        "lines": [("oxygenII3727", 3727.09), ("oxygenII3730", 3729.88)],
+        "components": ["Disk", "Spheroid"],
+        "effective_wavelength": 3728.5,
+    },
     "hbeta_oiii_khostovan": {
         "label": "Hbeta+[OIII] Khostovan",
         "lines": [("balmerBeta4863", 4862.68), ("oxygenIII4960", 4960.30), ("oxygenIII5008", 5008.24)],
@@ -75,6 +81,12 @@ KHOSTOVAN_HBETA_OIII_CASES = [
     (1.42, [41.95, 42.25, 42.55, 42.85], [0.15] * 4),
     (2.23, [42.60, 42.75, 42.90, 43.05], [0.075] * 4),
     (3.24, [42.65, 42.80, 42.95, 43.10], [0.075] * 4),
+]
+
+KHOSTOVAN_OII_CASES = [
+    (1.47, [41.65, 41.80, 41.95, 42.10, 42.25, 42.40, 42.55], [0.075] * 7),
+    (2.25, [42.45, 42.65, 42.85], [0.10] * 3),
+    (3.34, [43.05, 43.15, 43.30], [0.050, 0.075, 0.075]),
 ]
 
 
@@ -338,6 +350,21 @@ def _case_definitions(handle: h5py.File) -> list[dict[str, Any]]:
                 "z_max": float(z_max),
                 "log10_centers": centers,
                 "log10_edges": _centers_to_edges(centers),
+            }
+        )
+    for redshift, centers_text, half_widths_text in KHOSTOVAN_OII_CASES:
+        output_name, output_redshift = _select_output(redshifts, redshift, redshift)
+        centers = np.asarray(centers_text, dtype=float)
+        half_widths = np.asarray(half_widths_text, dtype=float)
+        cases.append(
+            {
+                "observable": "oii_khostovan",
+                "sample_label": f"z{redshift:.2f}",
+                "output_name": output_name,
+                "redshift": float(output_redshift),
+                "target_redshift": float(redshift),
+                "log10_centers": centers,
+                "log10_edges": _centers_half_widths_to_edges(centers, half_widths),
             }
         )
     for redshift, centers_text, half_widths_text in KHOSTOVAN_HBETA_OIII_CASES:
