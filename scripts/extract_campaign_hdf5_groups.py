@@ -10,6 +10,10 @@ import h5py
 DEFAULT_EXCLUDE = ("Outputs",)
 DEFAULT_SIDECARS = (
     "campaign.json",
+    "campaign_design.json",
+    "COMMAND_LOG.md",
+    "excluded_evaluations.txt",
+    "filtered_campaign_view.json",
     "samples.csv",
     "commands.txt",
     "commands.sh",
@@ -17,9 +21,24 @@ DEFAULT_SIDECARS = (
     "commands_postprocess.txt",
     "submit_slurm_array_postprocess.sh",
     "postprocess_rescue_manifest.json",
+    "halpha_dust_lf_merge_metadata.json",
     "subset_train_ids_n8.txt",
     "subset_train_ids_n16.txt",
     "subset_train_ids_n32.txt",
+)
+
+DEFAULT_EVALUATION_SIDECAR_FILES = (
+    "model_changes.xml",
+    "output.xml",
+    "params.xml",
+    "galacticus_input_values.json",
+    "run_eval.sh",
+)
+
+DEFAULT_EVALUATION_SIDECAR_DIRS = (
+    "halpha_dust",
+    "emission_line_dust",
+    "oii_boost_grid",
 )
 
 
@@ -208,15 +227,16 @@ def _copy_sidecars(campaign_root: Path, output_root: Path, *, dry_run: bool) -> 
         return copied
 
     for evaluation_dir in sorted(path for path in evaluations_root.iterdir() if path.is_dir()):
-        for sidecar_name in ("model_changes.xml", "output.xml", "params.xml"):
+        for sidecar_name in DEFAULT_EVALUATION_SIDECAR_FILES:
             source = evaluation_dir / sidecar_name
             destination = output_root / "evaluations" / evaluation_dir.name / sidecar_name
             if _copy_if_present(source, destination, dry_run=dry_run):
                 copied += 1
-        halpha_dust_source = evaluation_dir / "halpha_dust"
-        halpha_dust_destination = output_root / "evaluations" / evaluation_dir.name / "halpha_dust"
-        if _copy_tree_if_present(halpha_dust_source, halpha_dust_destination, dry_run=dry_run):
-            copied += 1
+        for sidecar_name in DEFAULT_EVALUATION_SIDECAR_DIRS:
+            source = evaluation_dir / sidecar_name
+            destination = output_root / "evaluations" / evaluation_dir.name / sidecar_name
+            if _copy_tree_if_present(source, destination, dry_run=dry_run):
+                copied += 1
     return copied
 
 
