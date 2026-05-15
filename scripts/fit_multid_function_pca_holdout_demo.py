@@ -31,6 +31,7 @@ from fit_multid_function_holdout_demo import (
     _quantile_columns,
     _setting,
     _space_filling_examples,
+    _supported_bin_mask,
     _title,
     _x_label,
     _y_label,
@@ -38,6 +39,7 @@ from fit_multid_function_holdout_demo import (
 
 
 DEFAULT_PCA_COMPONENTS = {
+    "bh_halo_mass_trinity_z1": 4,
     "smf_zfourge_z0": 5,
     "smf_zfourge_z3": 4,
     "mzr_blanc2019": 5,
@@ -76,9 +78,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--bad-training-sigma", type=float, default=None)
     parser.add_argument("--min-training-sigma", type=float, default=None)
     parser.add_argument(
+        "--drop-unsupported-bins",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+    )
+    parser.add_argument(
         "--optimize-hyperparameters",
         action=argparse.BooleanOptionalAction,
         default=True,
+    )
+    parser.add_argument(
+        "--fit-white-noise",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Fit an additional constant WhiteKernel noise term on top of any supplied training alpha.",
     )
     parser.add_argument("--pca-components", type=int, default=None)
     parser.add_argument(
@@ -137,6 +150,7 @@ def _fit_predict_pca(
     n_restarts_optimizer: int,
     optimize_hyperparameters: bool,
     alpha_train: np.ndarray | None,
+    fit_white_noise: bool,
 ) -> tuple[np.ndarray, np.ndarray, dict[str, object]]:
     scaler = _make_preprocessor(pca_scaling)
     y_train_scaled = scaler.fit_transform(y_train)
@@ -162,6 +176,7 @@ def _fit_predict_pca(
             n_restarts_optimizer=n_restarts_optimizer,
             optimize_hyperparameters=optimize_hyperparameters,
             alpha=coefficient_alpha[:, component_index] if coefficient_alpha is not None else None,
+            fit_white_noise=fit_white_noise,
         )
         coefficient_predictions[:, component_index], coefficient_stds[:, component_index] = predict_scaled_gp(
             model,
@@ -264,11 +279,12 @@ def main() -> None:
     emulator_dir = campaign_root / emulator_dir_name
     overlay_ymin = _setting(args, "overlay-ymin", None)
     overlay_ymax = _setting(args, "overlay-ymax", None)
-    use_training_alpha = _setting(args, "use-training-alpha", False)
+    use_training_alpha = _setting(args, "use-training-alpha", True)
     bad_training_condition = _setting(args, "bad-training-condition", "nonfinite")
     bad_training_value_fill = _setting(args, "bad-training-value-fill", "bin_median")
     bad_training_sigma = _setting(args, "bad-training-sigma", 5.0)
     min_training_sigma = _setting(args, "min-training-sigma", 1.0e-3)
+    drop_unsupported_bins = bool(_setting(args, "drop_unsupported_bins", False))
     pca_components = _pca_components_for(args)
     figures_dir.mkdir(parents=True, exist_ok=True)
     emulator_dir.mkdir(parents=True, exist_ok=True)
@@ -303,7 +319,22 @@ def main() -> None:
         hdf5_filename=args.hdf5_filename,
         min_log10_y=args.min_log10_y,
     )
-    y_fit_all, alpha_all, training_target_metadata = _prepare_training_targets(
+    supported_bin_mask = np.ones(y_plot_all.shape[1], dtype=bool)
+    if drop_unsupported_bins:
+        supported_bin_mask = _supported_bin_mask(
+            y_plot_all,
+            bad_training_condition=str(bad_training_condition),
+        )
+        if not np.any(supported_bin_mask):
+            raise ValueError("All bins are unsupported after applying the bad-training mask.")
+        x_bins_plot = x_bins_plot[supported_bin_mask]
+        target_plot = target_plot[supported_bin_mask]
+        if target_std_plot is not None:
+            target_std_plot = target_std_plot[supported_bin_mask]
+        y_plot_all = y_plot_all[:, supported_bin_mask]
+        if y_std_all is not None:
+            y_std_all = y_std_all[:, supported_bin_mask]
+    y_fit_all, alpha_sigma_all, training_target_metadata = _prepare_training_targets(
         y_plot_all,
         y_std_all,
         analysis=analysis,
@@ -313,6 +344,7 @@ def main() -> None:
         bad_training_sigma=float(bad_training_sigma),
         min_training_sigma=float(min_training_sigma),
     )
+    alpha_all = alpha_sigma_all**2 if alpha_sigma_all is not None else None
 
     n_samples = x_train_all.shape[0]
     n_splits = int(round(1.0 / (1.0 - args.train_fraction)))
@@ -338,6 +370,7 @@ def main() -> None:
             n_restarts_optimizer=args.n_restarts_optimizer,
             optimize_hyperparameters=args.optimize_hyperparameters,
             alpha_train=alpha_all[train_index] if alpha_all is not None else None,
+            fit_white_noise=args.fit_white_noise,
         )
 
     metrics = _metrics(y_plot_all[test_index], y_pred, y_pred_std, x_bins_plot)
@@ -351,7 +384,7 @@ def main() -> None:
         x_plot=x_bins_plot,
         target_plot=target_plot,
         target_std_plot=target_std_plot,
-        y_train=y_plot_all[train_index],
+        y_train=y_fit_all[train_index],
         y_test=y_plot_all[test_index],
         y_test_std=y_std_all[test_index] if y_std_all is not None else None,
         y_pred=y_pred,
@@ -363,13 +396,16 @@ def main() -> None:
         ymin=overlay_ymin,
         ymax=overlay_ymax,
         path=overlay_path,
+        bad_training_condition=str(bad_training_condition),
     )
     _plot_parity(
         x_bins_plot=x_bins_plot,
+        target_plot=target_plot,
         y_test=y_plot_all[test_index],
         y_pred=y_pred,
         y_pred_std=y_pred_std,
         path=parity_path,
+        bad_training_condition=str(bad_training_condition),
     )
 
     pca_summary = _plot_pca_modes(
@@ -417,6 +453,8 @@ def main() -> None:
         "training_target_metadata": training_target_metadata,
         "pca_fit_metadata": pca_fit_metadata,
         "pca_summary": pca_summary,
+        "fit_white_noise": bool(args.fit_white_noise),
+        "supported_bin_mask": supported_bin_mask.tolist(),
     }
     summary_path.write_text(json.dumps(summary, indent=2) + "\n")
 
