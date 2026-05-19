@@ -121,6 +121,11 @@ def trinity_parameter_specs() -> list[ParameterSpec]:
             prior=TruncatedLogNormalPrior(lower=1.0e-10, upper=1.0e-8, x0=1.0e-9, sigma=2.0),
         ),
         ParameterSpec(
+            path="stellarPopulation/metalYield",
+            short_name="stellarPopulationMetalYield",
+            prior=TruncatedLogNormalPrior(lower=0.01, upper=0.04, x0=0.02, sigma=0.5),
+        ),
+        ParameterSpec(
             path="hotHaloMassDistributionCoreRadius/coreRadiusOverVirialRadius",
             short_name="coreRadiusOverVirialRadius",
             prior=TruncatedLogNormalPrior(lower=0.03, upper=1.0, x0=0.3, sigma=1.0),
