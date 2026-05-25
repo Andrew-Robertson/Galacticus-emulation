@@ -108,6 +108,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--random-uniform-index", type=int, default=None)
     parser.add_argument("--input-json", type=Path, default=None)
     parser.add_argument("--dust-prior-json", action="append", default=[])
+    parser.add_argument(
+        "--fill-missing-node-weights-with-median",
+        action="store_true",
+        help=(
+            "Salvage Galacticus files affected by the merger-tree weight race condition by filling "
+            "unassigned node weights with the median finite mergerTreeWeight. Default is strict/error."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -385,13 +393,22 @@ def _case_definitions(handle: h5py.File) -> list[dict[str, Any]]:
     return cases
 
 
-def _compute_case_lfs(galacticus_file: Path, dust_case: dict[str, Any], *, base_seed: int) -> list[dict[str, Any]]:
+def _compute_case_lfs(
+    galacticus_file: Path,
+    dust_case: dict[str, Any],
+    *,
+    base_seed: int,
+    fill_missing_node_weights_with_median: bool = False,
+) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     with h5py.File(galacticus_file, "r") as handle:
         for case in _case_definitions(handle):
             observable = case["observable"]
             output_group = handle[f"/Outputs/{case['output_name']}"]
-            weights = _combined_node_weights(output_group)
+            weights = _combined_node_weights(
+                output_group,
+                fill_missing_with_median=fill_missing_node_weights_with_median,
+            )
             line_luminosities = _line_group_luminosities(output_group, observable)
             intrinsic = _total_luminosity(line_luminosities, observable)
             if dust_case["scatter_mode"] == "expected":
@@ -531,7 +548,12 @@ def main() -> None:
             **input_values,
             **dust_params,
         }
-        for row in _compute_case_lfs(galacticus_file, dust_case, base_seed=args.base_seed):
+        for row in _compute_case_lfs(
+            galacticus_file,
+            dust_case,
+            base_seed=args.base_seed,
+            fill_missing_node_weights_with_median=args.fill_missing_node_weights_with_median,
+        ):
             merged = dict(draw_metadata)
             merged.update(row)
             lf_rows.append(merged)
@@ -571,6 +593,7 @@ def main() -> None:
                 "scatter_mode": args.scatter_mode,
                 "z_pivot": args.z_pivot,
                 "random_uniform_index": args.random_uniform_index,
+                "fill_missing_node_weights_with_median": args.fill_missing_node_weights_with_median,
                 "dust_priors": priors,
                 "input_values": input_values,
                 "line_groups": LINE_GROUPS,

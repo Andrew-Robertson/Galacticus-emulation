@@ -105,6 +105,14 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Optional limit on the number of evaluation directories to process.",
     )
+    parser.add_argument(
+        "--fill-missing-node-weights-with-median",
+        action="store_true",
+        help=(
+            "Salvage Galacticus files affected by the merger-tree weight race condition by filling "
+            "unassigned node weights with the median finite mergerTreeWeight. Default is strict/error."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -169,13 +177,18 @@ def _iter_evaluation_dirs(campaign_root: Path) -> list[Path]:
 def _compute_case_lfs(
     galacticus_file: Path,
     dust_case: dict[str, Any],
+    *,
+    fill_missing_node_weights_with_median: bool = False,
 ) -> list[dict[str, Any]]:
     output_rows: list[dict[str, Any]] = []
     with h5py.File(galacticus_file, "r") as handle:
         for output_name, redshift, sobral_label, analysis_name in SOBRAL_CASES:
             output_group = handle[f"/Outputs/{output_name}"]
             analysis_group = handle[f"/analyses/{analysis_name}"]
-            weights = _combined_node_weights(output_group)
+            weights = _combined_node_weights(
+                output_group,
+                fill_missing_with_median=fill_missing_node_weights_with_median,
+            )
             nd = output_group["nodeData"]
             stellar_mass = (
                 np.asarray(nd["diskMassStellar"][...], dtype=float)
@@ -298,7 +311,11 @@ def main() -> None:
             }
             dust_draw_rows.append(draw_metadata)
 
-            draw_lf_rows = _compute_case_lfs(galacticus_file, dust_case)
+            draw_lf_rows = _compute_case_lfs(
+                galacticus_file,
+                dust_case,
+                fill_missing_node_weights_with_median=args.fill_missing_node_weights_with_median,
+            )
             wide_row = {
                 "evaluation_id": evaluation_id,
                 "dust_draw_index": int(dust_draw_index),
@@ -355,6 +372,7 @@ def main() -> None:
         "scatter_mode": args.scatter_mode,
         "z_pivot": args.z_pivot,
         "random_uniform_index": args.random_uniform_index,
+        "fill_missing_node_weights_with_median": args.fill_missing_node_weights_with_median,
         "dust_priors": priors,
         "sobral_cases": [
             {

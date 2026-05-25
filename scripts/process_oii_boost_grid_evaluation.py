@@ -68,6 +68,14 @@ def parse_args() -> argparse.Namespace:
             "Can be supplied multiple times. Defaults to 0.0, 0.15, 0.30, 0.45, 0.60."
         ),
     )
+    parser.add_argument(
+        "--fill-missing-node-weights-with-median",
+        action="store_true",
+        help=(
+            "Salvage Galacticus files affected by the merger-tree weight race condition by filling "
+            "unassigned node weights with the median finite mergerTreeWeight. Default is strict/error."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -104,6 +112,7 @@ def _compute_oii_lfs(
     *,
     boost_log10: float,
     base_seed: int,
+    fill_missing_node_weights_with_median: bool = False,
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     boost_factor = 10.0**boost_log10
@@ -112,7 +121,10 @@ def _compute_oii_lfs(
         for case in cases:
             observable = case["observable"]
             output_group = handle[f"/Outputs/{case['output_name']}"]
-            weights = _combined_node_weights(output_group)
+            weights = _combined_node_weights(
+                output_group,
+                fill_missing_with_median=fill_missing_node_weights_with_median,
+            )
             line_luminosities = _line_group_luminosities(output_group, observable)
             boosted_line_luminosities = {
                 line_name: luminosity * boost_factor for line_name, luminosity in line_luminosities.items()
@@ -256,6 +268,7 @@ def main() -> None:
                 dust_case,
                 boost_log10=boost_log10,
                 base_seed=args.base_seed,
+                fill_missing_node_weights_with_median=args.fill_missing_node_weights_with_median,
             ):
                 merged = dict(boost_metadata)
                 merged.update(row)
@@ -302,6 +315,7 @@ def main() -> None:
                 "galacticus_file": str(galacticus_file),
                 "dust_draws_csv": str(dust_draws_csv),
                 "boost_grid_log10": [float(value) for value in boost_grid],
+                "fill_missing_node_weights_with_median": args.fill_missing_node_weights_with_median,
                 "observables": sorted(OII_OBSERVABLES),
                 "row_count_long": len(lf_rows),
                 "row_count_table": len(table_rows),

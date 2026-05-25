@@ -8,6 +8,7 @@ from math import erf
 from pathlib import Path
 import sys
 from typing import Any
+import warnings
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 os.environ.setdefault("MPLCONFIGDIR", str(REPO_ROOT / ".mplconfig"))
@@ -87,26 +88,62 @@ def parse_args() -> argparse.Namespace:
             "'both' includes both curves."
         ),
     )
+    parser.add_argument(
+        "--fill-missing-node-weights-with-median",
+        action="store_true",
+        help=(
+            "If mergerTreeStartIndex/mergerTreeCount leaves any nodeData rows without a merger-tree "
+            "weight, fill those rows with the median finite mergerTreeWeight instead of raising. "
+            "Default is strict/error."
+        ),
+    )
     return parser.parse_args()
 
 
-def _read_tree_weights(output_group: h5py.Group, n_nodes: int) -> np.ndarray:
+def _read_tree_weights(
+    output_group: h5py.Group,
+    n_nodes: int,
+    *,
+    fill_missing_with_median: bool = False,
+) -> np.ndarray:
     tree_weights = np.asarray(output_group["mergerTreeWeight"][...], dtype=float)
     tree_counts = np.asarray(output_group["mergerTreeCount"][...], dtype=int)
     tree_starts = np.asarray(output_group["mergerTreeStartIndex"][...], dtype=int)
     node_weights = np.zeros(n_nodes, dtype=float)
+    assigned = np.zeros(n_nodes, dtype=bool)
     for start, count, weight in zip(tree_starts, tree_counts, tree_weights, strict=True):
-        node_weights[start : start + count] = weight
-    if np.any(node_weights == 0.0):
-        raise ValueError("Some nodes were not assigned a merger-tree weight")
+        stop = start + count
+        if start < 0 or stop > n_nodes:
+            raise ValueError(f"Merger-tree node range [{start}:{stop}] is outside nodeData length {n_nodes}")
+        node_weights[start:stop] = weight
+        assigned[start:stop] = True
+    if np.any(~assigned):
+        missing_count = int(np.count_nonzero(~assigned))
+        if not fill_missing_with_median:
+            raise ValueError("Some nodes were not assigned a merger-tree weight")
+        finite_weights = tree_weights[np.isfinite(tree_weights)]
+        if finite_weights.size == 0:
+            raise ValueError("Some nodes were not assigned a merger-tree weight and no finite median weight is available")
+        fill_value = float(np.median(finite_weights))
+        node_weights[~assigned] = fill_value
+        warnings.warn(
+            f"Filled {missing_count} unassigned node weight(s) in {output_group.name} "
+            f"with median merger-tree weight {fill_value:.6g}",
+            RuntimeWarning,
+            stacklevel=2,
+        )
     return node_weights
 
 
-def _combined_node_weights(output_group: h5py.Group) -> np.ndarray:
+def _combined_node_weights(output_group: h5py.Group, *, fill_missing_with_median: bool = False) -> np.ndarray:
     nd = output_group["nodeData"]
     first_dataset = next(iter(nd.values()))
     n_nodes = first_dataset.shape[0]
-    weights = _read_tree_weights(output_group, n_nodes)
+    weights = _read_tree_weights(
+        output_group,
+        n_nodes,
+        fill_missing_with_median=fill_missing_with_median,
+    )
     if "nodeSubsamplingWeight" in nd:
         weights = weights * np.asarray(nd["nodeSubsamplingWeight"][...], dtype=float)
     return weights
@@ -379,7 +416,10 @@ def main() -> None:
     with h5py.File(galacticus_file, "r") as handle:
         for output_name, redshift, label, analysis_name in SOBRAL_CASES:
             output_group = handle[f"/Outputs/{output_name}"]
-            weights = _combined_node_weights(output_group)
+            weights = _combined_node_weights(
+                output_group,
+                fill_missing_with_median=args.fill_missing_node_weights_with_median,
+            )
             nd = output_group["nodeData"]
             stellar_mass = (
                 np.asarray(nd["diskMassStellar"][...], dtype=float)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import warnings
 
 import h5py
 import numpy as np
@@ -33,6 +34,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--stellar-mass-max", type=float, default=12.5)
     parser.add_argument("--stellar-mass-bin-width", type=float, default=0.25)
     parser.add_argument("--use-centrals-only", action="store_true")
+    parser.add_argument(
+        "--fill-missing-node-weights-with-median",
+        action="store_true",
+        help=(
+            "Salvage Galacticus files affected by the merger-tree weight race condition by filling "
+            "unassigned node weights with the median finite mergerTreeWeight. Default is strict/error."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -77,17 +86,40 @@ def _read_weights(node_data: h5py.Group) -> np.ndarray:
     return np.ones(first_dataset.shape[0], dtype=float)
 
 
-def _read_tree_weights(output_group: h5py.Group, n_nodes: int) -> np.ndarray:
+def _read_tree_weights(
+    output_group: h5py.Group,
+    n_nodes: int,
+    *,
+    fill_missing_with_median: bool = False,
+) -> np.ndarray:
     if not all(name in output_group for name in ["mergerTreeStartIndex", "mergerTreeCount", "mergerTreeWeight"]):
         return np.ones(n_nodes, dtype=float)
     tree_weights = np.asarray(output_group["mergerTreeWeight"][...], dtype=float)
     tree_counts = np.asarray(output_group["mergerTreeCount"][...], dtype=int)
     tree_starts = np.asarray(output_group["mergerTreeStartIndex"][...], dtype=int)
     node_weights = np.zeros(n_nodes, dtype=float)
+    assigned = np.zeros(n_nodes, dtype=bool)
     for start, count, weight in zip(tree_starts, tree_counts, tree_weights, strict=True):
-        node_weights[start : start + count] = weight
-    if np.any(node_weights == 0.0):
-        raise ValueError("Some nodes were not assigned a merger-tree weight")
+        stop = start + count
+        if start < 0 or stop > n_nodes:
+            raise ValueError(f"Merger-tree node range [{start}:{stop}] is outside nodeData length {n_nodes}")
+        node_weights[start:stop] = weight
+        assigned[start:stop] = True
+    if np.any(~assigned):
+        missing_count = int(np.count_nonzero(~assigned))
+        if not fill_missing_with_median:
+            raise ValueError("Some nodes were not assigned a merger-tree weight")
+        finite_weights = tree_weights[np.isfinite(tree_weights)]
+        if finite_weights.size == 0:
+            raise ValueError("Some nodes were not assigned a merger-tree weight and no finite median weight is available")
+        fill_value = float(np.median(finite_weights))
+        node_weights[~assigned] = fill_value
+        warnings.warn(
+            f"Filled {missing_count} unassigned node weight(s) in {output_group.name} "
+            f"with median merger-tree weight {fill_value:.6g}",
+            RuntimeWarning,
+            stacklevel=2,
+        )
     return node_weights
 
 
@@ -99,12 +131,17 @@ def _summary_for_output(
     stellar_mass_edges: np.ndarray,
     *,
     use_centrals_only: bool,
+    fill_missing_node_weights_with_median: bool,
 ) -> dict[str, np.ndarray | float | int | str]:
     output_group = handle[f"/Outputs/{output_name}"]
     node_data = output_group["nodeData"]
     luminosity, stellar_mass = _read_total_halpha_and_mstar(node_data)
     subsampling_weights = _read_weights(node_data)
-    tree_weights = _read_tree_weights(output_group, luminosity.size)
+    tree_weights = _read_tree_weights(
+        output_group,
+        luminosity.size,
+        fill_missing_with_median=fill_missing_node_weights_with_median,
+    )
     weights = subsampling_weights * tree_weights
     is_central = np.asarray(node_data["nodeIsIsolated"][...], dtype=int) == 1 if "nodeIsIsolated" in node_data else np.ones_like(weights, dtype=bool)
 
@@ -183,6 +220,7 @@ def main() -> None:
         root.attrs["sourceFile"] = str(input_hdf5)
         root.attrs["lineName"] = args.line_name
         root.attrs["selection"] = "centrals" if args.use_centrals_only else "all"
+        root.attrs["fillMissingNodeWeightsWithMedian"] = bool(args.fill_missing_node_weights_with_median)
         root.attrs["luminosityDatasetDefinition"] = (
             "luminosityEmissionLineAGN:balmerAlpha6565 + "
             "luminosityEmissionLineDisk:balmerAlpha6565 + "
@@ -206,6 +244,7 @@ def main() -> None:
                 luminosity_edges,
                 stellar_mass_edges,
                 use_centrals_only=args.use_centrals_only,
+                fill_missing_node_weights_with_median=args.fill_missing_node_weights_with_median,
             )
             for key, value in summary.items():
                 group.create_dataset(key, data=value)
