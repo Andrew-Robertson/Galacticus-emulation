@@ -6,6 +6,7 @@ import json
 import os
 from math import erf
 from pathlib import Path
+import re
 import sys
 from typing import Any
 
@@ -38,6 +39,8 @@ sys.path.insert(0, str(SED_PACKAGE_ROOT))
 
 from dust_attenuation import apply_dust_attenuation_to_line, dust_attenuation_gb10_generalised  # type: ignore
 
+
+DUST_PARAMETER_NAMES = ["delta_0", "delta_z", "delta_M", "delta_Mz", "attenuation_scatter"]
 
 LINE_GROUPS = {
     "halpha_sobral": {
@@ -107,6 +110,36 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--z-pivot", type=float, default=1.0)
     parser.add_argument("--random-uniform-index", type=int, default=None)
     parser.add_argument("--input-json", type=Path, default=None)
+    parser.add_argument(
+        "--fixed-dust-params-json",
+        type=Path,
+        default=None,
+        help=(
+            "JSON file containing fixed dust parameters. Accepts either a flat object with "
+            "delta_0, delta_z, delta_M, delta_Mz, attenuation_scatter, or a run-summary-like "
+            "object containing best_theta with those keys."
+        ),
+    )
+    parser.add_argument(
+        "--map-run-summary",
+        type=Path,
+        default=None,
+        help="MCMC run summary JSON containing best_theta dust parameters to use as a single MAP dust case.",
+    )
+    parser.add_argument(
+        "--map-changes-xml",
+        type=Path,
+        default=None,
+        help=(
+            "maximum_a_posteriori_model_changes.xml containing a comment like "
+            "'Sidecar LF nuisance parameters at MAP: delta_0=..., ...'."
+        ),
+    )
+    parser.add_argument(
+        "--fixed-dust-case-label",
+        default="map_dust",
+        help="Label written to dust_draws.csv when fixed MAP dust parameters are supplied.",
+    )
     parser.add_argument("--dust-prior-json", action="append", default=[])
     parser.add_argument(
         "--fill-missing-node-weights-with-median",
@@ -117,6 +150,58 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     return parser.parse_args()
+
+
+def _dust_params_from_mapping(data: dict[str, Any]) -> dict[str, float] | None:
+    if "best_theta" in data and isinstance(data["best_theta"], dict):
+        data = data["best_theta"]
+    if not all(name in data for name in DUST_PARAMETER_NAMES):
+        return None
+    return {name: float(data[name]) for name in DUST_PARAMETER_NAMES}
+
+
+def _dust_params_from_map_comment(path: Path) -> dict[str, float]:
+    text = path.read_text()
+    match = re.search(r"Sidecar LF nuisance parameters at MAP:\s*(.*?)-->", text, flags=re.DOTALL)
+    if match is None:
+        raise ValueError(f"{path} does not contain a 'Sidecar LF nuisance parameters at MAP' comment")
+    comment = match.group(1)
+    values = {
+        name: float(value)
+        for name, value in re.findall(
+            r"([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?)",
+            comment,
+        )
+    }
+    missing = [name for name in DUST_PARAMETER_NAMES if name not in values]
+    if missing:
+        raise ValueError(f"{path} MAP dust comment is missing parameter(s): {missing}")
+    return {name: values[name] for name in DUST_PARAMETER_NAMES}
+
+
+def _fixed_dust_params_from_args(args: argparse.Namespace) -> dict[str, float] | None:
+    sources = [
+        args.fixed_dust_params_json is not None,
+        args.map_run_summary is not None,
+        args.map_changes_xml is not None,
+    ]
+    if sum(sources) > 1:
+        raise ValueError("Use only one of --fixed-dust-params-json, --map-run-summary, or --map-changes-xml")
+    if args.fixed_dust_params_json is not None:
+        data = json.loads(args.fixed_dust_params_json.read_text())
+        dust_params = _dust_params_from_mapping(data)
+        if dust_params is None:
+            raise ValueError(f"{args.fixed_dust_params_json} does not contain all MAP dust parameters")
+        return dust_params
+    if args.map_run_summary is not None:
+        data = json.loads(args.map_run_summary.read_text())
+        dust_params = _dust_params_from_mapping(data)
+        if dust_params is None:
+            raise ValueError(f"{args.map_run_summary} does not contain all MAP dust parameters in best_theta")
+        return dust_params
+    if args.map_changes_xml is not None:
+        return _dust_params_from_map_comment(args.map_changes_xml)
+    return None
 
 
 def _normal_cdf(x: np.ndarray) -> np.ndarray:
@@ -513,18 +598,30 @@ def main() -> None:
     if args.input_json is not None:
         input_values = json.loads(args.input_json.read_text())
 
-    priors = _load_dust_priors(args)
+    fixed_dust_params = _fixed_dust_params_from_args(args)
+    priors = None if fixed_dust_params is not None else _load_dust_priors(args)
     rng = np.random.default_rng(np.random.SeedSequence([args.base_seed, args.evaluation_index]))
     dust_draw_rows: list[dict[str, Any]] = []
     lf_rows: list[dict[str, Any]] = []
     table_rows: list[dict[str, Any]] = []
 
+    if fixed_dust_params is not None:
+        dust_param_cases = [(0, args.fixed_dust_case_label, {**fixed_dust_params, "z_pivot": float(args.z_pivot)})]
+    else:
+        dust_param_cases = [
+            (
+                int(dust_draw_index),
+                f"dust_draw_{dust_draw_index:04d}",
+                _sample_dust_params(priors, z_pivot=args.z_pivot, rng=rng),
+            )
+            for dust_draw_index in range(args.n_dust_draws)
+        ]
+
     print(f"starting emission-line dust post-processing for {evaluation_id}")
-    for dust_draw_index in range(args.n_dust_draws):
-        print(f"{evaluation_id} dust draw {dust_draw_index + 1}/{args.n_dust_draws}")
-        dust_params = _sample_dust_params(priors, z_pivot=args.z_pivot, rng=rng)
+    for case_counter, (dust_draw_index, dust_case_label, dust_params) in enumerate(dust_param_cases, start=1):
+        print(f"{evaluation_id} dust case {case_counter}/{len(dust_param_cases)}: {dust_case_label}")
         dust_case = {
-            "label": f"dust_draw_{dust_draw_index:04d}",
+            "label": dust_case_label,
             "dust_model": "gb10_generalised",
             "dust_params": dust_params,
             "dust_law": "calzetti",
@@ -594,6 +691,12 @@ def main() -> None:
                 "z_pivot": args.z_pivot,
                 "random_uniform_index": args.random_uniform_index,
                 "fill_missing_node_weights_with_median": args.fill_missing_node_weights_with_median,
+                "fixed_dust_params_source": (
+                    str(args.fixed_dust_params_json or args.map_run_summary or args.map_changes_xml)
+                    if fixed_dust_params is not None
+                    else None
+                ),
+                "fixed_dust_case_label": args.fixed_dust_case_label if fixed_dust_params is not None else None,
                 "dust_priors": priors,
                 "input_values": input_values,
                 "line_groups": LINE_GROUPS,
