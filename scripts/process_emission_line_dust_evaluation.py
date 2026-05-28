@@ -162,9 +162,9 @@ def _dust_params_from_mapping(data: dict[str, Any]) -> dict[str, float] | None:
 
 def _dust_params_from_map_comment(path: Path) -> dict[str, float]:
     text = path.read_text()
-    match = re.search(r"Sidecar LF nuisance parameters at MAP:\s*(.*?)-->", text, flags=re.DOTALL)
+    match = re.search(r"Sidecar LF nuisance parameters(?: at MAP)?:\s*(.*?)-->", text, flags=re.DOTALL)
     if match is None:
-        raise ValueError(f"{path} does not contain a 'Sidecar LF nuisance parameters at MAP' comment")
+        raise ValueError(f"{path} does not contain a 'Sidecar LF nuisance parameters' comment")
     comment = match.group(1)
     values = {
         name: float(value)
