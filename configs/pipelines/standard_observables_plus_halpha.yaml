@@ -259,6 +259,70 @@ workflows:
       - plot_halpha_standard_corner
       - run_standard_best_fit_galacticus
       - run_combined_best_fit_galacticus
+  standard_halpha_mcmc_compact:
+    description: Fewer Slurm jobs; small plotting stages run inside the producing MCMC job where practical.
+    jobs:
+      - name: train_standard_emulators
+        stages:
+          - train_standard_emulators
+      - name: train_halpha_emulator
+        stages:
+          - train_halpha_emulator
+      - name: standard_mcmcs_and_corner
+        depends_on:
+          - train_standard_emulators
+        stages:
+          - run_standard_mcmcs
+          - plot_standard_corner
+      - name: halpha_and_combined_mcmcs
+        depends_on:
+          - train_standard_emulators
+          - train_halpha_emulator
+        stages:
+          - run_halpha_and_combined_mcmcs
+      - name: halpha_standard_corner
+        depends_on:
+          - standard_mcmcs_and_corner
+          - halpha_and_combined_mcmcs
+        stages:
+          - plot_halpha_standard_corner
+  standard_halpha_mcmc_compact_with_bestfits:
+    description: Compact MCMC workflow, plus EPS Galacticus MAP reruns.
+    jobs:
+      - name: train_standard_emulators
+        stages:
+          - train_standard_emulators
+      - name: train_halpha_emulator
+        stages:
+          - train_halpha_emulator
+      - name: standard_mcmcs_and_corner
+        depends_on:
+          - train_standard_emulators
+        stages:
+          - run_standard_mcmcs
+          - plot_standard_corner
+      - name: halpha_and_combined_mcmcs
+        depends_on:
+          - train_standard_emulators
+          - train_halpha_emulator
+        stages:
+          - run_halpha_and_combined_mcmcs
+      - name: halpha_standard_corner
+        depends_on:
+          - standard_mcmcs_and_corner
+          - halpha_and_combined_mcmcs
+        stages:
+          - plot_halpha_standard_corner
+      - name: standard_best_fit_galacticus
+        depends_on:
+          - standard_mcmcs_and_corner
+        stages:
+          - run_standard_best_fit_galacticus
+      - name: combined_best_fit_galacticus
+        depends_on:
+          - halpha_and_combined_mcmcs
+        stages:
+          - run_combined_best_fit_galacticus
 
 stages:
   - name: train_standard_emulators

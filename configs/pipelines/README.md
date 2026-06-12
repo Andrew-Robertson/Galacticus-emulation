@@ -21,14 +21,15 @@ python scripts/run_campaign_pipeline.py \
 ```
 
 On a Slurm machine, the same config can be submitted as a small dependency
-graph. The `standard_halpha_mcmc` workflow trains the two emulator bundles,
-runs the independent MCMCs concurrently where possible, and then runs the
-corner-plot stages after their inputs are complete.
+graph. The `standard_halpha_mcmc_compact` workflow trains the two emulator
+bundles, runs the standard MCMCs and their corner plot in one job, runs the
+H-alpha/combined MCMCs in another job, and submits only one small final
+corner-plot job after both branches finish.
 
 ```bash
 python scripts/submit_campaign_pipeline_slurm.py \
   --config configs/pipelines/standard_observables_plus_halpha.yaml \
-  --workflow standard_halpha_mcmc \
+  --workflow standard_halpha_mcmc_compact \
   --set ROOT=/home/arobert2/GalacticusEmu/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced \
   --set PIPELINE_OUTPUT_ROOT=/home/arobert2/GalacticusEmu/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced/pipeline \
   --setup-command 'source /resnick/groups/carnegie_poc/arobert2/miniconda3/etc/profile.d/conda.sh' \
@@ -44,8 +45,10 @@ python scripts/submit_campaign_pipeline_slurm.py \
 Omit `--submit` first to write the batch scripts and inspect the dependency
 commands without sending anything to Slurm.
 
-Use `--workflow standard_halpha_mcmc_with_bestfits` instead if the all-standard
-and all-standard-plus-H-alpha MAP Galacticus runs should also be submitted.
-Those runs are written under `bestFitModel_GalacticusRun/` inside the relevant
-MCMC directory, and the template gives only those Galacticus rerun stages
-larger OpenMP-style Slurm resources.
+Use `--workflow standard_halpha_mcmc` instead for more, smaller jobs and more
+concurrency within the standard-observable MCMCs. Use
+`--workflow standard_halpha_mcmc_compact_with_bestfits` if the all-standard and
+all-standard-plus-H-alpha MAP Galacticus runs should also be submitted. Those
+runs are written under `bestFitModel_GalacticusRun/` inside the relevant MCMC
+directory, and the template gives only those Galacticus rerun stages larger
+OpenMP-style Slurm resources.

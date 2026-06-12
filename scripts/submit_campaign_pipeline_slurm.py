@@ -108,6 +108,49 @@ def _workflow_stage_names(config: Mapping[str, Any], workflow_name: str) -> list
     return list(stages)
 
 
+def _workflow_job_specs(config: Mapping[str, Any], workflow_name: str) -> list[dict[str, Any]] | None:
+    workflows = config.get("workflows", {}) or {}
+    if not isinstance(workflows, Mapping):
+        raise ValueError("config['workflows'] must be a mapping when present")
+    if workflow_name not in workflows:
+        raise ValueError(f"Unknown workflow {workflow_name!r}")
+    workflow = workflows[workflow_name]
+    if not isinstance(workflow, Mapping) or "jobs" not in workflow:
+        return None
+    raw_jobs = workflow["jobs"]
+    if not isinstance(raw_jobs, list):
+        raise ValueError(f"Workflow {workflow_name!r} jobs must be a list")
+    jobs: list[dict[str, Any]] = []
+    for raw_job in raw_jobs:
+        if isinstance(raw_job, str):
+            jobs.append({"name": raw_job, "stages": [raw_job], "depends_on": []})
+            continue
+        if not isinstance(raw_job, Mapping):
+            raise ValueError(f"Workflow {workflow_name!r} jobs must be strings or mappings")
+        name = str(raw_job.get("name", "")).strip()
+        if not name:
+            raise ValueError(f"Workflow {workflow_name!r} contains a job with no name")
+        stages = raw_job.get("stages", [])
+        if isinstance(stages, str):
+            stages = [stages]
+        if not isinstance(stages, list) or not stages or not all(isinstance(stage, str) for stage in stages):
+            raise ValueError(f"Workflow job {name!r} stages must be a non-empty list of strings")
+        depends_on = raw_job.get("depends_on", [])
+        if isinstance(depends_on, str):
+            depends_on = [depends_on]
+        if not isinstance(depends_on, list) or not all(isinstance(value, str) for value in depends_on):
+            raise ValueError(f"Workflow job {name!r} depends_on must be a string or list of strings")
+        job = {"name": name, "stages": list(stages), "depends_on": list(depends_on)}
+        if "slurm" in raw_job:
+            job["slurm"] = raw_job["slurm"]
+        jobs.append(job)
+    names = [job["name"] for job in jobs]
+    duplicates = sorted({name for name in names if names.count(name) > 1})
+    if duplicates:
+        raise ValueError(f"Workflow {workflow_name!r} has duplicate job name(s): {duplicates}")
+    return jobs
+
+
 def _requested_stage_names(config: Mapping[str, Any], args: argparse.Namespace) -> list[str]:
     names = []
     if args.workflow is not None:
@@ -175,34 +218,55 @@ def _slurm_value(stage: Mapping[str, Any], key: str, default: str | None) -> str
     return str(value)
 
 
+def _job_slurm_value(
+    job: Mapping[str, Any],
+    by_name: Mapping[str, Mapping[str, Any]],
+    key: str,
+    default: str | None,
+) -> str | None:
+    slurm = job.get("slurm", {}) or {}
+    if not isinstance(slurm, Mapping):
+        raise ValueError(f"Job {job.get('name')} slurm metadata must be a mapping")
+    normalized_key = key.replace("-", "_")
+    if normalized_key in slurm or key in slurm:
+        value = slurm.get(normalized_key, slurm.get(key))
+        return None if value is None else str(value)
+    stages = job.get("stages", [])
+    if isinstance(stages, list) and len(stages) == 1 and stages[0] in by_name:
+        return _slurm_value(by_name[stages[0]], key, default)
+    if default is None:
+        return None
+    return str(default)
+
+
 def _sbatch_script(
     *,
-    stage: Mapping[str, Any],
-    stage_name: str,
+    job: Mapping[str, Any],
+    by_name: Mapping[str, Mapping[str, Any]],
     args: argparse.Namespace,
     config_path: Path,
     logs_dir: Path,
 ) -> str:
-    safe_name = stage_name.replace("_", "-")
+    safe_name = str(job["name"]).replace("_", "-")
     job_name = f"{args.job_prefix}-{safe_name}"
     lines = [
         "#!/bin/bash",
         f"#SBATCH --job-name={job_name}",
-        f"#SBATCH --nodes={_slurm_value(stage, 'nodes', args.nodes)}",
-        f"#SBATCH --ntasks={_slurm_value(stage, 'ntasks', args.ntasks)}",
-        f"#SBATCH --cpus-per-task={_slurm_value(stage, 'cpus_per_task', args.cpus_per_task)}",
-        f"#SBATCH --time={_slurm_value(stage, 'time', args.time)}",
+        f"#SBATCH --nodes={_job_slurm_value(job, by_name, 'nodes', args.nodes)}",
+        f"#SBATCH --ntasks={_job_slurm_value(job, by_name, 'ntasks', args.ntasks)}",
+        f"#SBATCH --cpus-per-task={_job_slurm_value(job, by_name, 'cpus_per_task', args.cpus_per_task)}",
+        f"#SBATCH --time={_job_slurm_value(job, by_name, 'time', args.time)}",
         f"#SBATCH --output={logs_dir}/%x-%j.out",
         f"#SBATCH --error={logs_dir}/%x-%j.err",
     ]
-    mem_per_cpu = _slurm_value(stage, "mem_per_cpu", args.mem_per_cpu)
-    mem = _slurm_value(stage, "mem", args.mem)
+    mem_per_cpu = _job_slurm_value(job, by_name, "mem_per_cpu", args.mem_per_cpu)
+    mem = _job_slurm_value(job, by_name, "mem", args.mem)
     if mem_per_cpu is not None and mem is not None:
         mem = None
     for key, value in (
-        ("partition", _slurm_value(stage, "partition", args.partition)),
-        ("qos", _slurm_value(stage, "qos", args.qos)),
-        ("account", _slurm_value(stage, "account", args.account)),
+        ("partition", _job_slurm_value(job, by_name, "partition", args.partition)),
+        ("qos", _job_slurm_value(job, by_name, "qos", args.qos)),
+        ("account", _job_slurm_value(job, by_name, "account", args.account)),
         ("mem-per-cpu", mem_per_cpu),
         ("mem", mem),
     ):
@@ -216,10 +280,10 @@ def _sbatch_script(
         "scripts/run_campaign_pipeline.py",
         "--config",
         str(config_path),
-        "--stage",
-        stage_name,
-        "--execute",
     ]
+    for stage_name in job["stages"]:
+        command.extend(["--stage", str(stage_name)])
+    command.append("--execute")
     for profile_name in args.profile:
         command.extend(["--profile", profile_name])
     if args.no_default_profiles:
@@ -232,8 +296,8 @@ def _sbatch_script(
 
 def _write_stage_script(
     *,
-    stage: Mapping[str, Any],
-    stage_name: str,
+    job: Mapping[str, Any],
+    by_name: Mapping[str, Mapping[str, Any]],
     args: argparse.Namespace,
     config_path: Path,
     script_dir: Path,
@@ -241,12 +305,57 @@ def _write_stage_script(
 ) -> Path:
     script_dir.mkdir(parents=True, exist_ok=True)
     logs_dir.mkdir(parents=True, exist_ok=True)
-    path = script_dir / f"{stage_name}.sbatch"
+    path = script_dir / f"{job['name']}.sbatch"
     path.write_text(
-        _sbatch_script(stage=stage, stage_name=stage_name, args=args, config_path=config_path, logs_dir=logs_dir)
+        _sbatch_script(job=job, by_name=by_name, args=args, config_path=config_path, logs_dir=logs_dir)
     )
     path.chmod(0o755)
     return path
+
+
+def _jobs_from_stage_names(stage_names: Sequence[str], by_name: Mapping[str, Mapping[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "name": stage_name,
+            "stages": [stage_name],
+            "depends_on": [name for name in _stage_dependencies(by_name[stage_name]) if name in stage_names],
+        }
+        for stage_name in stage_names
+    ]
+
+
+def _validate_jobs(jobs: Sequence[Mapping[str, Any]], by_name: Mapping[str, Mapping[str, Any]]) -> None:
+    job_names = {str(job["name"]) for job in jobs}
+    for job in jobs:
+        for stage_name in job["stages"]:
+            if stage_name not in by_name:
+                raise ValueError(f"Job {job['name']!r} references unknown stage {stage_name!r}")
+            if bool(by_name[stage_name].get("manual", False)):
+                raise ValueError(f"Refusing to submit manual stage {stage_name!r}")
+        unknown_jobs = [name for name in job.get("depends_on", []) if name not in job_names]
+        if unknown_jobs:
+            raise ValueError(f"Job {job['name']!r} depends on unknown job(s): {unknown_jobs}")
+
+
+def _ordered_workflow_jobs(jobs: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    by_job_name = {str(job["name"]): dict(job) for job in jobs}
+    selected: set[str] = set()
+    ordered: list[dict[str, Any]] = []
+
+    def visit(name: str, stack: tuple[str, ...] = ()) -> None:
+        if name in selected:
+            return
+        if name in stack:
+            raise ValueError("Workflow job dependency cycle: " + " -> ".join((*stack, name)))
+        job = by_job_name[name]
+        for dependency_name in job.get("depends_on", []):
+            visit(str(dependency_name), (*stack, name))
+        selected.add(name)
+        ordered.append(job)
+
+    for job in jobs:
+        visit(str(job["name"]))
+    return ordered
 
 
 def _submit_stage(script_path: Path, dependency_job_ids: Sequence[str]) -> str:
@@ -276,12 +385,21 @@ def main() -> None:
     if not isinstance(stages, list):
         raise ValueError("config['stages'] must be a list")
     by_name = _stage_by_name(stages)
-    requested = _requested_stage_names(config, args)
-    stage_names = (
-        _dependency_closure(requested, by_name)
-        if args.include_dependencies
-        else _ordered_without_dependencies(requested, by_name)
-    )
+    workflow_jobs = _workflow_job_specs(config, args.workflow) if args.workflow is not None else None
+    if workflow_jobs is not None and args.stage:
+        raise ValueError("--stage cannot be combined with a workflow that defines explicit jobs")
+    if workflow_jobs is None:
+        requested = _requested_stage_names(config, args)
+        stage_names = (
+            _dependency_closure(requested, by_name)
+            if args.include_dependencies
+            else _ordered_without_dependencies(requested, by_name)
+        )
+        jobs = _jobs_from_stage_names(stage_names, by_name)
+    else:
+        requested = [str(job["name"]) for job in workflow_jobs]
+        jobs = _ordered_workflow_jobs(workflow_jobs)
+    _validate_jobs(jobs, by_name)
     logs_dir = _resolve_output_path(args.logs_dir, variables, "slurm_logs")
     script_dir = _resolve_output_path(args.script_dir, variables, "slurm_scripts")
     manifest_path = (
@@ -292,17 +410,15 @@ def main() -> None:
 
     job_ids: dict[str, str] = {}
     manifest_rows = []
-    for stage_name in stage_names:
-        stage = by_name[stage_name]
-        if bool(stage.get("manual", False)):
-            raise ValueError(f"Refusing to submit manual stage {stage_name!r}")
-        dependency_names = [name for name in _stage_dependencies(stage) if name in stage_names]
+    for job in jobs:
+        job_name = str(job["name"])
+        dependency_names = list(job.get("depends_on", []))
         missing_dependency_jobs = [name for name in dependency_names if name not in job_ids and args.submit]
         if missing_dependency_jobs:
             raise RuntimeError(f"Internal ordering error; dependencies not yet submitted: {missing_dependency_jobs}")
         script_path = _write_stage_script(
-            stage=stage,
-            stage_name=stage_name,
+            job=job,
+            by_name=by_name,
             args=args,
             config_path=config_path,
             script_dir=script_dir,
@@ -315,8 +431,10 @@ def main() -> None:
         sbatch_command.append(str(script_path))
         job_id = _submit_stage(script_path, dependency_job_ids) if args.submit else None
         if job_id is not None:
-            job_ids[stage_name] = job_id
-        print(("submitted " if args.submit else "dry-run ") + stage_name)
+            job_ids[job_name] = job_id
+        print(("submitted " if args.submit else "dry-run ") + job_name)
+        if len(job["stages"]) > 1:
+            print("stages=" + ",".join(str(stage_name) for stage_name in job["stages"]))
         if dependency_names:
             print("depends_on=" + ",".join(dependency_names))
         print(shlex.join(sbatch_command))
@@ -324,7 +442,8 @@ def main() -> None:
             print(f"job_id={job_id}")
         manifest_rows.append(
             {
-                "stage": stage_name,
+                "job": job_name,
+                "stages": list(job["stages"]),
                 "depends_on": dependency_names,
                 "dependency_job_ids": dependency_job_ids,
                 "script_path": str(script_path),
@@ -336,8 +455,8 @@ def main() -> None:
     manifest = {
         "config": str(config_path),
         "workflow": args.workflow,
-        "requested_stages": requested,
-        "submitted_stages": stage_names,
+        "requested": requested,
+        "submitted_jobs": [str(job["name"]) for job in jobs],
         "submit": bool(args.submit),
         "jobs": manifest_rows,
     }
