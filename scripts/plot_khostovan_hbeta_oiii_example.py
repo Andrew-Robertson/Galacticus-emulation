@@ -39,15 +39,34 @@ DEFAULT_GALACTICUS_FILE = (
     / "runs/campaigns/sobol_mass_function_emissionlines_dust_simpleSizes_19p_512/evaluations/"
     / "sobol_mass_function_emissionlines_dust_simpleSizes_19p_512-eval-0000/galacticus.hdf5"
 )
-DEFAULT_OUTPUT_DIR = REPO_ROOT / "playing/emission_line_lf_comparisons/khostovan_hbeta_oiii_eval0000"
 
 COMPONENTS_NO_AGN = ["Disk", "Spheroid"]
 COMPONENTS_WITH_AGN = ["Disk", "Spheroid", "AGN"]
-HIZELS_LINES = [
-    ("balmerBeta4863", 4862.68),
-    ("oxygenIII4960", 4960.30),
-    ("oxygenIII5008", 5008.24),
-]
+LINE_SETS = {
+    "hbeta_oiii": {
+        "lines": [
+            ("balmerBeta4863", 4862.68),
+            ("oxygenIII4960", 4960.30),
+            ("oxygenIII5008", 5008.24),
+        ],
+        "output_dir_name": "khostovan_hbeta_oiii_eval0000",
+        "csv_stem": "hbeta_oiii",
+        "axis_label": r"H\beta + [OIII]",
+        "title_label": r"H$\beta$ + [OIII]",
+        "plain_label": "Hbeta+[OIII]",
+    },
+    "oii": {
+        "lines": [
+            ("oxygenII3727", 3727.09),
+            ("oxygenII3730", 3729.88),
+        ],
+        "output_dir_name": "khostovan_oii_eval0000",
+        "csv_stem": "oii",
+        "axis_label": r"[OII]",
+        "title_label": r"[OII]",
+        "plain_label": "[OII]",
+    },
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -58,7 +77,8 @@ def parse_args() -> argparse.Namespace:
         )
     )
     parser.add_argument("--galacticus-file", type=Path, default=DEFAULT_GALACTICUS_FILE)
-    parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument("--line-set", choices=sorted(LINE_SETS), default="hbeta_oiii")
+    parser.add_argument("--output-dir", type=Path, default=None)
     parser.add_argument(
         "--include-agn",
         action=argparse.BooleanOptionalAction,
@@ -92,31 +112,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _load_khostovan_hbeta_oiii_lf() -> pd.DataFrame:
-    # Khostovan et al. 2015, MNRAS 452, 3948, Appendix B table B1.
-    # The observed quantity is the narrow-band Hbeta + [OIII] blend.
-    table = [
-        (0.84, 41.10, 0.10, 703, -1.97, -1.82, 0.02, 3.25),
-        (0.84, 41.30, 0.10, 465, -2.15, -2.04, 0.03, 3.25),
-        (0.84, 41.50, 0.10, 262, -2.39, -2.35, 0.04, 3.25),
-        (0.84, 41.70, 0.10, 128, -2.71, -2.61, 0.06, 3.25),
-        (0.84, 41.90, 0.10, 68, -2.98, -2.94, 0.08, 3.25),
-        (0.84, 42.10, 0.10, 28, -3.37, -3.17, 0.13, 3.25),
-        (0.84, 42.30, 0.10, 12, -3.73, -3.52, 0.20, 3.25),
-        (0.84, 42.50, 0.10, 3, -4.34, -4.12, 0.39, 3.25),
-        (1.42, 41.95, 0.15, 284, -2.63, -2.49, 0.03, 4.06),
-        (1.42, 42.25, 0.15, 73, -3.22, -3.14, 0.07, 4.06),
-        (1.42, 42.55, 0.15, 12, -4.01, -3.89, 0.19, 4.06),
-        (1.42, 42.85, 0.15, 2, -4.78, -4.64, 0.48, 4.06),
-        (2.23, 42.60, 0.075, 84, -3.27, -3.08, 0.06, 10.46),
-        (2.23, 42.75, 0.075, 70, -3.36, -3.14, 0.07, 10.69),
-        (2.23, 42.90, 0.075, 22, -3.86, -3.65, 0.13, 10.69),
-        (2.23, 43.05, 0.075, 5, -4.51, -4.26, 0.29, 10.69),
-        (3.24, 42.65, 0.075, 70, -3.33, -3.17, 0.07, 9.99),
-        (3.24, 42.80, 0.075, 52, -3.48, -3.26, 0.09, 10.48),
-        (3.24, 42.95, 0.075, 25, -3.80, -3.55, 0.13, 10.48),
-        (3.24, 43.10, 0.075, 6, -4.42, -4.17, 0.27, 10.48),
-    ]
+def _lf_dataframe(table: list[tuple[float, float, float, int, float, float, float, float]]) -> pd.DataFrame:
     data = pd.DataFrame(
         table,
         columns=[
@@ -142,6 +138,53 @@ def _load_khostovan_hbeta_oiii_lf() -> pd.DataFrame:
     return data
 
 
+def _load_khostovan_lf(line_set: str) -> pd.DataFrame:
+    # Khostovan et al. 2015, MNRAS 452, 3948, Appendix B.
+    # Table B1 is the narrow-band Hbeta + [OIII] blend.
+    if line_set == "hbeta_oiii":
+        return _lf_dataframe([
+        (0.84, 41.10, 0.10, 703, -1.97, -1.82, 0.02, 3.25),
+        (0.84, 41.30, 0.10, 465, -2.15, -2.04, 0.03, 3.25),
+        (0.84, 41.50, 0.10, 262, -2.39, -2.35, 0.04, 3.25),
+        (0.84, 41.70, 0.10, 128, -2.71, -2.61, 0.06, 3.25),
+        (0.84, 41.90, 0.10, 68, -2.98, -2.94, 0.08, 3.25),
+        (0.84, 42.10, 0.10, 28, -3.37, -3.17, 0.13, 3.25),
+        (0.84, 42.30, 0.10, 12, -3.73, -3.52, 0.20, 3.25),
+        (0.84, 42.50, 0.10, 3, -4.34, -4.12, 0.39, 3.25),
+        (1.42, 41.95, 0.15, 284, -2.63, -2.49, 0.03, 4.06),
+        (1.42, 42.25, 0.15, 73, -3.22, -3.14, 0.07, 4.06),
+        (1.42, 42.55, 0.15, 12, -4.01, -3.89, 0.19, 4.06),
+        (1.42, 42.85, 0.15, 2, -4.78, -4.64, 0.48, 4.06),
+        (2.23, 42.60, 0.075, 84, -3.27, -3.08, 0.06, 10.46),
+        (2.23, 42.75, 0.075, 70, -3.36, -3.14, 0.07, 10.69),
+        (2.23, 42.90, 0.075, 22, -3.86, -3.65, 0.13, 10.69),
+        (2.23, 43.05, 0.075, 5, -4.51, -4.26, 0.29, 10.69),
+        (3.24, 42.65, 0.075, 70, -3.33, -3.17, 0.07, 9.99),
+        (3.24, 42.80, 0.075, 52, -3.48, -3.26, 0.09, 10.48),
+        (3.24, 42.95, 0.075, 25, -3.80, -3.55, 0.13, 10.48),
+        (3.24, 43.10, 0.075, 6, -4.42, -4.17, 0.27, 10.48),
+    ])
+    if line_set == "oii":
+        # Table B2. The z=4.69 rows are intentionally omitted because this
+        # campaign has no matching output and the Roman-mock use case is z~1-3.
+        return _lf_dataframe([
+            (1.47, 41.65, 0.075, 590, -2.24, -2.08, 0.02, 6.80),
+            (1.47, 41.80, 0.075, 425, -2.38, -2.28, 0.03, 6.80),
+            (1.47, 41.95, 0.075, 257, -2.60, -2.46, 0.04, 6.80),
+            (1.47, 42.10, 0.075, 127, -2.90, -2.69, 0.06, 6.80),
+            (1.47, 42.25, 0.075, 42, -3.39, -3.05, 0.10, 6.80),
+            (1.47, 42.40, 0.075, 19, -3.73, -3.55, 0.15, 6.80),
+            (1.47, 42.55, 0.075, 6, -4.23, -4.23, 0.28, 6.80),
+            (2.25, 42.45, 0.10, 92, -3.14, -2.77, 0.05, 6.29),
+            (2.25, 42.65, 0.10, 37, -3.53, -3.15, 0.08, 6.29),
+            (2.25, 42.85, 0.10, 3, -4.62, -4.46, 0.35, 6.29),
+            (3.34, 43.05, 0.050, 12, -4.12, -3.86, 0.17, 15.88),
+            (3.34, 43.15, 0.075, 7, -4.37, -3.92, 0.24, 16.52),
+            (3.34, 43.30, 0.075, 2, -5.22, -4.87, 0.48, 16.52),
+        ])
+    raise ValueError(f"Unknown line_set={line_set!r}")
+
+
 def _output_redshifts(handle: h5py.File) -> dict[str, float]:
     redshifts: dict[str, float] = {}
     for output_name in handle["Outputs"]:
@@ -156,11 +199,11 @@ def _select_output(redshifts: dict[str, float], redshift: float) -> tuple[str, f
     return output_name, output_redshift
 
 
-def _line_luminosities(output_group: h5py.Group, include_agn: bool) -> dict[str, np.ndarray]:
+def _line_luminosities(output_group: h5py.Group, line_set: str, include_agn: bool) -> dict[str, np.ndarray]:
     nd = output_group["nodeData"]
     components = COMPONENTS_WITH_AGN if include_agn else COMPONENTS_NO_AGN
     line_luminosities: dict[str, np.ndarray] = {}
-    for line_name, _wavelength in HIZELS_LINES:
+    for line_name, _wavelength in LINE_SETS[line_set]["lines"]:
         luminosity = None
         for component in components:
             dataset_name = f"luminosityEmissionLine{component}:{line_name}"
@@ -172,9 +215,9 @@ def _line_luminosities(output_group: h5py.Group, include_agn: bool) -> dict[str,
     return line_luminosities
 
 
-def _total_luminosity(line_luminosities: dict[str, np.ndarray]) -> np.ndarray:
+def _total_luminosity(line_luminosities: dict[str, np.ndarray], line_set: str) -> np.ndarray:
     luminosity = None
-    for line_name, _wavelength in HIZELS_LINES:
+    for line_name, _wavelength in LINE_SETS[line_set]["lines"]:
         values = line_luminosities[line_name]
         luminosity = values.copy() if luminosity is None else luminosity + values
     if luminosity is None:
@@ -190,6 +233,7 @@ def _stellar_mass(output_group: h5py.Group) -> np.ndarray:
 def _gb10_attenuated_luminosity(
     output_group: h5py.Group,
     redshift: float,
+    line_set: str,
     line_luminosities: dict[str, np.ndarray],
     dust_params: dict[str, float],
     *,
@@ -204,7 +248,7 @@ def _gb10_attenuated_luminosity(
         **dust_params,
     )
     attenuated = None
-    for line_name, wavelength in HIZELS_LINES:
+    for line_name, wavelength in LINE_SETS[line_set]["lines"]:
         values = np.asarray(
             apply_dust_attenuation_to_line(
                 line_luminosities[line_name],
@@ -233,6 +277,7 @@ def _model_rows(
     galacticus_file: Path,
     observations: pd.DataFrame,
     *,
+    line_set: str,
     include_agn: bool,
     include_dust: bool,
     dust_params_by_draw: list[dict[str, float]],
@@ -256,13 +301,14 @@ def _model_rows(
                 ),
                 decimals=6,
             )
-            line_luminosities = _line_luminosities(output_group, include_agn=include_agn)
-            cases = {"intrinsic": _total_luminosity(line_luminosities)}
+            line_luminosities = _line_luminosities(output_group, line_set=line_set, include_agn=include_agn)
+            cases = {"intrinsic": _total_luminosity(line_luminosities, line_set)}
             if include_dust:
                 baseline_rng = np.random.default_rng(np.random.SeedSequence([base_seed, 0, int(output_name[6:]), 10_000]))
                 cases["gb10_baseline_calzetti"] = _gb10_attenuated_luminosity(
                     output_group,
                     output_redshift,
+                    line_set,
                     line_luminosities,
                     {
                         "delta_0": 0.0,
@@ -280,6 +326,7 @@ def _model_rows(
                     cases[f"dust_draw_{dust_draw_index:04d}"] = _gb10_attenuated_luminosity(
                         output_group,
                         output_redshift,
+                        line_set,
                         line_luminosities,
                         dust_params,
                         dust_law=dust_law,
@@ -322,13 +369,14 @@ def _write_model_csv(rows: list[dict[str, Any]], path: Path) -> None:
         writer.writerows(rows)
 
 
-def _plot(observations: pd.DataFrame, model: pd.DataFrame, output_path: Path) -> None:
+def _plot(observations: pd.DataFrame, model: pd.DataFrame, line_set: str, output_path: Path) -> None:
+    line_config = LINE_SETS[line_set]
     redshifts = sorted(observations["redshift"].unique())
     fig, axes = plt.subplots(2, 2, figsize=(10.8, 8.2), sharex=True, sharey=True, constrained_layout=True)
     axes_flat = axes.ravel()
     dust_color = "#d1495b"
 
-    for axis, redshift in zip(axes_flat, redshifts, strict=True):
+    for axis, redshift in zip(axes_flat, redshifts, strict=False):
         obs = observations[observations["redshift"] == redshift]
         axis.errorbar(
             obs["log10_luminosity_erg_s"],
@@ -397,26 +445,41 @@ def _plot(observations: pd.DataFrame, model: pd.DataFrame, output_path: Path) ->
         axis.set_title(f"z={redshift:.2f}  ({example['output_name']}, z={example['output_redshift']:.2f})")
         axis.set_yscale("log")
         axis.set_ylim(1.0e-8, 3.0e-2)
-        axis.set_xlim(40.9, 43.35)
         axis.grid(alpha=0.18)
+    for axis in axes_flat[len(redshifts) :]:
+        axis.axis("off")
+
+    x_min = float(observations["log10_luminosity_min"].min()) - 0.25
+    x_max = float(observations["log10_luminosity_max"].max()) + 0.25
+    for axis in axes_flat[: len(redshifts)]:
+        axis.set_xlim(x_min, x_max)
 
     for axis in axes[-1, :]:
-        axis.set_xlabel(r"$\log_{10}(L_{\mathrm{H\beta+[OIII]}}/\mathrm{erg\,s^{-1}})$")
+        axis.set_xlabel(rf"$\log_{{10}}(L_{{\mathrm{{{line_config['axis_label']}}}}}/\mathrm{{erg\,s^{{-1}}}})$")
     for axis in axes[:, 0]:
         axis.set_ylabel(r"$\phi\ [\mathrm{Mpc}^{-3}\,\mathrm{dex}^{-1}]$")
     handles, legend_labels = axes_flat[0].get_legend_handles_labels()
-    axes_flat[-1].legend(handles, legend_labels, loc="lower right", frameon=False, fontsize=10)
-    fig.suptitle(r"H$\beta$ + [OIII] luminosity function: full eval-0000 Galacticus output vs. Khostovan et al. (2015)", fontsize=14)
+    legend_axis = axes_flat[len(redshifts) - 1]
+    legend_axis.legend(handles, legend_labels, loc="lower right", frameon=False, fontsize=10)
+    fig.suptitle(
+        rf"{line_config['title_label']} luminosity function: full eval-0000 Galacticus output vs. Khostovan et al. (2015)",
+        fontsize=14,
+    )
     fig.savefig(output_path, dpi=200)
     plt.close(fig)
 
 
 def main() -> None:
     args = parse_args()
-    output_dir = args.output_dir.resolve()
+    line_config = LINE_SETS[args.line_set]
+    output_dir = (
+        args.output_dir.resolve()
+        if args.output_dir is not None
+        else REPO_ROOT / "playing/emission_line_lf_comparisons" / str(line_config["output_dir_name"])
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    observations = _load_khostovan_hbeta_oiii_lf()
+    observations = _load_khostovan_lf(args.line_set)
     priors = _load_dust_priors(args)
     rng = np.random.default_rng(np.random.SeedSequence([args.base_seed, 10_002]))
     dust_params_by_draw = [
@@ -426,6 +489,7 @@ def main() -> None:
     model_rows = _model_rows(
         args.galacticus_file.resolve(),
         observations,
+        line_set=args.line_set,
         include_agn=args.include_agn,
         include_dust=not args.skip_dust,
         dust_params_by_draw=dust_params_by_draw,
@@ -434,16 +498,17 @@ def main() -> None:
     )
     model = pd.DataFrame(model_rows)
 
-    observations_csv = output_dir / "khostovan_2015_hbeta_oiii_lf.csv"
-    model_csv = output_dir / "galacticus_eval0000_hbeta_oiii_lf.csv"
-    figure_path = output_dir / "galacticus_eval0000_vs_khostovan_hbeta_oiii_2015.png"
-    dust_draws_path = output_dir / "hbeta_oiii_dust_draws.csv"
+    stem = str(line_config["csv_stem"])
+    observations_csv = output_dir / f"khostovan_2015_{stem}_lf.csv"
+    model_csv = output_dir / f"galacticus_eval0000_{stem}_lf.csv"
+    figure_path = output_dir / f"galacticus_eval0000_vs_khostovan_{stem}_2015.png"
+    dust_draws_path = output_dir / f"{stem}_dust_draws.csv"
     observations.to_csv(observations_csv, index=False)
     _write_model_csv(model_rows, model_csv)
     pd.DataFrame(
         [{"dust_draw_index": index, "dust_law": args.dust_law, **params} for index, params in enumerate(dust_params_by_draw)]
     ).to_csv(dust_draws_path, index=False)
-    _plot(observations, model, figure_path)
+    _plot(observations, model, args.line_set, figure_path)
 
     print(observations_csv)
     print(model_csv)

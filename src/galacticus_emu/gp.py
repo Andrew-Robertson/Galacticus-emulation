@@ -7,12 +7,15 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import KFold, LeaveOneOut
 
 
-def build_kernel(n_features: int) -> ConstantKernel:
-    return ConstantKernel(1.0, (1.0e-3, 1.0e3)) * Matern(
+def build_kernel(n_features: int, *, fit_white_noise: bool = False) -> ConstantKernel:
+    kernel = ConstantKernel(1.0, (1.0e-3, 1.0e3)) * Matern(
         length_scale=np.full(n_features, 0.25),
         length_scale_bounds=(1.0e-2, 10.0),
         nu=2.5,
-    ) + WhiteKernel(noise_level=1.0e-3, noise_level_bounds=(1.0e-8, 1.0))
+    )
+    if fit_white_noise:
+        kernel += WhiteKernel(noise_level=1.0e-3, noise_level_bounds=(1.0e-8, 1.0))
+    return kernel
 
 
 def fit_scaled_gp(
@@ -20,19 +23,28 @@ def fit_scaled_gp(
     y: np.ndarray,
     n_restarts_optimizer: int,
     optimize_hyperparameters: bool = True,
+    alpha: np.ndarray | float | None = None,
+    fit_white_noise: bool = False,
 ) -> tuple[GaussianProcessRegressor, float, float]:
     y_mean = float(np.mean(y))
     y_std = float(np.std(y))
     if y_std == 0.0:
         y_std = 1.0
     y_scaled = (y - y_mean) / y_std
-    model = GaussianProcessRegressor(
-        kernel=build_kernel(x.shape[1]),
-        normalize_y=False,
-        n_restarts_optimizer=n_restarts_optimizer,
-        optimizer="fmin_l_bfgs_b" if optimize_hyperparameters else None,
-        random_state=42,
-    )
+    alpha_scaled = None
+    if alpha is not None:
+        alpha_scaled = np.asarray(alpha, dtype=float) / (y_std ** 2)
+        alpha_scaled = np.maximum(alpha_scaled, 1.0e-12)
+    kwargs = {
+        "kernel": build_kernel(x.shape[1], fit_white_noise=fit_white_noise),
+        "normalize_y": False,
+        "n_restarts_optimizer": n_restarts_optimizer,
+        "optimizer": "fmin_l_bfgs_b" if optimize_hyperparameters else None,
+        "random_state": 42,
+    }
+    if alpha_scaled is not None:
+        kwargs["alpha"] = alpha_scaled
+    model = GaussianProcessRegressor(**kwargs)
     model.fit(x, y_scaled)
     return model, y_mean, y_std
 
@@ -53,6 +65,8 @@ def fit_cv_predictions(
     n_restarts_optimizer: int,
     cv_folds: int,
     optimize_hyperparameters: bool = True,
+    alpha: np.ndarray | None = None,
+    fit_white_noise: bool = False,
 ) -> tuple[np.ndarray, np.ndarray]:
     n_samples = x.shape[0]
     splitter = LeaveOneOut() if cv_folds >= n_samples else KFold(
@@ -69,6 +83,8 @@ def fit_cv_predictions(
             y=y[train_index],
             n_restarts_optimizer=n_restarts_optimizer,
             optimize_hyperparameters=optimize_hyperparameters,
+            alpha=alpha[train_index] if alpha is not None else None,
+            fit_white_noise=fit_white_noise,
         )
         pred, pred_std = predict_scaled_gp(model, y_mean, y_std, x[test_index])
         predictions[test_index] = pred

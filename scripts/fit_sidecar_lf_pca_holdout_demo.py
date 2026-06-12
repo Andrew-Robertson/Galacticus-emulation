@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 from pathlib import Path
 import sys
 import warnings
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+os.environ.setdefault("MPLCONFIGDIR", str(REPO_ROOT / ".mplconfig"))
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 import h5py
@@ -48,6 +50,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--random-state", type=int, default=42)
     parser.add_argument("--n-restarts-optimizer", type=int, default=1)
     parser.add_argument("--pca-components", type=int, default=4)
+    parser.add_argument(
+        "--pca-variance-threshold",
+        type=float,
+        default=None,
+        help="Choose enough PCA components to explain this variance fraction, e.g. 0.99. Overrides --pca-components.",
+    )
     parser.add_argument("--min-log10-lf", type=float, default=-8.0)
     parser.add_argument("--max-example-curves", type=int, default=5)
     parser.add_argument("--use-training-alpha", action=argparse.BooleanOptionalAction, default=True)
@@ -288,6 +296,19 @@ def _target_curve(
     return np.full_like(x_plot, np.nan, dtype=float), None
 
 
+def _choose_pca_components(y_scaled: np.ndarray, requested: int, threshold: float | None) -> int:
+    max_components = min(y_scaled.shape[0], y_scaled.shape[1])
+    if threshold is None:
+        return min(int(requested), max_components)
+    threshold = float(threshold)
+    if not 0.0 < threshold <= 1.0:
+        raise ValueError(f"--pca-variance-threshold must be in (0, 1], got {threshold}")
+    probe = PCA(n_components=max_components)
+    probe.fit(y_scaled)
+    cumulative = np.cumsum(probe.explained_variance_ratio_)
+    return int(np.searchsorted(cumulative, threshold) + 1)
+
+
 def _linear_to_log10(values: np.ndarray, min_log10_lf: float) -> np.ndarray:
     positive = values[np.isfinite(values) & (values > 0.0)]
     if positive.size == 0:
@@ -420,6 +441,35 @@ def _plot_pca_modes(
     plt.close(fig)
 
 
+def _robust_heldout_ylim(
+    *,
+    target_plot: np.ndarray,
+    y_train: np.ndarray,
+    y_test: np.ndarray,
+    y_pred: np.ndarray,
+    y_pred_std: np.ndarray,
+) -> tuple[float, float] | None:
+    values = [
+        np.asarray(target_plot, dtype=float).ravel(),
+        np.asarray(y_train, dtype=float).ravel(),
+        np.asarray(y_test, dtype=float).ravel(),
+        np.asarray(y_pred, dtype=float).ravel(),
+        np.asarray(y_pred - y_pred_std, dtype=float).ravel(),
+        np.asarray(y_pred + y_pred_std, dtype=float).ravel(),
+    ]
+    finite = np.concatenate([array[np.isfinite(array)] for array in values])
+    if finite.size == 0:
+        return None
+    lower, upper = np.nanpercentile(finite, [0.5, 99.5])
+    if not np.isfinite(lower) or not np.isfinite(upper):
+        return None
+    if upper <= lower:
+        lower -= 0.5
+        upper += 0.5
+    margin = max(0.08 * (upper - lower), 0.15)
+    return float(lower - margin), float(upper + margin)
+
+
 def _plot_heldout_curves(
     *,
     x_plot: np.ndarray,
@@ -498,6 +548,15 @@ def _plot_heldout_curves(
     ax.set_ylabel("log10 Phi [Mpc^-3 dex^-1]")
     ax.set_title(f"{observable} held-out examples")
     ax.grid(alpha=0.2)
+    y_limits = _robust_heldout_ylim(
+        target_plot=target_plot,
+        y_train=y_train,
+        y_test=y_test,
+        y_pred=y_pred,
+        y_pred_std=y_pred_std,
+    )
+    if y_limits is not None:
+        ax.set_ylim(*y_limits)
     fig.savefig(path, dpi=180)
     plt.close(fig)
 
@@ -555,7 +614,7 @@ def main() -> None:
 
     scaler = StandardScaler()
     y_train_scaled = scaler.fit_transform(y_train)
-    n_components = min(args.pca_components, y_train_scaled.shape[0], y_train_scaled.shape[1])
+    n_components = _choose_pca_components(y_train_scaled, args.pca_components, args.pca_variance_threshold)
     pca = PCA(n_components=n_components)
     coefficients = pca.fit_transform(y_train_scaled)
 
@@ -634,6 +693,8 @@ def main() -> None:
         "target_log10_phi": target_plot.tolist(),
         "target_log10_phi_std": None if target_std_plot is None else target_std_plot.tolist(),
         "log10_floor_linear": floor,
+        "pca_components_requested": int(args.pca_components),
+        "pca_variance_threshold": None if args.pca_variance_threshold is None else float(args.pca_variance_threshold),
         "pca_components": int(n_components),
         "pca_explained_variance_ratio": pca.explained_variance_ratio_.tolist(),
         "pca_explained_variance_ratio_cumulative": np.cumsum(pca.explained_variance_ratio_).tolist(),

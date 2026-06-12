@@ -39,21 +39,54 @@ def parse_args() -> argparse.Namespace:
         help="Copy evaluation directories instead of symlinking them.",
     )
     parser.add_argument(
+        "--link-mode",
+        choices=["symlink", "copy"],
+        default=None,
+        help="Evaluation storage mode. Equivalent to default symlinks or --copy-evaluations.",
+    )
+    parser.add_argument(
+        "--include-sidecars",
+        action="store_true",
+        help="Accepted for clarity; sidecars are included automatically because whole evaluation directories are linked/copied.",
+    )
+    parser.add_argument(
+        "--max-evaluations",
+        type=int,
+        default=None,
+        help="Keep only the first N evaluation directories, after sorting by evaluation id.",
+    )
+    parser.add_argument(
         "--overwrite",
         action="store_true",
         help="Replace OUTPUT_CAMPAIGN if it already exists.",
     )
+    parser.add_argument(
+        "--skip-derived-directories",
+        action="store_true",
+        help=(
+            "Do not symlink derived root-level directories such as emulator_* and figures_*. "
+            "Useful when the filtered view will be retrained independently."
+        ),
+    )
     return parser.parse_args()
 
 
-def _normalize_evaluation_id(campaign_name: str, text: str) -> str:
+def _evaluation_id_prefix(source_campaign: Path) -> str:
+    source_evaluations = source_campaign / "evaluations"
+    for source_eval in sorted(path for path in source_evaluations.iterdir() if path.is_dir()):
+        if "-eval-" in source_eval.name:
+            return source_eval.name.rsplit("-eval-", 1)[0]
+    return source_campaign.name
+
+
+def _normalize_evaluation_id(evaluation_id_prefix: str, text: str) -> str:
     value = text.strip()
     if not value:
         raise ValueError("Empty evaluation ID")
     if value.isdigit():
-        return f"{campaign_name}-eval-{int(value):04d}"
+        return f"{evaluation_id_prefix}-eval-{int(value):04d}"
     if value.startswith("eval-"):
-        return f"{campaign_name}-{value}"
+        return f"{evaluation_id_prefix}-{value}"
     return value
 
 
@@ -67,7 +100,15 @@ def _read_exclusions(args: argparse.Namespace, source_campaign: Path) -> set[str
             stripped = line.strip()
             if stripped and not stripped.startswith("#"):
                 raw_values.append(stripped)
-    return {_normalize_evaluation_id(source_campaign.name, value) for value in raw_values}
+    evaluation_id_prefix = _evaluation_id_prefix(source_campaign)
+    exclusions = {_normalize_evaluation_id(evaluation_id_prefix, value) for value in raw_values}
+    if args.max_evaluations is not None:
+        if args.max_evaluations < 1:
+            raise ValueError("--max-evaluations must be at least 1")
+        source_evaluations = source_campaign / "evaluations"
+        evaluation_ids = sorted(path.name for path in source_evaluations.iterdir() if path.is_dir())
+        exclusions.update(evaluation_ids[args.max_evaluations :])
+    return exclusions
 
 
 def _copy_or_filter_root_file(source: Path, destination: Path, excluded_evaluation_ids: set[str]) -> None:
@@ -129,6 +170,10 @@ def _link_or_copy_evaluations(
     return kept
 
 
+def _is_derived_directory(path: Path) -> bool:
+    return path.name.startswith(("emulator_", "figures_"))
+
+
 def main() -> None:
     args = parse_args()
     source_campaign = args.source_campaign.resolve()
@@ -141,6 +186,7 @@ def main() -> None:
     excluded_evaluation_ids = _read_exclusions(args, source_campaign)
     if not excluded_evaluation_ids:
         raise ValueError("No excluded evaluations were supplied.")
+    copy_evaluations = bool(args.copy_evaluations or args.link_mode == "copy")
 
     if output_campaign.exists():
         if not args.overwrite:
@@ -154,6 +200,8 @@ def main() -> None:
     for source in sorted(path for path in source_campaign.iterdir() if path.is_dir()):
         if source.name in {"evaluations", "logs"}:
             continue
+        if args.skip_derived_directories and _is_derived_directory(source):
+            continue
         destination = output_campaign / source.name
         destination.symlink_to(source.resolve(), target_is_directory=True)
 
@@ -161,7 +209,7 @@ def main() -> None:
         source_campaign,
         output_campaign,
         excluded_evaluation_ids,
-        copy_evaluations=args.copy_evaluations,
+        copy_evaluations=copy_evaluations,
     )
     (output_campaign / "excluded_evaluations.txt").write_text(
         "\n".join(sorted(excluded_evaluation_ids)) + "\n"
@@ -171,7 +219,10 @@ def main() -> None:
         "output_campaign": str(output_campaign),
         "excluded_evaluation_ids": sorted(excluded_evaluation_ids),
         "n_evaluations_kept": kept,
-        "evaluation_storage": "copy" if args.copy_evaluations else "symlink",
+        "max_evaluations": args.max_evaluations,
+        "evaluation_storage": "copy" if copy_evaluations else "symlink",
+        "include_sidecars": True,
+        "skip_derived_directories": bool(args.skip_derived_directories),
     }
     (output_campaign / "filtered_campaign_view.json").write_text(json.dumps(metadata, indent=2) + "\n")
 

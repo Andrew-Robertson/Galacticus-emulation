@@ -37,8 +37,20 @@ def parse_args() -> argparse.Namespace:
         "--observable",
         dest="observables",
         action="append",
-        choices=sorted(OBSERVABLE_CONFIGS),
         help="Train only a selected observable key. Repeat to include multiple.",
+    )
+    parser.add_argument(
+        "--analysis-observable",
+        action="append",
+        default=[],
+        help="Add a standard outputAnalysis observable as key=analysis. Repeat to include multiple.",
+    )
+    parser.add_argument(
+        "--observable-config-json",
+        action="append",
+        type=Path,
+        default=[],
+        help="JSON mapping of observable_key to config values such as analysis, label, and plotting/training defaults.",
     )
     parser.add_argument("--n-restarts-optimizer", type=int, default=0)
     parser.add_argument(
@@ -53,6 +65,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--pca-scaling", choices=["standardized", "unscaled"], default="standardized")
     parser.add_argument("--default-pca-components", type=int, default=None)
     parser.add_argument(
+        "--pca-variance-threshold",
+        type=float,
+        default=None,
+        help="In PCA mode, choose enough components to explain this variance fraction, e.g. 0.99.",
+    )
+    parser.add_argument(
         "--pca-components",
         action="append",
         default=[],
@@ -62,14 +80,44 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _parse_pca_component_overrides(values: list[str]) -> dict[str, int]:
+def _load_observable_config_json(paths: list[Path]) -> dict[str, dict]:
+    configs: dict[str, dict] = {}
+    for path in paths:
+        data = json.loads(path.read_text())
+        if not isinstance(data, dict):
+            raise ValueError(f"{path} must contain a JSON object mapping observable keys to configs")
+        for key, config in data.items():
+            if not isinstance(config, dict):
+                raise ValueError(f"Observable config {key!r} in {path} must be an object")
+            configs[str(key)] = dict(config)
+    return configs
+
+
+def _parse_analysis_observables(values: list[str]) -> dict[str, dict]:
+    configs: dict[str, dict] = {}
+    for value in values:
+        if "=" not in value:
+            raise ValueError(f"Invalid --analysis-observable value {value!r}; expected key=analysis")
+        key, analysis = value.split("=", 1)
+        key = key.strip()
+        analysis = analysis.strip()
+        if not key or not analysis:
+            raise ValueError(f"Invalid --analysis-observable value {value!r}; expected key=analysis")
+        configs[key] = {
+            "analysis": analysis,
+            "label": key.replace("_", " "),
+        }
+    return configs
+
+
+def _parse_pca_component_overrides(values: list[str], known_keys: set[str]) -> dict[str, int]:
     result: dict[str, int] = {}
     for value in values:
         if "=" not in value:
             raise ValueError(f"Invalid --pca-components value {value!r}; expected observable_key=n")
         key, raw_count = value.split("=", 1)
         key = key.strip()
-        if key not in OBSERVABLE_CONFIGS:
+        if key not in known_keys:
             raise ValueError(f"Unknown observable key {key!r} in --pca-components")
         result[key] = int(raw_count)
     return result
@@ -78,9 +126,15 @@ def _parse_pca_component_overrides(values: list[str]) -> dict[str, int]:
 def main() -> None:
     args = parse_args()
     warnings.filterwarnings("ignore", category=ConvergenceWarning)
-    pca_component_overrides = _parse_pca_component_overrides(args.pca_components)
+    extra_observable_configs = _load_observable_config_json(args.observable_config_json)
+    extra_observable_configs.update(_parse_analysis_observables(args.analysis_observable))
+    known_observable_keys = set(OBSERVABLE_CONFIGS) | set(extra_observable_configs)
+    pca_component_overrides = _parse_pca_component_overrides(args.pca_components, known_observable_keys)
     if args.default_pca_components is not None:
-        pca_components = {key: int(args.default_pca_components) for key in (args.observables or OBSERVABLE_CONFIGS.keys())}
+        pca_components = {
+            key: int(args.default_pca_components)
+            for key in (args.observables or known_observable_keys)
+        }
         pca_components.update(pca_component_overrides)
     else:
         pca_components = dict(DEFAULT_PCA_COMPONENTS)
@@ -96,6 +150,8 @@ def main() -> None:
         emulator_mode=args.emulator_mode,
         pca_components=pca_components,
         pca_scaling=args.pca_scaling,
+        pca_variance_threshold=args.pca_variance_threshold,
+        observable_configs=extra_observable_configs,
     )
     benchmark = benchmark_observables_bundle(bundle, n_predictions=args.benchmark_predictions)
     bundle["prediction_benchmark"] = benchmark

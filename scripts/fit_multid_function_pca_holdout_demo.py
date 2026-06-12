@@ -20,10 +20,14 @@ from sklearn.model_selection import KFold
 from sklearn.preprocessing import StandardScaler
 
 from galacticus_emu.gp import fit_scaled_gp, predict_scaled_gp
+from galacticus_emu.interactive_observables import DEFAULT_PCA_COMPONENTS as SHARED_DEFAULT_PCA_COMPONENTS
 
 from fit_multid_function_holdout_demo import (
     PRESETS,
+    PRESET_OBSERVABLE_KEYS,
+    _bad_mask_override_for_transform,
     _load_campaign,
+    _json_safe_metadata,
     _metrics,
     _plot_overlay,
     _plot_parity,
@@ -39,13 +43,9 @@ from fit_multid_function_holdout_demo import (
 
 
 DEFAULT_PCA_COMPONENTS = {
-    "bh_halo_mass_trinity_z1": 4,
-    "smf_zfourge_z0": 5,
-    "smf_zfourge_z3": 4,
-    "mzr_blanc2019": 5,
-    "sfr_function_robotham2011": 5,
-    "size_mass_vdw2014_star_forming_z0": 3,
-    "size_mass_vdw2014_quiescent_z0": 4,
+    preset_key: SHARED_DEFAULT_PCA_COMPONENTS[observable_key]
+    for preset_key, observable_key in PRESET_OBSERVABLE_KEYS.items()
+    if observable_key in SHARED_DEFAULT_PCA_COMPONENTS
 }
 
 
@@ -320,11 +320,19 @@ def main() -> None:
         min_log10_y=args.min_log10_y,
     )
     supported_bin_mask = np.ones(y_plot_all.shape[1], dtype=bool)
+    bad_mask_override = _bad_mask_override_for_transform(
+        transform_metadata,
+        bad_training_condition=str(bad_training_condition),
+        bad_training_value_fill=bad_training_value_fill,
+    )
     if drop_unsupported_bins:
-        supported_bin_mask = _supported_bin_mask(
-            y_plot_all,
-            bad_training_condition=str(bad_training_condition),
-        )
+        if bad_mask_override is not None:
+            supported_bin_mask = np.any(~bad_mask_override, axis=0)
+        else:
+            supported_bin_mask = _supported_bin_mask(
+                y_plot_all,
+                bad_training_condition=str(bad_training_condition),
+            )
         if not np.any(supported_bin_mask):
             raise ValueError("All bins are unsupported after applying the bad-training mask.")
         x_bins_plot = x_bins_plot[supported_bin_mask]
@@ -334,6 +342,8 @@ def main() -> None:
         y_plot_all = y_plot_all[:, supported_bin_mask]
         if y_std_all is not None:
             y_std_all = y_std_all[:, supported_bin_mask]
+    if bad_mask_override is not None:
+        bad_mask_override = bad_mask_override[:, supported_bin_mask]
     y_fit_all, alpha_sigma_all, training_target_metadata = _prepare_training_targets(
         y_plot_all,
         y_std_all,
@@ -343,6 +353,7 @@ def main() -> None:
         bad_training_value_fill=bad_training_value_fill,
         bad_training_sigma=float(bad_training_sigma),
         min_training_sigma=float(min_training_sigma),
+        bad_mask_override=bad_mask_override,
     )
     alpha_all = alpha_sigma_all**2 if alpha_sigma_all is not None else None
 
@@ -397,6 +408,7 @@ def main() -> None:
         ymax=overlay_ymax,
         path=overlay_path,
         bad_training_condition=str(bad_training_condition),
+        bad_training_value_fill=bad_training_value_fill,
     )
     _plot_parity(
         x_bins_plot=x_bins_plot,
@@ -406,6 +418,7 @@ def main() -> None:
         y_pred_std=y_pred_std,
         path=parity_path,
         bad_training_condition=str(bad_training_condition),
+        bad_training_value_fill=bad_training_value_fill,
     )
 
     pca_summary = _plot_pca_modes(
@@ -449,7 +462,7 @@ def main() -> None:
         "example_curve_ids": samples.iloc[test_index[example_indices]]["evaluation_id"].tolist(),
         "quantile_columns": _quantile_columns(samples),
         "analysis_attrs": attrs,
-        "transform_metadata": transform_metadata,
+        "transform_metadata": _json_safe_metadata(transform_metadata),
         "training_target_metadata": training_target_metadata,
         "pca_fit_metadata": pca_fit_metadata,
         "pca_summary": pca_summary,

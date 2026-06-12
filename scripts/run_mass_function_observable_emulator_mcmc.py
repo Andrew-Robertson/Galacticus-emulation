@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 import json
 import os
 from pathlib import Path
@@ -12,6 +13,7 @@ os.environ.setdefault("MPLCONFIGDIR", str(REPO_ROOT / ".mplconfig"))
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 import h5py
+import joblib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -31,7 +33,14 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 
 from galacticus_emu.gp import fit_scaled_gp, predict_scaled_gp
-from galacticus_emu.lhs import log_prior_density, transform_from_prior_quantiles, transform_to_prior_quantiles
+from galacticus_emu.lhs import (
+    TruncatedLogNormalPrior,
+    log_prior_density,
+    transform_from_prior_quantiles,
+    transform_to_prior_quantiles,
+)
+from galacticus_emu.mcmc_corner import corner_with_log10_priors
+from galacticus_emu.mcmc_trace import make_trace_plot
 from galacticus_emu.specs import trinity_parameter_specs
 
 
@@ -69,7 +78,7 @@ ANALYSIS_CONFIGS = {
     "smf_z0": {
         "analysis": "massFunctionStellarTomczak2014ZFOURGEz0",
         "label": "Tomczak z~0",
-        "use_training_alpha": False,
+        "use_training_alpha": True,
         "bad_training_condition": "nonfinite",
         "bad_training_value_fill": "bin_median",
         "bad_training_sigma": 5.0,
@@ -78,7 +87,7 @@ ANALYSIS_CONFIGS = {
     "smf_z3": {
         "analysis": "massFunctionStellarTomczak2014ZFOURGEz3",
         "label": "Tomczak z~2",
-        "use_training_alpha": False,
+        "use_training_alpha": True,
         "bad_training_condition": "nonfinite",
         "bad_training_value_fill": "bin_median",
         "bad_training_sigma": 5.0,
@@ -87,7 +96,7 @@ ANALYSIS_CONFIGS = {
     "sfr": {
         "analysis": "starFormationRateFunctionRobotham2011",
         "label": "Robotham 2011 SFRF",
-        "use_training_alpha": False,
+        "use_training_alpha": True,
         "bad_training_condition": "nonfinite",
         "bad_training_value_fill": "bin_median",
         "bad_training_sigma": 5.0,
@@ -172,6 +181,18 @@ def parse_args() -> argparse.Namespace:
         default=True,
         help="Include GP predictive variance in the likelihood covariance.",
     )
+    parser.add_argument(
+        "--thin-disk-maximum-prior-median",
+        type=float,
+        default=None,
+        help="Override the thinDiskMaximum prior median (x0) while keeping the original support.",
+    )
+    parser.add_argument(
+        "--thin-disk-maximum-prior-sigma-dex",
+        type=float,
+        default=None,
+        help="Override the thinDiskMaximum prior scatter in dex.",
+    )
     parser.add_argument("--pca-scaling", choices=["standardized", "unscaled"], default="standardized")
     parser.add_argument("--default-pca-components", type=int, default=None)
     parser.add_argument(
@@ -181,6 +202,29 @@ def parse_args() -> argparse.Namespace:
         help="Override PCA components as analysis_key=n, e.g. smf_z0=6",
     )
     return parser.parse_args()
+
+
+def _parameter_specs_with_overrides(args: argparse.Namespace):
+    specs = list(_parameter_specs())
+    if args.thin_disk_maximum_prior_median is None and args.thin_disk_maximum_prior_sigma_dex is None:
+        return specs
+
+    median = args.thin_disk_maximum_prior_median
+    sigma_dex = args.thin_disk_maximum_prior_sigma_dex
+    for index, spec in enumerate(specs):
+        if spec.short_name != "thinDiskMaximum":
+            continue
+        if not isinstance(spec.prior, TruncatedLogNormalPrior):
+            raise TypeError("thinDiskMaximum prior is no longer TruncatedLogNormalPrior; override logic needs updating.")
+        updated_prior = TruncatedLogNormalPrior(
+            lower=spec.prior.lower,
+            upper=spec.prior.upper,
+            x0=spec.prior.x0 if median is None else float(median),
+            sigma=spec.prior.sigma if sigma_dex is None else float(sigma_dex) * float(np.log(10.0)),
+        )
+        specs[index] = replace(spec, prior=updated_prior)
+        break
+    return specs
 
 
 def _decode_attr(value):
@@ -433,7 +477,7 @@ def _load_analysis_bundle(
         is_log=y_is_log,
         min_log10_y=-7.0,
     )
-    y_fit, alpha, training_metadata = _prepare_training_targets(
+    y_fit, alpha_sigma, training_metadata = _prepare_training_targets(
         y_fit_space,
         y_noise_fit_space,
         bad_training_condition=str(config["bad_training_condition"]),
@@ -442,6 +486,7 @@ def _load_analysis_bundle(
         bad_training_sigma=float(config["bad_training_sigma"]),
         min_training_sigma=float(config["min_training_sigma"]),
     )
+    alpha = alpha_sigma**2 if alpha_sigma is not None else None
 
     bundle = {
         "analysis_key": analysis_key,
@@ -706,8 +751,14 @@ def _plot_best_fit_observables(
     bundles: list[dict[str, object]],
     prediction_mean_by_key: dict[str, np.ndarray],
     prediction_std_by_key: dict[str, np.ndarray],
+    slow_theta_quantiles: np.ndarray,
     output_path: Path,
 ) -> None:
+    y_limits_override = {
+        "smf_z0": (-7.0, -1.0),
+        "smf_z3": (-7.0, -1.0),
+        "sfr": (-7.0, -1.0),
+    }
     n_panels = len(bundles)
     ncols = 2 if n_panels > 1 else 1
     nrows = int(np.ceil(n_panels / ncols))
@@ -720,24 +771,41 @@ def _plot_best_fit_observables(
         pred = prediction_mean_by_key[bundle["analysis_key"]]
         pred_std = prediction_std_by_key[bundle["analysis_key"]]
         if bundle["y_is_log"]:
+            pred_log10, pred_std_log10 = _predict_bundle(bundle, np.atleast_2d(slow_theta_quantiles))
+            pred_plot = pred_log10[0]
+            pred_std_plot = pred_std_log10[0]
             lower_target = np.maximum(target - target_std, 1.0e-30)
             upper_target = target + target_std
             target_plot = np.log10(np.maximum(target, 1.0e-30))
             yerr_lower = target_plot - np.log10(lower_target)
             yerr_upper = np.log10(upper_target) - target_plot
-            pred_plot = np.log10(np.maximum(pred, 1.0e-30))
-            lower_pred = np.maximum(pred - pred_std, 1.0e-30)
-            upper_pred = pred + pred_std
-            pred_lower_plot = np.log10(lower_pred)
-            pred_upper_plot = np.log10(upper_pred)
+            pred_lower_plot = pred_plot - pred_std_plot
+            pred_upper_plot = pred_plot + pred_std_plot
+            override = y_limits_override.get(bundle["analysis_key"])
+            if override is None:
+                central_values = np.concatenate([target_plot, pred_plot])
+                central_values = central_values[np.isfinite(central_values)]
+                lower = float(np.min(central_values))
+                upper = float(np.max(central_values))
+                margin = 0.08 * (upper - lower if upper > lower else 1.0)
+                y_limits = (lower - margin, upper + margin)
+            else:
+                y_limits = override
             axis.errorbar(x, target_plot, yerr=np.vstack([yerr_lower, yerr_upper]), fmt="o", color="0.15")
             axis.plot(x, pred_plot, color="tab:blue", lw=1.8)
             axis.fill_between(x, pred_lower_plot, pred_upper_plot, color="tab:blue", alpha=0.2)
+            axis.set_ylim(*y_limits)
             axis.set_ylabel(r"$\log_{10}(\Phi)$")
         else:
+            central_values = np.concatenate([target, pred])
+            central_values = central_values[np.isfinite(central_values)]
+            lower = float(np.min(central_values))
+            upper = float(np.max(central_values))
+            margin = 0.08 * (upper - lower if upper > lower else 1.0)
             axis.errorbar(x, target, yerr=target_std, fmt="o", color="0.15")
             axis.plot(x, pred, color="tab:blue", lw=1.8)
             axis.fill_between(x, pred - pred_std, pred + pred_std, color="tab:blue", alpha=0.2)
+            axis.set_ylim(lower - margin, upper + margin)
             axis.set_ylabel(_display_y_label(bundle))
         axis.set_title(bundle["label"])
         axis.set_xlabel(_display_x_label(bundle))
@@ -748,22 +816,30 @@ def _plot_best_fit_observables(
     plt.close(fig)
 
 
-def _make_trace_plot(samples: np.ndarray, labels: list[str], output_path: Path) -> None:
-    n_steps, _, n_dim = samples.shape
-    fig, axes = plt.subplots(n_dim, 1, figsize=(9.0, 2.0 * n_dim), sharex=True, constrained_layout=True)
-    if n_dim == 1:
-        axes = [axes]
-    for axis, label, dim_index in zip(axes, labels, range(n_dim), strict=True):
-        axis.plot(samples[:, :, dim_index], alpha=0.25, linewidth=0.6)
-        axis.set_ylabel(label)
-    axes[-1].set_xlabel("Step")
-    fig.savefig(output_path, dpi=180)
-    plt.close(fig)
+def _make_trace_plot(
+    samples: np.ndarray,
+    labels: list[str],
+    output_path: Path,
+    *,
+    parameter_specs=None,
+    burn_in: int = 0,
+) -> dict[str, float]:
+    return make_trace_plot(
+        samples,
+        labels,
+        output_path,
+        parameter_specs=parameter_specs,
+        burn_in=burn_in,
+        row_height=2.0,
+        alpha=0.25,
+        linewidth=0.6,
+    )
 
 
 def main() -> None:
     args = parse_args()
     campaign_root = args.campaign_root.resolve()
+    parameter_specs = _parameter_specs_with_overrides(args)
     pca_component_overrides = _parse_pca_component_overrides(args.pca_components)
     default_output_prefix = f"observable_{args.likelihood_case}"
     mcmc_dir_name = args.mcmc_dir_name or f"emulator_observable_mcmc_{args.likelihood_case}"
@@ -807,7 +883,7 @@ def main() -> None:
         start += n_out
 
     posterior = ObservableEmulatorPosterior(
-        parameter_specs=INPUT_PARAMETER_SPECS,
+        parameter_specs=parameter_specs,
         bundles=bundles,
         output_slices=output_slices,
         include_emulator_variance=bool(args.include_emulator_variance),
@@ -815,10 +891,10 @@ def main() -> None:
 
     if args.init_center == "prior_center":
         center_quantiles = np.full(len(INPUT_COLUMNS), 0.5, dtype=float)
-        center_theta = transform_from_prior_quantiles(INPUT_PARAMETER_SPECS, center_quantiles[None, :])[0]
+        center_theta = transform_from_prior_quantiles(parameter_specs, center_quantiles[None, :])[0]
     else:
         center_theta = _best_training_theta(bundles)
-        center_quantiles = transform_to_prior_quantiles(INPUT_PARAMETER_SPECS, center_theta[None, :])[0]
+        center_quantiles = transform_to_prior_quantiles(parameter_specs, center_theta[None, :])[0]
 
     rng = np.random.default_rng(args.seed)
     initial_quantiles = np.clip(
@@ -826,7 +902,7 @@ def main() -> None:
         1.0e-4,
         1.0 - 1.0e-4,
     )
-    initial_positions = transform_from_prior_quantiles(INPUT_PARAMETER_SPECS, initial_quantiles)
+    initial_positions = transform_from_prior_quantiles(parameter_specs, initial_quantiles)
 
     sampler_kwargs = {"nwalkers": args.n_walkers, "ndim": len(INPUT_COLUMNS)}
     if args.n_processes > 1:
@@ -913,6 +989,13 @@ def main() -> None:
         "include_emulator_variance": bool(args.include_emulator_variance),
         "analysis_keys": analysis_keys,
         "input_columns": INPUT_COLUMNS,
+        "parameter_priors": {
+            spec.short_name: {
+                "prior_type": type(spec.prior).__name__,
+                **spec.prior.__dict__,
+            }
+            for spec in parameter_specs
+        },
         "n_restarts_optimizer": args.n_restarts_optimizer,
         "n_walkers": args.n_walkers,
         "n_steps": args.n_steps,
@@ -926,6 +1009,8 @@ def main() -> None:
         "pca_scaling": args.pca_scaling,
         "default_pca_components": args.default_pca_components,
         "pca_component_overrides": pca_component_overrides,
+        "thin_disk_maximum_prior_median": args.thin_disk_maximum_prior_median,
+        "thin_disk_maximum_prior_sigma_dex": args.thin_disk_maximum_prior_sigma_dex,
         "mean_acceptance_fraction": float(np.mean(acceptance_fraction)),
         "acceptance_fraction_by_walker": [float(value) for value in acceptance_fraction],
         "best_log_probability": float(flat_log_prob[best_index]),
@@ -944,20 +1029,61 @@ def main() -> None:
     summary_path = mcmc_root / f"{output_prefix}_run_summary.json"
     summary_path.write_text(json.dumps(summary, indent=2) + "\n")
 
+    emulator_bundle_path = mcmc_root / f"{output_prefix}_fitted_emulators.joblib"
+    joblib.dump(
+        {
+            "bundle_type": "observable_mcmc_fitted_emulators",
+            "campaign_root": str(campaign_root),
+            "likelihood_case": args.likelihood_case,
+            "emulator_mode": args.emulator_mode,
+            "include_emulator_variance": bool(args.include_emulator_variance),
+            "input_columns": INPUT_COLUMNS,
+            "parameter_specs": parameter_specs,
+            "analysis_keys": analysis_keys,
+            "bundles": bundles,
+            "output_slices": output_slices,
+            "best_theta": {name: float(value) for name, value in zip(INPUT_COLUMNS, best_theta, strict=True)},
+        },
+        emulator_bundle_path,
+    )
+
     trace_path = figures_root / f"{output_prefix}_trace.png"
-    _make_trace_plot(chain, INPUT_COLUMNS, trace_path)
+    trace_tau = _make_trace_plot(
+        chain,
+        INPUT_COLUMNS,
+        trace_path,
+        parameter_specs=parameter_specs,
+        burn_in=args.burn_in,
+    )
+    summary["trace_autocorrelation_time"] = trace_tau
+    summary["trace_autocorrelation_time_burn_in"] = int(args.burn_in)
+    summary_path.write_text(json.dumps(summary, indent=2) + "\n")
 
     corner_path = figures_root / f"{output_prefix}_corner.png"
     if corner is not None:
-        corner_fig = corner.corner(posterior_df[INPUT_COLUMNS], labels=INPUT_COLUMNS, truths=best_theta)
+        corner_fig = corner_with_log10_priors(
+            corner,
+            posterior_df,
+            INPUT_COLUMNS,
+            parameter_specs,
+            truths=best_theta,
+        )
         corner_fig.savefig(corner_path, dpi=180)
         plt.close(corner_fig)
 
     best_fit_fig_path = figures_root / f"{output_prefix}_best_fit_observables.png"
-    _plot_best_fit_observables(bundles, prediction_mean_by_key, prediction_std_by_key, best_fit_fig_path)
+    best_theta_quantiles = transform_to_prior_quantiles(parameter_specs, best_theta[None, :])[0]
+    _plot_best_fit_observables(
+        bundles,
+        prediction_mean_by_key,
+        prediction_std_by_key,
+        best_theta_quantiles,
+        best_fit_fig_path,
+    )
 
     print(posterior_path)
     print(summary_path)
+    print(emulator_bundle_path)
     print(trace_path)
     if corner is not None:
         print(corner_path)

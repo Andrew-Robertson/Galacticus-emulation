@@ -20,6 +20,12 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import KFold
 
 from galacticus_emu.gp import fit_scaled_gp, predict_scaled_gp
+from galacticus_emu.interactive_observables import (
+    OBSERVABLE_CONFIGS,
+    _prepare_training_targets as _prepare_shared_training_targets,
+    _supported_bin_mask as _shared_supported_bin_mask,
+    training_bad_mask_override_from_transform,
+)
 
 
 PRESETS = {
@@ -53,6 +59,14 @@ PRESETS = {
         "overlay_ymin": -6.0,
         "overlay_ymax": -1.0,
     },
+    "smf_liwhite2009_sdss": {
+        "analysis": "massFunctionStellarLiWhite2009SDSS",
+        "output_prefix": "smf_liwhite2009_sdss_holdout_demo",
+        "figures_dir_name": "figures_smf_liwhite2009_sdss_holdout_demo",
+        "emulator_dir_name": "emulator_smf_liwhite2009_sdss_holdout_demo",
+        "overlay_ymin": -7.0,
+        "overlay_ymax": -1.0,
+    },
     "mzr_blanc2019": {
         "analysis": "massMetallicityBlanc2019",
         "output_prefix": "mzr_blanc2019_holdout_demo",
@@ -73,6 +87,14 @@ PRESETS = {
         "emulator_dir_name": "emulator_hi_mass_function_alfalfa_holdout_demo",
         "overlay_ymin": -6.0,
         "overlay_ymax": -1.0,
+    },
+    "bh_velocity_dispersion": {
+        "analysis": "blackHoleVelocityDispersionRelation",
+        "output_prefix": "bh_velocity_dispersion_holdout_demo",
+        "figures_dir_name": "figures_bh_velocity_dispersion_holdout_demo",
+        "emulator_dir_name": "emulator_bh_velocity_dispersion_holdout_demo",
+        "overlay_ymin": 5.0,
+        "overlay_ymax": 10.0,
     },
     "sfr_function_robotham2011": {
         "analysis": "starFormationRateFunctionRobotham2011",
@@ -105,6 +127,46 @@ PRESETS = {
         "min_training_sigma": 1.0e-3,
     },
 }
+
+
+PRESET_OBSERVABLE_KEYS = {
+    "bh_halo_mass_trinity_z1": "bh_halo_mass_trinity_z1",
+    "bh_velocity_dispersion": "bh_velocity_dispersion",
+    "smf_liwhite2009_sdss": "smf_liwhite2009_sdss",
+    "smf_zfourge_z0": "smf_z0",
+    "smf_zfourge_z3": "smf_z3",
+    "mzr_blanc2019": "mzr_blanc2019",
+    "sfr_function_robotham2011": "sfr_function_robotham2011",
+    "size_mass_vdw2014_star_forming_z0": "size_mass_vdw2014_star_forming_z0",
+    "size_mass_vdw2014_quiescent_z0": "size_mass_vdw2014_quiescent_z0",
+}
+
+
+def _apply_shared_observable_policy() -> None:
+    policy_keys = [
+        "analysis",
+        "use_training_alpha",
+        "bad_training_condition",
+        "bad_training_value_fill",
+        "bad_training_sigma",
+        "min_training_sigma",
+        "drop_unsupported_bins",
+    ]
+    for preset_key, observable_key in PRESET_OBSERVABLE_KEYS.items():
+        if preset_key not in PRESETS or observable_key not in OBSERVABLE_CONFIGS:
+            continue
+        shared_config = OBSERVABLE_CONFIGS[observable_key]
+        preset = PRESETS[preset_key]
+        for key in policy_keys:
+            if key in shared_config:
+                preset[key] = shared_config[key]
+        if "y_plot_min" in shared_config:
+            preset["overlay_ymin"] = shared_config["y_plot_min"]
+        if "y_plot_max" in shared_config:
+            preset["overlay_ymax"] = shared_config["y_plot_max"]
+
+
+_apply_shared_observable_policy()
 
 
 def parse_args() -> argparse.Namespace:
@@ -210,7 +272,7 @@ def _transform_y(
     *,
     is_log: bool,
     min_log10_y: float,
-) -> tuple[np.ndarray, np.ndarray | None, np.ndarray, np.ndarray | None, dict[str, int | float | str]]:
+) -> tuple[np.ndarray, np.ndarray | None, np.ndarray, np.ndarray | None, dict]:
     if not is_log:
         return (
             y_linear,
@@ -225,25 +287,31 @@ def _transform_y(
         raise ValueError("Analysis contains no positive values to log-transform")
 
     effective_floor_linear = 10.0 ** min_log10_y
-    n_floored = int(np.sum(y_linear <= 0.0))
+    y_nonpositive = np.asarray(y_linear <= 0.0, dtype=bool)
+    target_nonpositive = np.asarray(target_linear <= 0.0, dtype=bool)
+    n_floored = int(np.sum(y_nonpositive))
     safe_y_linear = np.where(y_linear > 0.0, y_linear, effective_floor_linear)
     y_log10_raw = np.log10(safe_y_linear)
     n_clipped = int(np.sum(y_log10_raw < min_log10_y))
     y_plot = np.maximum(y_log10_raw, min_log10_y)
+    y_floor_mask = np.asarray(y_log10_raw <= min_log10_y, dtype=bool)
 
     safe_target_linear = np.where(target_linear > 0.0, target_linear, effective_floor_linear)
-    target_plot = np.maximum(np.log10(safe_target_linear), min_log10_y)
+    target_log10_raw = np.log10(safe_target_linear)
+    target_plot = np.maximum(target_log10_raw, min_log10_y)
+    target_floor_mask = np.asarray(target_log10_raw <= min_log10_y, dtype=bool)
 
     if y_noise_linear is None:
         y_noise = None
     else:
         y_noise = np.maximum(y_noise_linear / (safe_y_linear * np.log(10.0)), 1.0e-6)
-        y_noise = np.where(y_log10_raw > min_log10_y, y_noise, np.nan)
+        y_noise = np.where(y_floor_mask, np.nan, y_noise)
 
     if target_noise_linear is None:
         target_noise = None
     else:
         target_noise = np.maximum(target_noise_linear / (safe_target_linear * np.log(10.0)), 1.0e-6)
+        target_noise = np.where(target_floor_mask, np.nan, target_noise)
 
     return (
         y_plot,
@@ -256,6 +324,11 @@ def _transform_y(
             "min_log10_y": float(min_log10_y),
             "n_floored": n_floored,
             "n_clipped": n_clipped,
+            "nonpositive_mask": y_nonpositive,
+            "target_nonpositive_mask": target_nonpositive,
+            "floor_mask": y_floor_mask,
+            "target_floor_mask": target_floor_mask,
+            "n_at_floor": int(np.count_nonzero(y_floor_mask)),
         },
     )
 
@@ -380,52 +453,74 @@ def _prepare_training_targets(
     bad_training_value_fill,
     bad_training_sigma: float,
     min_training_sigma: float,
+    bad_mask_override: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray | None, dict]:
-    y_fit = np.asarray(y_values, dtype=float).copy()
-    metadata = {
-        "training_alpha_used": bool(use_training_alpha),
-        "bad_training_condition": bad_training_condition,
-        "bad_training_value_fill": bad_training_value_fill,
-        "bad_training_sigma": float(bad_training_sigma),
-        "min_training_sigma": float(min_training_sigma),
-        "n_bad_training_points": 0,
-    }
-    if not use_training_alpha:
-        return y_fit, None, metadata
-
-    sigma = np.asarray(y_noise, dtype=float).copy() if y_noise is not None else np.zeros_like(y_fit)
-    sigma = np.where(np.isfinite(sigma), sigma, np.nan)
-
-    bad_mask = ~np.isfinite(y_fit)
-    if bad_training_condition == "nonpositive":
-        bad_mask |= (y_fit <= 0.0)
-    elif bad_training_condition == "zero_only":
-        bad_mask |= (y_fit == 0.0)
-
-    metadata["n_bad_training_points"] = int(np.sum(bad_mask))
-
-    if bad_training_value_fill == "bin_median":
-        fallback_value = 8.5 if analysis == "massMetallicityBlanc2019" else float(np.nanmedian(y_fit[np.isfinite(y_fit)]))
-        for bin_index in range(y_fit.shape[1]):
-            valid = np.isfinite(y_fit[:, bin_index]) & ~bad_mask[:, bin_index]
-            replacement = float(np.nanmedian(y_fit[valid, bin_index])) if np.any(valid) else fallback_value
-            y_fit[bad_mask[:, bin_index], bin_index] = replacement
-    else:
-        fill_value = float(bad_training_value_fill)
-        y_fit[bad_mask] = fill_value
-
-    sigma = np.where(bad_mask, bad_training_sigma, sigma)
-    sigma = np.where(np.isfinite(sigma) & (sigma > 0.0), sigma, min_training_sigma)
-    return y_fit, sigma, metadata
+    return _prepare_shared_training_targets(
+        y_values,
+        y_noise,
+        analysis=analysis,
+        use_training_alpha=use_training_alpha,
+        bad_training_condition=bad_training_condition,
+        bad_training_value_fill=bad_training_value_fill,
+        bad_training_sigma=bad_training_sigma,
+        min_training_sigma=min_training_sigma,
+        bad_mask_override=bad_mask_override,
+    )
 
 
 def _supported_bin_mask(y_values: np.ndarray, *, bad_training_condition: str) -> np.ndarray:
-    bad_mask = ~np.isfinite(y_values)
+    return _shared_supported_bin_mask(
+        y_values,
+        bad_training_condition=bad_training_condition,
+    )
+
+
+def _bad_mask_override_for_transform(
+    transform_metadata: dict,
+    *,
+    bad_training_condition: str,
+    bad_training_value_fill="bin_median",
+) -> np.ndarray | None:
+    return training_bad_mask_override_from_transform(
+        transform_metadata,
+        bad_training_condition=bad_training_condition,
+        bad_training_value_fill=bad_training_value_fill,
+    )
+
+
+def _json_safe_metadata(metadata: dict) -> dict:
+    safe = {}
+    for key, value in metadata.items():
+        if isinstance(value, np.ndarray):
+            safe[key] = {
+                "shape": list(value.shape),
+                "n_true": int(np.count_nonzero(value)) if value.dtype == bool else None,
+            }
+        elif isinstance(value, np.generic):
+            safe[key] = value.item()
+        else:
+            safe[key] = value
+    return safe
+
+
+def _plot_keeps_bad_values(bad_training_value_fill) -> bool:
+    return str(bad_training_value_fill) in {"keep", "as_is"}
+
+
+def _valid_observed_mask(
+    observed: np.ndarray,
+    *,
+    bad_training_condition: str,
+    bad_training_value_fill,
+) -> np.ndarray:
+    valid = np.isfinite(observed)
+    if _plot_keeps_bad_values(bad_training_value_fill):
+        return valid
     if bad_training_condition == "nonpositive":
-        bad_mask |= (y_values <= 0.0)
-    elif bad_training_condition == "zero_only":
-        bad_mask |= (y_values == 0.0)
-    return np.any(~bad_mask, axis=0)
+        return valid & (observed > 0.0)
+    if bad_training_condition == "zero_only":
+        return valid & (observed != 0.0)
+    return valid
 
 
 def _metrics(y_true: np.ndarray, y_pred: np.ndarray, y_std: np.ndarray, x_bins_plot: np.ndarray) -> pd.DataFrame:
@@ -503,6 +598,7 @@ def _plot_overlay(
     ymax: float | None,
     path: Path,
     bad_training_condition: str = "nonfinite",
+    bad_training_value_fill="bin_median",
 ) -> None:
     fig, ax = plt.subplots(figsize=(9.5, 6.5), constrained_layout=True)
     for curve in y_train:
@@ -543,12 +639,11 @@ def _plot_overlay(
         ax.plot(x_plot, y_pred[row_index], color=color, lw=2.0, zorder=3)
 
         observed = y_test[row_index]
-        if bad_training_condition == "nonpositive":
-            valid_observed = np.isfinite(observed) & (observed > 0.0)
-        elif bad_training_condition == "zero_only":
-            valid_observed = np.isfinite(observed) & (observed != 0.0)
-        else:
-            valid_observed = np.isfinite(observed)
+        valid_observed = _valid_observed_mask(
+            observed,
+            bad_training_condition=bad_training_condition,
+            bad_training_value_fill=bad_training_value_fill,
+        )
 
         if sanitized_y_test_std is None:
             x_observed = x_plot[valid_observed] + x_offsets[color_index]
@@ -556,18 +651,31 @@ def _plot_overlay(
         else:
             observed_std = sanitized_y_test_std[row_index]
             x_observed = x_plot[valid_observed] + x_offsets[color_index]
-            ax.errorbar(
-                x_observed,
-                observed[valid_observed],
-                yerr=observed_std[valid_observed],
-                fmt="o",
-                ms=3.5,
-                lw=1.0,
-                capsize=2.0,
-                color=color,
-                alpha=0.95,
-                zorder=5,
-            )
+            observed_valid = observed[valid_observed]
+            observed_std_valid = observed_std[valid_observed]
+            finite_std = np.isfinite(observed_std_valid)
+            if np.any(finite_std):
+                ax.errorbar(
+                    x_observed[finite_std],
+                    observed_valid[finite_std],
+                    yerr=observed_std_valid[finite_std],
+                    fmt="o",
+                    ms=3.5,
+                    lw=1.0,
+                    capsize=2.0,
+                    color=color,
+                    alpha=0.95,
+                    zorder=5,
+                )
+            if np.any(~finite_std):
+                ax.scatter(
+                    x_observed[~finite_std],
+                    observed_valid[~finite_std],
+                    color=color,
+                    s=18,
+                    alpha=0.95,
+                    zorder=5,
+                )
 
     ax.plot(x_plot, target_plot, color="k", lw=2.2, zorder=9)
     if target_std_plot is None:
@@ -629,6 +737,7 @@ def _plot_parity(
     path: Path,
     target_plot: np.ndarray | None = None,
     bad_training_condition: str = "nonfinite",
+    bad_training_value_fill="bin_median",
 ) -> None:
     n_bins = y_test.shape[1]
     ncols = min(4, n_bins)
@@ -640,12 +749,11 @@ def _plot_parity(
         axis = axes_flat[bin_index]
         observed = y_test[:, bin_index]
         predicted = y_pred[:, bin_index]
-        if bad_training_condition == "nonpositive":
-            valid = np.isfinite(observed) & (observed > 0.0) & np.isfinite(predicted)
-        elif bad_training_condition == "zero_only":
-            valid = np.isfinite(observed) & (observed != 0.0) & np.isfinite(predicted)
-        else:
-            valid = np.isfinite(observed) & np.isfinite(predicted)
+        valid = _valid_observed_mask(
+            observed,
+            bad_training_condition=bad_training_condition,
+            bad_training_value_fill=bad_training_value_fill,
+        ) & np.isfinite(predicted)
 
         if not np.any(valid):
             axis.set_title(f"x={x_bins_plot[bin_index]:.2f}")
@@ -746,11 +854,19 @@ def main() -> None:
         min_log10_y=args.min_log10_y,
     )
     supported_bin_mask = np.ones(y_plot_all.shape[1], dtype=bool)
+    bad_mask_override = _bad_mask_override_for_transform(
+        transform_metadata,
+        bad_training_condition=str(bad_training_condition),
+        bad_training_value_fill=bad_training_value_fill,
+    )
     if drop_unsupported_bins:
-        supported_bin_mask = _supported_bin_mask(
-            y_plot_all,
-            bad_training_condition=str(bad_training_condition),
-        )
+        if bad_mask_override is not None:
+            supported_bin_mask = np.any(~bad_mask_override, axis=0)
+        else:
+            supported_bin_mask = _supported_bin_mask(
+                y_plot_all,
+                bad_training_condition=str(bad_training_condition),
+            )
         if not np.any(supported_bin_mask):
             raise ValueError("All bins are unsupported after applying the bad-training mask.")
         x_bins_plot = x_bins_plot[supported_bin_mask]
@@ -760,6 +876,8 @@ def main() -> None:
         y_plot_all = y_plot_all[:, supported_bin_mask]
         if y_std_all is not None:
             y_std_all = y_std_all[:, supported_bin_mask]
+    if bad_mask_override is not None:
+        bad_mask_override = bad_mask_override[:, supported_bin_mask]
     y_fit_all, alpha_sigma_all, training_target_metadata = _prepare_training_targets(
         y_plot_all,
         y_std_all,
@@ -769,6 +887,7 @@ def main() -> None:
         bad_training_value_fill=bad_training_value_fill,
         bad_training_sigma=float(bad_training_sigma),
         min_training_sigma=float(min_training_sigma),
+        bad_mask_override=bad_mask_override,
     )
     alpha_all = alpha_sigma_all**2 if alpha_sigma_all is not None else None
 
@@ -797,6 +916,7 @@ def main() -> None:
             ymax=overlay_ymax,
             path=overlay_path,
             bad_training_condition=str(bad_training_condition),
+            bad_training_value_fill=bad_training_value_fill,
         )
         _plot_parity(
             x_bins_plot=x_bins_plot,
@@ -806,6 +926,7 @@ def main() -> None:
             y_pred_std=y_pred_std,
             path=parity_path,
             bad_training_condition=str(bad_training_condition),
+            bad_training_value_fill=bad_training_value_fill,
         )
         print(overlay_path)
         print(parity_path)
@@ -859,6 +980,7 @@ def main() -> None:
         ymax=overlay_ymax,
         path=overlay_path,
         bad_training_condition=str(bad_training_condition),
+        bad_training_value_fill=bad_training_value_fill,
     )
 
     _plot_parity(
@@ -869,6 +991,7 @@ def main() -> None:
         y_pred_std=y_pred_std,
         path=parity_path,
         bad_training_condition=str(bad_training_condition),
+        bad_training_value_fill=bad_training_value_fill,
     )
 
     prediction_rows = []
@@ -902,7 +1025,7 @@ def main() -> None:
         "kernels": kernels,
         "fit_white_noise": bool(args.fit_white_noise),
         "analysis_attrs": attrs,
-        "transform_metadata": transform_metadata,
+        "transform_metadata": _json_safe_metadata(transform_metadata),
         "training_target_metadata": training_target_metadata,
         "supported_bin_mask": supported_bin_mask.tolist(),
     }

@@ -13,13 +13,14 @@ import pandas as pd
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
+from galacticus_emu.mcmc_results import load_posterior_frame, load_run_summary
 from galacticus_emu.specs import trinity_parameter_specs
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Sample rows from an MCMC posterior CSV and write changes.xml-style "
+            "Sample rows from an MCMC posterior HDF5/CSV and write changes.xml-style "
             "files that can be run through Galacticus."
         )
     )
@@ -27,10 +28,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--run-summary",
         type=Path,
-        required=True,
+        default=None,
         help=(
-            "MCMC run summary JSON. Used for parameter order, slow_count, and "
-            "sidecar LF nuisance parameter names."
+            "MCMC run summary JSON/HDF5. Defaults to --posterior-samples when that is an HDF5 results file."
         ),
     )
     parser.add_argument("--output-dir", type=Path, required=True)
@@ -132,8 +132,9 @@ def main() -> None:
     if args.n_draws < 1:
         raise ValueError("--n-draws must be >= 1")
 
-    summary = json.loads(args.run_summary.expanduser().resolve().read_text())
-    posterior = pd.read_csv(args.posterior_samples.expanduser().resolve())
+    summary_path = args.run_summary or args.posterior_samples
+    summary = load_run_summary(summary_path)
+    posterior = load_posterior_frame(args.posterior_samples)
     parameter_names = summary.get("parameter_names")
     if not isinstance(parameter_names, list) or not all(isinstance(name, str) for name in parameter_names):
         parameter_names = [name for name in posterior.columns if name != "log_probability"]
@@ -182,7 +183,7 @@ def main() -> None:
     if args.include_map:
         map_path = output_dir / "maximum_a_posteriori_model_changes.xml"
         map_theta = _theta_from_summary(summary, parameter_names)
-        comments = [f"Generated from best_theta in {args.run_summary}"]
+        comments = [f"Generated from best_theta in {summary_path}"]
         if "best_log_probability" in summary:
             comments.append(f"best_log_probability={float(summary['best_log_probability']):.17g}")
         _write_model_changes(

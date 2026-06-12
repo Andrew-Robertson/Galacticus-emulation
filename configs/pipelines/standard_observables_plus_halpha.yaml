@@ -1,0 +1,598 @@
+# Reusable GP/MCMC pipeline for standard observables plus H-alpha Sobral LFs.
+# Override ROOT and PIPELINE_OUTPUT_ROOT for a different reduced campaign.
+#
+#default_profiles:
+  # - mcmc_transformed_parameters
+  # - mcmc_de_rescue # use a mix of different emcee move types (defined below)
+
+variables:
+  # Input campaign data root. This must point at the reduced campaign containing
+  # samples.csv, evaluations/, and sidecar files.
+  ROOT: runs/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced
+  HDF5_FILENAME: galacticus.hdf5
+
+  # Outputs created by this config-driven pipeline. Keeping this separate from
+  # ROOT lets the pipeline recreate the existing workflow without overwriting
+  # historical emulators/MCMCs at the top level of the campaign.
+  PIPELINE_OUTPUT_ROOT: ${ROOT}/pipeline
+
+  # Standard-observable emulator choice. Keep the numerical setting and the
+  # output-name tag together so that changing one prompts changing the other.
+  STANDARD_PCA_VARIANCE_THRESHOLD: "0.99"
+  STANDARD_EMULATOR_TAG: pca_99
+  STANDARD_BUNDLE: ${PIPELINE_OUTPUT_ROOT}/emulators/standard_observables/${STANDARD_EMULATOR_TAG}/standard_observables_bundle.joblib
+  STANDARD_META: ${PIPELINE_OUTPUT_ROOT}/emulators/standard_observables/${STANDARD_EMULATOR_TAG}/standard_observables_bundle.meta.json
+
+  # Sidecar LF emulator choice. The directory tag keeps the existing pca_99
+  # directory convention, while the name tag keeps existing pca99 filenames.
+  SIDECAR_LF_PCA_VARIANCE_THRESHOLD: "0.99"
+  SIDECAR_LF_EMULATOR_DIR_TAG: pca_99
+  SIDECAR_LF_EMULATOR_NAME_TAG: pca99
+
+  # H-alpha sidecar LF training choice. The label controls output names; the
+  # argument list controls which rows are used.
+  HALPHA_OBSERVABLE: halpha_sobral
+  HALPHA_DUST_DRAW_LABEL: 1dustdraw
+  HALPHA_DUST_DRAW_ARGS:
+    - --dust-draw-index
+    - "0"
+  HALPHA_TAG: ${HALPHA_OBSERVABLE}_${HALPHA_DUST_DRAW_LABEL}_${SIDECAR_LF_EMULATOR_NAME_TAG}
+  HALPHA_BUNDLE: ${PIPELINE_OUTPUT_ROOT}/emulators/emission_line_lfs/${SIDECAR_LF_EMULATOR_DIR_TAG}/${HALPHA_TAG}.joblib
+
+  MCMC_ROOT: ${PIPELINE_OUTPUT_ROOT}/MCMCs
+  STANDARD_MCMC_ROOT: ${MCMC_ROOT}/standard_observables
+  HALPHA_MCMC_ROOT: ${MCMC_ROOT}/emission_line_lfs/${HALPHA_TAG}
+  COMBINED_MCMC_ROOT: ${MCMC_ROOT}/standard_observables_plus_emission_line_lfs/all_standard_observables_plus_${HALPHA_TAG}
+
+  SMF_MCMC_DIR: ${STANDARD_MCMC_ROOT}/smf_z0_z3
+  SFRF_MCMC_DIR: ${STANDARD_MCMC_ROOT}/sfr_function_robotham2011
+  SIZE_MCMC_DIR: ${STANDARD_MCMC_ROOT}/size_mass_vdw2014_sf_q
+  BH_MSIGMA_MCMC_DIR: ${STANDARD_MCMC_ROOT}/bh_velocity_dispersion
+  MZR_MCMC_DIR: ${STANDARD_MCMC_ROOT}/mzr_blanc2019
+  ALL_STANDARD_MCMC_DIR: ${STANDARD_MCMC_ROOT}/all_standard_observables
+
+  SMF_PREFIX: mcmc_smf_z0_z3
+  SFRF_PREFIX: mcmc_sfr_function_robotham2011
+  SIZE_PREFIX: mcmc_size_mass_vdw2014_sf_q
+  BH_MSIGMA_PREFIX: mcmc_bh_velocity_dispersion
+  MZR_PREFIX: mcmc_mzr_blanc2019
+  ALL_STANDARD_PREFIX: mcmc_all_standard_observables
+  HALPHA_PREFIX: mcmc_${HALPHA_TAG}
+  COMBINED_PREFIX: mcmc_all_standard_observables_plus_${HALPHA_TAG}
+
+  # Optional emcee proposal moves. Leave empty to use emcee's default
+  # StretchMove, or set via a profile / override list as repeated --move args.
+  MCMC_MOVE_ARGS: []
+  MCMC_SAMPLER_COORDINATE_ARGS: []
+
+  ACTUAL_STANDARD_HDF5: ${ALL_STANDARD_MCMC_DIR}/bestFitModel/romanEPS_massFunction.hdf5
+  ACTUAL_COMBINED_HDF5: ${COMBINED_MCMC_ROOT}/bestFitModel/${HALPHA_TAG}_romanEPS_massFunction.hdf5
+  ACTUAL_COMBINED_SIDECAR_DIR: ${COMBINED_MCMC_ROOT}/bestFitModel/emission_line_dust
+  ACTUAL_COMBINED_UNIT_HDF5: ${COMBINED_MCMC_ROOT}/bestFitModel-UNIT/${HALPHA_TAG}_romanUNIT_massFunction.hdf5
+  ACTUAL_COMBINED_UNIT_SIDECAR_DIR: ${COMBINED_MCMC_ROOT}/bestFitModel-UNIT/emission_line_dust
+  ACTUAL_EMISSION_LINE_FIGURE_DIR: ${COMBINED_MCMC_ROOT}/figures/emission_line_lfs_actual_eps_vs_unit
+  POSTERIOR_DRAW_XML_DIR: ${COMBINED_MCMC_ROOT}/posterior_draws
+  POSTERIOR_DRAW_COUNT: "25"
+  POSTERIOR_DRAW_SEED: "20260528"
+
+  STANDARD_OBSERVABLE_ARGS:
+    - --observable
+    - bh_velocity_dispersion
+    - --observable
+    - smf_liwhite2009_sdss
+    - --observable
+    - smf_z0
+    - --observable
+    - smf_z3
+    - --observable
+    - mzr_blanc2019
+    - --observable
+    - sfr_function_robotham2011
+    - --observable
+    - size_mass_vdw2014_star_forming_z0
+    - --observable
+    - size_mass_vdw2014_quiescent_z0
+
+  ALL_STANDARD_MCMC_OBSERVABLE_ARGS:
+    - --observable
+    - smf_z0
+    - --observable
+    - smf_z3
+    - --observable
+    - sfr_function_robotham2011
+    - --observable
+    - size_mass_vdw2014_star_forming_z0
+    - --observable
+    - size_mass_vdw2014_quiescent_z0
+    - --observable
+    - bh_velocity_dispersion
+    - --observable
+    - mzr_blanc2019
+
+  MCMC_COMMON:
+    - --n-walkers
+    - "128"
+    - --n-steps
+    - "50000"
+    - --burn-in
+    - "5000"
+    - --thin
+    - "100"
+    - --seed
+    - "12345"
+    - --progress
+
+  MCMC_LONG:
+    - --n-walkers
+    - "128"
+    - --n-steps
+    - "250000"
+    - --burn-in
+    - "25000"
+    - --thin
+    - "250"
+    - --seed
+    - "12345"
+    - --progress
+
+  MCMC_LF_COMMON:
+    - --n-walkers
+    - "128"
+    - --n-steps
+    - "250000"
+    - --burn-in
+    - "25000"
+    - --thin
+    - "250"
+    - --seed
+    - "12345"
+    - --include-emulator-variance
+    - --progress
+
+profiles:
+  standard_pca99:
+    variables:
+      STANDARD_PCA_VARIANCE_THRESHOLD: "0.99"
+      STANDARD_EMULATOR_TAG: pca_99
+
+  standard_pca999:
+    variables:
+      STANDARD_PCA_VARIANCE_THRESHOLD: "0.999"
+      STANDARD_EMULATOR_TAG: pca_999
+
+  sidecar_lf_pca99:
+    variables:
+      SIDECAR_LF_PCA_VARIANCE_THRESHOLD: "0.99"
+      SIDECAR_LF_EMULATOR_DIR_TAG: pca_99
+      SIDECAR_LF_EMULATOR_NAME_TAG: pca99
+
+  sidecar_lf_pca999:
+    variables:
+      SIDECAR_LF_PCA_VARIANCE_THRESHOLD: "0.999"
+      SIDECAR_LF_EMULATOR_DIR_TAG: pca_999
+      SIDECAR_LF_EMULATOR_NAME_TAG: pca999
+
+  halpha_1dustdraw:
+    variables:
+      HALPHA_DUST_DRAW_LABEL: 1dustdraw
+      HALPHA_DUST_DRAW_ARGS:
+        - --dust-draw-index
+        - "0"
+
+  halpha_2dustdraws:
+    variables:
+      HALPHA_DUST_DRAW_LABEL: 2dustdraws
+      HALPHA_DUST_DRAW_ARGS:
+        - --dust-draw-index
+        - "0"
+        - --dust-draw-index
+        - "1"
+
+  halpha_4dustdraws:
+    variables:
+      HALPHA_DUST_DRAW_LABEL: 4dustdraws
+      HALPHA_DUST_DRAW_ARGS:
+        - --dust-draw-index
+        - "0"
+        - --dust-draw-index
+        - "1"
+        - --dust-draw-index
+        - "2"
+        - --dust-draw-index
+        - "3"
+
+  mcmc_de_mixture:
+    variables:
+      MCMC_MOVE_ARGS:
+        - --move
+        - StretchMove:0.3
+        - --move
+        - DEMove:0.6
+        - --move
+        - DESnookerMove:0.1
+
+  mcmc_de_rescue:
+    variables:
+      MCMC_MOVE_ARGS:
+        - --move
+        - StretchMove:0.65
+        - --move
+        - DEMove:0.25
+        - --move
+        - DEMove:0.05,gamma0=1.0
+        - --move
+        - DESnookerMove:0.05
+
+  mcmc_transformed_parameters:
+    variables:
+      MCMC_SAMPLER_COORDINATE_ARGS:
+        - --sample-transformed-parameters
+
+stages:
+  - name: train_standard_emulators
+    description: Build the PCA-99 standard-observable emulator bundle.
+    commands:
+      - name: train standard-observable bundle
+        argv:
+          - python
+          - scripts/train_interactive_observables_demo.py
+          - ${ROOT}
+          - --hdf5-filename
+          - ${HDF5_FILENAME}
+          - --emulator-mode
+          - pca
+          - --pca-scaling
+          - standardized
+          - --pca-variance-threshold
+          - ${STANDARD_PCA_VARIANCE_THRESHOLD}
+          - --n-restarts-optimizer
+          - "4"
+          - ${STANDARD_OBSERVABLE_ARGS}
+          - --output-path
+          - ${STANDARD_BUNDLE}
+
+  - name: run_standard_mcmcs
+    description: Run individual standard-observable MCMCs and the all-standard combined MCMC.
+    commands:
+      - name: smf z0+z3
+        argv:
+          - python
+          - scripts/run_interactive_observables_mcmc.py
+          - ${STANDARD_BUNDLE}
+          - --observable
+          - smf_z0
+          - --observable
+          - smf_z3
+          - --mcmc-dir
+          - ${SMF_MCMC_DIR}
+          - --output-prefix
+          - ${SMF_PREFIX}
+          - ${MCMC_COMMON}
+          - ${MCMC_MOVE_ARGS}
+          - ${MCMC_SAMPLER_COORDINATE_ARGS}
+      - name: sfr function
+        argv:
+          - python
+          - scripts/run_interactive_observables_mcmc.py
+          - ${STANDARD_BUNDLE}
+          - --observable
+          - sfr_function_robotham2011
+          - --mcmc-dir
+          - ${SFRF_MCMC_DIR}
+          - --output-prefix
+          - ${SFRF_PREFIX}
+          - ${MCMC_COMMON}
+          - ${MCMC_MOVE_ARGS}
+          - ${MCMC_SAMPLER_COORDINATE_ARGS}
+      - name: sizes
+        argv:
+          - python
+          - scripts/run_interactive_observables_mcmc.py
+          - ${STANDARD_BUNDLE}
+          - --observable
+          - size_mass_vdw2014_star_forming_z0
+          - --observable
+          - size_mass_vdw2014_quiescent_z0
+          - --mcmc-dir
+          - ${SIZE_MCMC_DIR}
+          - --output-prefix
+          - ${SIZE_PREFIX}
+          - ${MCMC_COMMON}
+          - ${MCMC_MOVE_ARGS}
+          - ${MCMC_SAMPLER_COORDINATE_ARGS}
+      - name: bh velocity dispersion
+        argv:
+          - python
+          - scripts/run_interactive_observables_mcmc.py
+          - ${STANDARD_BUNDLE}
+          - --observable
+          - bh_velocity_dispersion
+          - --mcmc-dir
+          - ${BH_MSIGMA_MCMC_DIR}
+          - --output-prefix
+          - ${BH_MSIGMA_PREFIX}
+          - ${MCMC_COMMON}
+          - ${MCMC_MOVE_ARGS}
+          - ${MCMC_SAMPLER_COORDINATE_ARGS}
+      - name: mzr
+        argv:
+          - python
+          - scripts/run_interactive_observables_mcmc.py
+          - ${STANDARD_BUNDLE}
+          - --observable
+          - mzr_blanc2019
+          - --mcmc-dir
+          - ${MZR_MCMC_DIR}
+          - --output-prefix
+          - ${MZR_PREFIX}
+          - ${MCMC_COMMON}
+          - ${MCMC_MOVE_ARGS}
+          - ${MCMC_SAMPLER_COORDINATE_ARGS}
+      - name: all standard observables
+        argv:
+          - python
+          - scripts/run_interactive_observables_mcmc.py
+          - ${STANDARD_BUNDLE}
+          - ${ALL_STANDARD_MCMC_OBSERVABLE_ARGS}
+          - --mcmc-dir
+          - ${ALL_STANDARD_MCMC_DIR}
+          - --output-prefix
+          - ${ALL_STANDARD_PREFIX}
+          - ${MCMC_LONG}
+          - ${MCMC_MOVE_ARGS}
+          - ${MCMC_SAMPLER_COORDINATE_ARGS}
+
+  - name: plot_standard_corner
+    description: Overlay standard-observable MCMC posteriors with the all-standard posterior in black.
+    commands:
+      - name: standard getDist overlay
+        argv:
+          - python
+          - scripts/plot_observable_mcmc_overlay_getdist.py
+          - --posterior
+          - SMF z0+z3=${SMF_MCMC_DIR}/${SMF_PREFIX}_mcmc_results.hdf5
+          - --posterior
+          - SFRF=${SFRF_MCMC_DIR}/${SFRF_PREFIX}_mcmc_results.hdf5
+          - --posterior
+          - Sizes=${SIZE_MCMC_DIR}/${SIZE_PREFIX}_mcmc_results.hdf5
+          - --posterior
+          - BH M-sigma=${BH_MSIGMA_MCMC_DIR}/${BH_MSIGMA_PREFIX}_mcmc_results.hdf5
+          - --posterior
+          - MZR=${MZR_MCMC_DIR}/${MZR_PREFIX}_mcmc_results.hdf5
+          - --posterior
+          - Combined=${ALL_STANDARD_MCMC_DIR}/${ALL_STANDARD_PREFIX}_mcmc_results.hdf5
+          - --output-path
+          - ${STANDARD_MCMC_ROOT}/standard_observables_mcmc_getdist_overlay.png
+          - --parameter-set
+          - auto
+          - --filled
+          - --dpi
+          - "300"
+          - --marker-summary
+          - ${ALL_STANDARD_MCMC_DIR}/${ALL_STANDARD_PREFIX}_mcmc_results.hdf5
+
+  - name: rerun_standard_best_fit_galacticus
+    manual: true
+    description: Manual HPC step to run Galacticus at the all-standard MAP point.
+    notes: |
+      Run Galacticus with ${ALL_STANDARD_MCMC_DIR}/maximum_a_posteriori_model_changes.xml
+      on the HPC, then copy the resulting HDF5 file back to ${ACTUAL_STANDARD_HDF5}
+      or override ACTUAL_STANDARD_HDF5 when plotting.
+
+  - name: plot_standard_best_fit_overlay
+    description: Plot subset and combined standard-observable best fits, optionally with the actual Galacticus MAP run.
+    commands:
+      - name: standard best-fit observables overlay
+        argv:
+          - python
+          - scripts/plot_interactive_observables_mcmc_best_fit_overlay.py
+          - --bundle-meta
+          - ${STANDARD_META}
+          - --combined
+          - Combined=${ALL_STANDARD_MCMC_DIR}/${ALL_STANDARD_PREFIX}_best_fit_observables.csv
+          - --subset
+          - SMF z0+z3=${SMF_MCMC_DIR}/${SMF_PREFIX}_best_fit_observables.csv
+          - --subset
+          - SFRF=${SFRF_MCMC_DIR}/${SFRF_PREFIX}_best_fit_observables.csv
+          - --subset
+          - Sizes=${SIZE_MCMC_DIR}/${SIZE_PREFIX}_best_fit_observables.csv
+          - --subset
+          - BH M-sigma=${BH_MSIGMA_MCMC_DIR}/${BH_MSIGMA_PREFIX}_best_fit_observables.csv
+          - --subset
+          - MZR=${MZR_MCMC_DIR}/${MZR_PREFIX}_best_fit_observables.csv
+          - --galacticus-hdf5
+          - ${ACTUAL_STANDARD_HDF5}
+          - --galacticus-label
+          - Actual Galacticus MAP
+          - --output-path
+          - ${ALL_STANDARD_MCMC_DIR}/figures/mcmc_subset_best_fits_on_all_observables.png
+          - --dpi
+          - "250"
+
+  - name: train_halpha_emulator
+    description: Build the H-alpha Sobral sidecar LF emulator using HALPHA_DUST_DRAW_ARGS.
+    commands:
+      - name: train H-alpha LF bundle
+        argv:
+          - python
+          - scripts/train_sidecar_lf_observables_demo.py
+          - ${ROOT}
+          - --sidecar-dir
+          - emission_line_dust
+          - --table-filename
+          - emission_line_dust_lf_emulator_table.csv
+          - --long-filename
+          - emission_line_dust_lf_long.csv
+          - --observable
+          - ${HALPHA_OBSERVABLE}
+          - --sample-label
+          - Z1
+          - --sample-label
+          - Z2
+          - --sample-label
+          - Z3
+          - --sample-label
+          - Z4
+          - ${HALPHA_DUST_DRAW_ARGS}
+          - --pca-variance-threshold
+          - ${SIDECAR_LF_PCA_VARIANCE_THRESHOLD}
+          - --n-restarts-optimizer
+          - "4"
+          - --use-training-alpha
+          - --output-path
+          - ${HALPHA_BUNDLE}
+
+  - name: run_halpha_and_combined_mcmcs
+    description: Run the H-alpha-only MCMC and the all-standard plus H-alpha MCMC.
+    commands:
+      - name: H-alpha only
+        argv:
+          - python
+          - scripts/run_sidecar_lf_observables_mcmc.py
+          - ${HALPHA_BUNDLE}
+          - --observable
+          - ${HALPHA_OBSERVABLE}
+          - --mcmc-dir
+          - ${HALPHA_MCMC_ROOT}
+          - --output-prefix
+          - ${HALPHA_PREFIX}
+          - ${MCMC_LF_COMMON}
+          - ${MCMC_MOVE_ARGS}
+          - ${MCMC_SAMPLER_COORDINATE_ARGS}
+      - name: all standard plus H-alpha
+        argv:
+          - python
+          - scripts/run_standard_sidecar_lf_observables_mcmc.py
+          - ${STANDARD_BUNDLE}
+          - ${HALPHA_BUNDLE}
+          - --standard-observable
+          - smf_z0
+          - --standard-observable
+          - smf_z3
+          - --standard-observable
+          - sfr_function_robotham2011
+          - --standard-observable
+          - size_mass_vdw2014_star_forming_z0
+          - --standard-observable
+          - size_mass_vdw2014_quiescent_z0
+          - --standard-observable
+          - bh_velocity_dispersion
+          - --standard-observable
+          - mzr_blanc2019
+          - --sidecar-observable
+          - ${HALPHA_OBSERVABLE}
+          - --mcmc-dir
+          - ${COMBINED_MCMC_ROOT}
+          - --output-prefix
+          - ${COMBINED_PREFIX}
+          - ${MCMC_LF_COMMON}
+          - ${MCMC_MOVE_ARGS}
+          - ${MCMC_SAMPLER_COORDINATE_ARGS}
+
+  - name: plot_halpha_standard_corner
+    description: Overlay H-alpha-only, standard-only, and combined posterior samples.
+    commands:
+      - name: H-alpha plus standard getDist overlay
+        argv:
+          - python
+          - scripts/plot_observable_mcmc_overlay_getdist.py
+          - --posterior
+          - H-alpha=${HALPHA_MCMC_ROOT}/${HALPHA_PREFIX}_mcmc_results.hdf5
+          - --posterior
+          - Standard=${ALL_STANDARD_MCMC_DIR}/${ALL_STANDARD_PREFIX}_mcmc_results.hdf5
+          - --posterior
+          - Combined=${COMBINED_MCMC_ROOT}/${COMBINED_PREFIX}_mcmc_results.hdf5
+          - --output-path
+          - ${COMBINED_MCMC_ROOT}/mcmc_getdist_overlay.png
+          - --parameter-set
+          - auto
+          - --filled
+          - --dpi
+          - "300"
+          - --marker-summary
+          - ${COMBINED_MCMC_ROOT}/${COMBINED_PREFIX}_mcmc_results.hdf5
+
+  - name: rerun_combined_best_fit_galacticus
+    manual: true
+    description: Manual HPC step to run Galacticus at the all-standard plus H-alpha MAP point.
+    notes: |
+      Run Galacticus with ${COMBINED_MCMC_ROOT}/maximum_a_posteriori_model_changes.xml
+      on the HPC, reduce the resulting HDF5 file and copy it back to
+      ${ACTUAL_COMBINED_HDF5}. Also copy the HPC-generated emission_line_dust
+      sidecar directory back to ${ACTUAL_COMBINED_SIDECAR_DIR}, or override
+      ACTUAL_COMBINED_HDF5 / ACTUAL_COMBINED_SIDECAR_DIR when plotting.
+
+  - name: export_combined_posterior_draw_xmls
+    description: Export changes.xml-style files for random posterior draws from the combined MCMC.
+    commands:
+      - name: posterior draw model changes
+        argv:
+          - python
+          - scripts/export_posterior_draw_model_changes.py
+          - --posterior-samples
+          - ${COMBINED_MCMC_ROOT}/${COMBINED_PREFIX}_mcmc_results.hdf5
+          - --run-summary
+          - ${COMBINED_MCMC_ROOT}/${COMBINED_PREFIX}_mcmc_results.hdf5
+          - --output-dir
+          - ${POSTERIOR_DRAW_XML_DIR}
+          - --n-draws
+          - ${POSTERIOR_DRAW_COUNT}
+          - --seed
+          - ${POSTERIOR_DRAW_SEED}
+          - --include-map
+
+  - name: plot_combined_best_fit_with_actual
+    description: Plot combined-MCMC emulator predictions and the actual Galacticus MAP run.
+    commands:
+      - name: standard and H-alpha actual-Galacticus overlays
+        argv:
+          - python
+          - scripts/plot_standard_sidecar_lf_mcmc_best_fit_with_actual.py
+          - --standard-bundle-meta
+          - ${STANDARD_META}
+          - --standard-predictions
+          - ${COMBINED_MCMC_ROOT}/${COMBINED_PREFIX}_best_fit_standard_observables.csv
+          - --sidecar-predictions
+          - ${COMBINED_MCMC_ROOT}/${COMBINED_PREFIX}_best_fit_sidecar_lfs.csv
+          - --run-summary
+          - ${COMBINED_MCMC_ROOT}/${COMBINED_PREFIX}_run_summary.json
+          - --actual-hdf5
+          - ${ACTUAL_COMBINED_HDF5}
+          - --extra-actual-hdf5
+          - UNIT Galacticus MAP=${ACTUAL_COMBINED_UNIT_HDF5}
+          - --actual-sidecar-dir
+          - ${ACTUAL_COMBINED_SIDECAR_DIR}
+          - --actual-sidecar-case
+          - map_dust
+          - --extra-actual-sidecar-dir
+          - UNIT Galacticus MAP=${ACTUAL_COMBINED_UNIT_SIDECAR_DIR}
+          - --actual-label
+          - EPS Galacticus MAP
+          - --standard-output-path
+          - ${COMBINED_MCMC_ROOT}/figures/${COMBINED_PREFIX}_best_fit_standard_observables_with_actual.png
+          - --sidecar-output-path
+          - ${COMBINED_MCMC_ROOT}/figures/${COMBINED_PREFIX}_best_fit_sidecar_lfs_with_actual.png
+          - --dpi
+          - "250"
+
+  - name: plot_actual_emission_line_lfs
+    description: Plot EPS and UNIT actual-Galacticus MAP emission-line LF sidecars against target data.
+    commands:
+      - name: EPS vs UNIT actual emission-line LFs
+        argv:
+          - python
+          - scripts/plot_actual_emission_line_sidecars.py
+          - --sidecar
+          - EPS Galacticus MAP=${ACTUAL_COMBINED_SIDECAR_DIR}
+          - --sidecar
+          - UNIT Galacticus MAP=${ACTUAL_COMBINED_UNIT_SIDECAR_DIR}
+          - --dust-case
+          - map_dust
+          - --halpha-target-hdf5
+          - ${ACTUAL_COMBINED_HDF5}
+          - --output-dir
+          - ${ACTUAL_EMISSION_LINE_FIGURE_DIR}
+          - --output-prefix
+          - actual_map_eps_vs_unit
+          - --dpi
+          - "250"

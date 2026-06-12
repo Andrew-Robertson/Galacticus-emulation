@@ -24,7 +24,13 @@ conda activate galacticus-workspace
 export GALACTICUS_EMU_ROOT="${GALACTICUS_EMU_ROOT:-/home/arobert2/GalacticusEmu/Galacticus-emulation}"
 
 RUN_ROOT="${RUN_ROOT:-/home/arobert2/GalacticusEmu/campaigns/sobol_mass_function_emissionlines_dust_simpleSizes_freeYield_20p_moreHalos_512/posteriorDrawRuns}"
-DRAW_XML_DIR="${DRAW_XML_DIR:-$SLURM_SUBMIT_DIR}"
+if [[ -z "${DRAW_XML_DIR:-}" ]]; then
+  if [[ -d "$SLURM_SUBMIT_DIR/posterior_draws" ]]; then
+    DRAW_XML_DIR="$SLURM_SUBMIT_DIR/posterior_draws"
+  else
+    DRAW_XML_DIR="$SLURM_SUBMIT_DIR"
+  fi
+fi
 DRAW_INDEX="${SLURM_ARRAY_TASK_ID}"
 DRAW_LABEL=$(printf "posterior_draw_%02d" "$DRAW_INDEX")
 DRAW_XML="$DRAW_XML_DIR/${DRAW_LABEL}.xml"
