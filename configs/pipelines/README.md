@@ -35,8 +35,8 @@ python scripts/submit_campaign_pipeline_slurm.py \
   --setup-command 'conda activate galacticus-workspace' \
   --partition expansion \
   --qos normal \
-  --cpus-per-task 16 \
-  --mem-per-cpu 8G \
+  --cpus-per-task 1 \
+  --mem 32G \
   --time 120:00:00 \
   --submit
 ```
@@ -47,4 +47,5 @@ commands without sending anything to Slurm.
 Use `--workflow standard_halpha_mcmc_with_bestfits` instead if the all-standard
 and all-standard-plus-H-alpha MAP Galacticus runs should also be submitted.
 Those runs are written under `bestFitModel_GalacticusRun/` inside the relevant
-MCMC directory.
+MCMC directory, and the template gives only those Galacticus rerun stages
+larger OpenMP-style Slurm resources.

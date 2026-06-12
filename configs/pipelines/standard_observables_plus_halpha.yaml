@@ -546,6 +546,9 @@ stages:
   - name: run_standard_best_fit_galacticus
     depends_on:
       - run_mcmc_all_standard
+    slurm:
+      cpus_per_task: "16"
+      mem_per_cpu: 8G
     description: Run Galacticus at the all-standard MAP point in bestFitModel_GalacticusRun.
     commands:
       - name: all-standard MAP Galacticus run
@@ -774,6 +777,9 @@ stages:
   - name: run_combined_best_fit_galacticus
     depends_on:
       - run_mcmc_all_standard_plus_halpha
+    slurm:
+      cpus_per_task: "16"
+      mem_per_cpu: 8G
     description: Run Galacticus at the all-standard plus H-alpha MAP point in bestFitModel_GalacticusRun.
     commands:
       - name: all-standard plus H-alpha MAP Galacticus run

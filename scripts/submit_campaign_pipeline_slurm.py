@@ -195,12 +195,16 @@ def _sbatch_script(
         f"#SBATCH --output={logs_dir}/%x-%j.out",
         f"#SBATCH --error={logs_dir}/%x-%j.err",
     ]
+    mem_per_cpu = _slurm_value(stage, "mem_per_cpu", args.mem_per_cpu)
+    mem = _slurm_value(stage, "mem", args.mem)
+    if mem_per_cpu is not None and mem is not None:
+        mem = None
     for key, value in (
         ("partition", _slurm_value(stage, "partition", args.partition)),
         ("qos", _slurm_value(stage, "qos", args.qos)),
         ("account", _slurm_value(stage, "account", args.account)),
-        ("mem-per-cpu", _slurm_value(stage, "mem_per_cpu", args.mem_per_cpu)),
-        ("mem", _slurm_value(stage, "mem", args.mem)),
+        ("mem-per-cpu", mem_per_cpu),
+        ("mem", mem),
     ):
         if value:
             lines.append(f"#SBATCH --{key}={value}")
