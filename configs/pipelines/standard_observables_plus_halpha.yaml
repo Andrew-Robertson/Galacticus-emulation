@@ -39,10 +39,23 @@ variables:
   HALPHA_TAG: ${HALPHA_OBSERVABLE}_${HALPHA_DUST_DRAW_LABEL}_${SIDECAR_LF_EMULATOR_NAME_TAG}
   HALPHA_BUNDLE: ${PIPELINE_OUTPUT_ROOT}/emulators/emission_line_lfs/${SIDECAR_LF_EMULATOR_DIR_TAG}/${HALPHA_TAG}.joblib
 
-  MCMC_ROOT: ${PIPELINE_OUTPUT_ROOT}/MCMCs
+  # Two-pass MCMC workflow for the science-critical joint fits:
+  #   1. exploratory: broad initialization from the prior quantile centre,
+  #      used to find a high-posterior MAP point;
+  #   2. production: initialized around the exploratory MAP point.
+  #
+  # Downstream plotting and best-fit stages use MCMC_ROOT, so production is the
+  # default "science" result.
+  MCMC_EXPLORATORY_ROOT: ${PIPELINE_OUTPUT_ROOT}/MCMCs_exploratory
+  MCMC_PRODUCTION_ROOT: ${PIPELINE_OUTPUT_ROOT}/MCMCs_production_from_exploratory_MAP
+  MCMC_ROOT: ${MCMC_PRODUCTION_ROOT}
   STANDARD_MCMC_ROOT: ${MCMC_ROOT}/standard_observables
   HALPHA_MCMC_ROOT: ${MCMC_ROOT}/emission_line_lfs/${HALPHA_TAG}
   COMBINED_MCMC_ROOT: ${MCMC_ROOT}/standard_observables_plus_emission_line_lfs/all_standard_observables_plus_${HALPHA_TAG}
+
+  EXPLORATORY_STANDARD_MCMC_ROOT: ${MCMC_EXPLORATORY_ROOT}/standard_observables
+  EXPLORATORY_ALL_STANDARD_MCMC_DIR: ${EXPLORATORY_STANDARD_MCMC_ROOT}/all_standard_observables
+  EXPLORATORY_COMBINED_MCMC_ROOT: ${MCMC_EXPLORATORY_ROOT}/standard_observables_plus_emission_line_lfs/all_standard_observables_plus_${HALPHA_TAG}
 
   SMF_MCMC_DIR: ${STANDARD_MCMC_ROOT}/smf_z0_z3
   SFRF_MCMC_DIR: ${STANDARD_MCMC_ROOT}/sfr_function_robotham2011
@@ -82,6 +95,23 @@ variables:
   # StretchMove, or set via a profile / override list as repeated --move args.
   MCMC_MOVE_ARGS: []
   MCMC_SAMPLER_COORDINATE_ARGS: []
+  MAP_INIT_QUANTILE_SIGMA: "0.01"
+  ALL_STANDARD_EXPLORATORY_MCMC_RESULTS: ${EXPLORATORY_ALL_STANDARD_MCMC_DIR}/${ALL_STANDARD_PREFIX}_mcmc_results.hdf5
+  COMBINED_EXPLORATORY_MCMC_RESULTS: ${EXPLORATORY_COMBINED_MCMC_ROOT}/${COMBINED_PREFIX}_mcmc_results.hdf5
+  ALL_STANDARD_PRODUCTION_INIT_ARGS:
+    - --init-from-results
+    - ${ALL_STANDARD_EXPLORATORY_MCMC_RESULTS}
+    - --init-source
+    - map
+    - --init-quantile-sigma
+    - ${MAP_INIT_QUANTILE_SIGMA}
+  COMBINED_PRODUCTION_INIT_ARGS:
+    - --init-from-results
+    - ${COMBINED_EXPLORATORY_MCMC_RESULTS}
+    - --init-source
+    - map
+    - --init-quantile-sigma
+    - ${MAP_INIT_QUANTILE_SIGMA}
 
   ACTUAL_STANDARD_HDF5: ${STANDARD_BEST_FIT_RUN_DIR}/${BEST_FIT_GALACTICUS_OUTPUT}
   ACTUAL_COMBINED_HDF5: ${COMBINED_BEST_FIT_RUN_DIR}/${BEST_FIT_GALACTICUS_OUTPUT}
@@ -153,7 +183,61 @@ variables:
     - "12345"
     - --progress
 
+  MCMC_LONG_EXPLORATORY:
+    - --n-walkers
+    - "128"
+    - --n-steps
+    - "75000"
+    - --burn-in
+    - "7500"
+    - --thin
+    - "250"
+    - --seed
+    - "12345"
+    - --progress
+
+  MCMC_LONG_PRODUCTION:
+    - --n-walkers
+    - "128"
+    - --n-steps
+    - "250000"
+    - --burn-in
+    - "25000"
+    - --thin
+    - "250"
+    - --seed
+    - "12345"
+    - --progress
+
   MCMC_LF_COMMON:
+    - --n-walkers
+    - "128"
+    - --n-steps
+    - "250000"
+    - --burn-in
+    - "25000"
+    - --thin
+    - "250"
+    - --seed
+    - "12345"
+    - --include-emulator-variance
+    - --progress
+
+  MCMC_LF_EXPLORATORY:
+    - --n-walkers
+    - "128"
+    - --n-steps
+    - "75000"
+    - --burn-in
+    - "7500"
+    - --thin
+    - "250"
+    - --seed
+    - "12345"
+    - --include-emulator-variance
+    - --progress
+
+  MCMC_LF_PRODUCTION:
     - --n-walkers
     - "128"
     - --n-steps
@@ -247,6 +331,63 @@ profiles:
         - --sample-transformed-parameters
 
 workflows:
+  two_phase_science_mcmcs_with_bestfits:
+    description: Two-phase all-standard and all-standard-plus-H-alpha MCMCs, followed by EPS Galacticus MAP reruns and overlay plots.
+    jobs:
+      - name: train_standard_emulators
+        stages:
+          - train_standard_emulators
+      - name: train_halpha_emulator
+        stages:
+          - train_halpha_emulator
+      - name: all_standard_exploratory
+        depends_on:
+          - train_standard_emulators
+        stages:
+          - run_mcmc_all_standard_exploratory
+      - name: all_standard_production
+        depends_on:
+          - all_standard_exploratory
+        stages:
+          - run_mcmc_all_standard
+      - name: combined_exploratory
+        depends_on:
+          - train_standard_emulators
+          - train_halpha_emulator
+        stages:
+          - run_mcmc_all_standard_plus_halpha_exploratory
+      - name: combined_production
+        depends_on:
+          - combined_exploratory
+        stages:
+          - run_mcmc_all_standard_plus_halpha
+      - name: standard_plus_halpha_corner
+        depends_on:
+          - all_standard_production
+          - combined_production
+        stages:
+          - plot_standard_plus_halpha_corner
+      - name: standard_best_fit_galacticus
+        depends_on:
+          - all_standard_production
+        stages:
+          - run_standard_best_fit_galacticus
+      - name: combined_best_fit_galacticus
+        depends_on:
+          - combined_production
+        stages:
+          - run_combined_best_fit_galacticus
+      - name: standard_best_fit_overlay
+        depends_on:
+          - standard_best_fit_galacticus
+        stages:
+          - plot_all_standard_best_fit_with_actual
+      - name: combined_best_fit_overlay
+        depends_on:
+          - combined_best_fit_galacticus
+        stages:
+          - plot_combined_best_fit_with_actual
+
   standard_halpha_mcmc:
     description: Concurrent standard-observable and H-alpha emulator/MCMC workflow.
     stages:
@@ -350,7 +491,7 @@ stages:
   - name: run_standard_mcmcs
     depends_on:
       - train_standard_emulators
-    description: Run individual standard-observable MCMCs and the all-standard combined MCMC.
+    description: Run illustrative individual standard-observable MCMCs and the exploratory all-standard MCMC.
     commands:
       - name: smf z0+z3
         argv:
@@ -426,14 +567,14 @@ stages:
           - ${MCMC_COMMON}
           - ${MCMC_MOVE_ARGS}
           - ${MCMC_SAMPLER_COORDINATE_ARGS}
-      - name: all standard observables
+      - name: all standard observables exploratory
         argv:
           - python
           - scripts/run_interactive_observables_mcmc.py
           - ${STANDARD_BUNDLE}
           - ${ALL_STANDARD_MCMC_OBSERVABLE_ARGS}
           - --mcmc-dir
-          - ${ALL_STANDARD_MCMC_DIR}
+          - ${EXPLORATORY_ALL_STANDARD_MCMC_DIR}
           - --output-prefix
           - ${ALL_STANDARD_PREFIX}
           - ${MCMC_LONG}
@@ -544,12 +685,32 @@ stages:
           - ${MCMC_MOVE_ARGS}
           - ${MCMC_SAMPLER_COORDINATE_ARGS}
 
+  - name: run_mcmc_all_standard_exploratory
+    depends_on:
+      - train_standard_emulators
+    description: Run the exploratory all-standard-observables MCMC from a broad prior-centred initialization.
+    commands:
+      - name: all standard observables exploratory
+        argv:
+          - python
+          - scripts/run_interactive_observables_mcmc.py
+          - ${STANDARD_BUNDLE}
+          - ${ALL_STANDARD_MCMC_OBSERVABLE_ARGS}
+          - --mcmc-dir
+          - ${EXPLORATORY_ALL_STANDARD_MCMC_DIR}
+          - --output-prefix
+          - ${ALL_STANDARD_PREFIX}
+          - ${MCMC_LONG_EXPLORATORY}
+          - ${MCMC_MOVE_ARGS}
+          - ${MCMC_SAMPLER_COORDINATE_ARGS}
+
   - name: run_mcmc_all_standard
     depends_on:
       - train_standard_emulators
-    description: Run the all-standard-observables MCMC.
+      - run_mcmc_all_standard_exploratory
+    description: Run the production all-standard-observables MCMC initialized around the exploratory MAP.
     commands:
-      - name: all standard observables
+      - name: all standard observables production from exploratory MAP
         argv:
           - python
           - scripts/run_interactive_observables_mcmc.py
@@ -559,9 +720,10 @@ stages:
           - ${ALL_STANDARD_MCMC_DIR}
           - --output-prefix
           - ${ALL_STANDARD_PREFIX}
-          - ${MCMC_LONG}
+          - ${MCMC_LONG_PRODUCTION}
           - ${MCMC_MOVE_ARGS}
           - ${MCMC_SAMPLER_COORDINATE_ARGS}
+          - ${ALL_STANDARD_PRODUCTION_INIT_ARGS}
 
   - name: plot_standard_corner
     depends_on:
@@ -623,14 +785,36 @@ stages:
           - ${ALL_STANDARD_MCMC_DIR}
           - --output-dir
           - ${STANDARD_BEST_FIT_RUN_DIR}
+          - --campaign-root
+          - ${ROOT}
           - --galacticus-executable
           - ${BEST_FIT_GALACTICUS_EXECUTABLE}
-          - --parameter-file
-          - ${BEST_FIT_PARAMETER_FILES}
           - --galacticus-output
           - ${BEST_FIT_GALACTICUS_OUTPUT}
           - --no-postprocess-emission-line-dust
           - --plot-mass-function-results
+
+  - name: plot_all_standard_best_fit_with_actual
+    depends_on:
+      - run_standard_best_fit_galacticus
+    description: Plot the all-standard MCMC emulator best fit and the actual Galacticus MAP run.
+    commands:
+      - name: all-standard best-fit observables with actual Galacticus
+        argv:
+          - python
+          - scripts/plot_interactive_observables_mcmc_best_fit_overlay.py
+          - --bundle-meta
+          - ${STANDARD_META}
+          - --combined
+          - Combined=${ALL_STANDARD_MCMC_DIR}/${ALL_STANDARD_PREFIX}_best_fit_observables.csv
+          - --galacticus-hdf5
+          - ${ACTUAL_STANDARD_HDF5}
+          - --galacticus-label
+          - EPS Galacticus MAP
+          - --output-path
+          - ${ALL_STANDARD_MCMC_DIR}/figures/${ALL_STANDARD_PREFIX}_best_fit_observables_with_actual.png
+          - --dpi
+          - "250"
 
   - name: plot_standard_best_fit_overlay
     description: Plot subset and combined standard-observable best fits, optionally with the actual Galacticus MAP run.
@@ -699,7 +883,7 @@ stages:
     depends_on:
       - train_standard_emulators
       - train_halpha_emulator
-    description: Run the H-alpha-only MCMC and the all-standard plus H-alpha MCMC.
+    description: Run the H-alpha-only MCMC and the exploratory all-standard plus H-alpha MCMC.
     commands:
       - name: H-alpha only
         argv:
@@ -715,7 +899,7 @@ stages:
           - ${MCMC_LF_COMMON}
           - ${MCMC_MOVE_ARGS}
           - ${MCMC_SAMPLER_COORDINATE_ARGS}
-      - name: all standard plus H-alpha
+      - name: all standard plus H-alpha exploratory
         argv:
           - python
           - scripts/run_standard_sidecar_lf_observables_mcmc.py
@@ -738,7 +922,7 @@ stages:
           - --sidecar-observable
           - ${HALPHA_OBSERVABLE}
           - --mcmc-dir
-          - ${COMBINED_MCMC_ROOT}
+          - ${EXPLORATORY_COMBINED_MCMC_ROOT}
           - --output-prefix
           - ${COMBINED_PREFIX}
           - ${MCMC_LF_COMMON}
@@ -761,7 +945,43 @@ stages:
           - ${HALPHA_MCMC_ROOT}
           - --output-prefix
           - ${HALPHA_PREFIX}
-          - ${MCMC_LF_COMMON}
+          - ${MCMC_LF_EXPLORATORY}
+          - ${MCMC_MOVE_ARGS}
+          - ${MCMC_SAMPLER_COORDINATE_ARGS}
+
+  - name: run_mcmc_all_standard_plus_halpha_exploratory
+    depends_on:
+      - train_standard_emulators
+      - train_halpha_emulator
+    description: Run the exploratory all-standard plus H-alpha sidecar LF MCMC from a broad prior-centred initialization.
+    commands:
+      - name: all standard plus H-alpha exploratory
+        argv:
+          - python
+          - scripts/run_standard_sidecar_lf_observables_mcmc.py
+          - ${STANDARD_BUNDLE}
+          - ${HALPHA_BUNDLE}
+          - --standard-observable
+          - smf_z0
+          - --standard-observable
+          - smf_z3
+          - --standard-observable
+          - sfr_function_robotham2011
+          - --standard-observable
+          - size_mass_vdw2014_star_forming_z0
+          - --standard-observable
+          - size_mass_vdw2014_quiescent_z0
+          - --standard-observable
+          - bh_velocity_dispersion
+          - --standard-observable
+          - mzr_blanc2019
+          - --sidecar-observable
+          - ${HALPHA_OBSERVABLE}
+          - --mcmc-dir
+          - ${EXPLORATORY_COMBINED_MCMC_ROOT}
+          - --output-prefix
+          - ${COMBINED_PREFIX}
+          - ${MCMC_LF_EXPLORATORY}
           - ${MCMC_MOVE_ARGS}
           - ${MCMC_SAMPLER_COORDINATE_ARGS}
 
@@ -769,9 +989,10 @@ stages:
     depends_on:
       - train_standard_emulators
       - train_halpha_emulator
-    description: Run the all-standard plus H-alpha sidecar LF MCMC.
+      - run_mcmc_all_standard_plus_halpha_exploratory
+    description: Run the production all-standard plus H-alpha sidecar LF MCMC initialized around the exploratory joint MAP.
     commands:
-      - name: all standard plus H-alpha
+      - name: all standard plus H-alpha production from exploratory MAP
         argv:
           - python
           - scripts/run_standard_sidecar_lf_observables_mcmc.py
@@ -797,9 +1018,10 @@ stages:
           - ${COMBINED_MCMC_ROOT}
           - --output-prefix
           - ${COMBINED_PREFIX}
-          - ${MCMC_LF_COMMON}
+          - ${MCMC_LF_PRODUCTION}
           - ${MCMC_MOVE_ARGS}
           - ${MCMC_SAMPLER_COORDINATE_ARGS}
+          - ${COMBINED_PRODUCTION_INIT_ARGS}
 
   - name: plot_halpha_standard_corner
     depends_on:
@@ -820,6 +1042,30 @@ stages:
           - Combined=${COMBINED_MCMC_ROOT}/${COMBINED_PREFIX}_mcmc_results.hdf5
           - --output-path
           - ${COMBINED_MCMC_ROOT}/mcmc_getdist_overlay.png
+          - --parameter-set
+          - auto
+          - --filled
+          - --dpi
+          - "300"
+          - --marker-summary
+          - ${COMBINED_MCMC_ROOT}/${COMBINED_PREFIX}_mcmc_results.hdf5
+
+  - name: plot_standard_plus_halpha_corner
+    depends_on:
+      - run_mcmc_all_standard
+      - run_mcmc_all_standard_plus_halpha
+    description: Overlay the all-standard and all-standard plus H-alpha posterior samples.
+    commands:
+      - name: standard plus H-alpha getDist overlay
+        argv:
+          - python
+          - scripts/plot_observable_mcmc_overlay_getdist.py
+          - --posterior
+          - Standard=${ALL_STANDARD_MCMC_DIR}/${ALL_STANDARD_PREFIX}_mcmc_results.hdf5
+          - --posterior
+          - Combined=${COMBINED_MCMC_ROOT}/${COMBINED_PREFIX}_mcmc_results.hdf5
+          - --output-path
+          - ${COMBINED_MCMC_ROOT}/mcmc_standard_plus_halpha_getdist_overlay.png
           - --parameter-set
           - auto
           - --filled
@@ -854,10 +1100,10 @@ stages:
           - ${COMBINED_MCMC_ROOT}
           - --output-dir
           - ${COMBINED_BEST_FIT_RUN_DIR}
+          - --campaign-root
+          - ${ROOT}
           - --galacticus-executable
           - ${BEST_FIT_GALACTICUS_EXECUTABLE}
-          - --parameter-file
-          - ${BEST_FIT_PARAMETER_FILES}
           - --galacticus-output
           - ${BEST_FIT_GALACTICUS_OUTPUT}
           - --postprocess-emission-line-dust
@@ -883,6 +1129,8 @@ stages:
           - --include-map
 
   - name: plot_combined_best_fit_with_actual
+    depends_on:
+      - run_combined_best_fit_galacticus
     description: Plot combined-MCMC emulator predictions and the actual Galacticus MAP run.
     commands:
       - name: standard and H-alpha actual-Galacticus overlays
@@ -899,14 +1147,10 @@ stages:
           - ${COMBINED_MCMC_ROOT}/${COMBINED_PREFIX}_run_summary.json
           - --actual-hdf5
           - ${ACTUAL_COMBINED_HDF5}
-          - --extra-actual-hdf5
-          - UNIT Galacticus MAP=${ACTUAL_COMBINED_UNIT_HDF5}
           - --actual-sidecar-dir
           - ${ACTUAL_COMBINED_SIDECAR_DIR}
           - --actual-sidecar-case
           - map_dust
-          - --extra-actual-sidecar-dir
-          - UNIT Galacticus MAP=${ACTUAL_COMBINED_UNIT_SIDECAR_DIR}
           - --actual-label
           - EPS Galacticus MAP
           - --standard-output-path

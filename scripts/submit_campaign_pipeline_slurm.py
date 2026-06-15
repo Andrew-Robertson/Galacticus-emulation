@@ -272,7 +272,19 @@ def _sbatch_script(
     ):
         if value:
             lines.append(f"#SBATCH --{key}={value}")
-    lines.extend(["", "set -euo pipefail", f"cd {shlex.quote(str(REPO_ROOT))}"])
+    omp_threads = _job_slurm_value(job, by_name, "cpus_per_task", args.cpus_per_task)
+    lines.extend(
+        [
+            "",
+            "set -euo pipefail",
+            f"cd {shlex.quote(str(REPO_ROOT))}",
+            "",
+            "ulimit -c 0",
+            "export GFORTRAN_ERROR_DUMPCORE=NO",
+            "ulimit -t unlimited",
+            f"export OMP_NUM_THREADS=${{SLURM_CPUS_PER_TASK:-{omp_threads}}}",
+        ]
+    )
     for setup_command in args.setup_command:
         lines.append(setup_command)
     command = [

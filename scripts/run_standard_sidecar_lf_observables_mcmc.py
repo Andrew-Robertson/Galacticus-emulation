@@ -43,6 +43,7 @@ from galacticus_emu.mcmc_results import split_thinned_chain, write_mcmc_results_
 from run_interactive_observables_mcmc import (
     BundlePosterior,
     _best_fit_plot as _standard_best_fit_plot,
+    _initial_center_from_results,
     _parameter_specs_for_columns,
     _parse_x_ranges,
     _selected_targets,
@@ -88,6 +89,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--thin", type=int, default=10)
     parser.add_argument("--seed", type=int, default=12345)
     parser.add_argument("--init-quantile-sigma", type=float, default=0.04)
+    parser.add_argument(
+        "--init-from-results",
+        type=Path,
+        default=None,
+        help=(
+            "Initialize walkers around a point saved in an existing MCMC HDF5 results file. "
+            "The point is read in physical parameter space, converted to prior quantiles, "
+            "then transformed into sampler coordinates when --sample-transformed-parameters is used."
+        ),
+    )
+    parser.add_argument(
+        "--init-source",
+        choices=["map"],
+        default="map",
+        help="Which point to read from --init-from-results. Currently only 'map' is supported.",
+    )
     parser.add_argument("--target-sigma-floor", type=float, default=1.0e-3)
     parser.add_argument("--include-emulator-variance", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--n-processes", type=int, default=1)
@@ -346,8 +363,31 @@ def main() -> None:
     )
 
     rng = np.random.default_rng(args.seed)
+    center_theta = None
+    center_quantiles = np.full(len(parameter_specs), 0.5, dtype=float)
+    initialization_summary = {
+        "mode": "prior_quantile_center",
+        "source": None,
+        "path": None,
+        "init_quantile_sigma": float(args.init_quantile_sigma),
+    }
+    if args.init_from_results is not None:
+        center_theta = _initial_center_from_results(
+            args.init_from_results,
+            parameter_names,
+            source=args.init_source,
+        )
+        center_quantiles = np.asarray(transform_to_prior_quantiles(parameter_specs, center_theta[None, :])[0], dtype=float)
+        initialization_summary = {
+            "mode": "results_file",
+            "source": args.init_source,
+            "path": str(args.init_from_results.expanduser().resolve()),
+            "center_theta": {name: float(value) for name, value in zip(parameter_names, center_theta, strict=True)},
+            "center_quantiles": {name: float(value) for name, value in zip(parameter_names, center_quantiles, strict=True)},
+            "init_quantile_sigma": float(args.init_quantile_sigma),
+        }
     initial_quantiles = np.clip(
-        0.5 + args.init_quantile_sigma * rng.normal(size=(args.n_walkers, len(parameter_specs))),
+        center_quantiles + args.init_quantile_sigma * rng.normal(size=(args.n_walkers, len(parameter_specs))),
         1.0e-4,
         1.0 - 1.0e-4,
     )
@@ -510,6 +550,7 @@ def main() -> None:
         "trace_thin": int(trace_thin),
         "seed": int(args.seed),
         "emcee_moves": describe_emcee_moves(args.move),
+        "initialization": initialization_summary,
         "sampler_coordinates": sampler_coordinate_summary(
             parameter_specs,
             parameter_names,

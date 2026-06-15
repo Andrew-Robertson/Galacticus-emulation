@@ -12,6 +12,7 @@ os.environ.setdefault("MPLCONFIGDIR", str(REPO_ROOT / ".mplconfig"))
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 import joblib
+import h5py
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -74,6 +75,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--thin", type=int, default=10)
     parser.add_argument("--seed", type=int, default=12345)
     parser.add_argument("--init-quantile-sigma", type=float, default=0.04)
+    parser.add_argument(
+        "--init-from-results",
+        type=Path,
+        default=None,
+        help=(
+            "Initialize walkers around a point stored in an existing *_mcmc_results.hdf5 file. "
+            "The stored physical parameters are aligned by name and then converted into this run's "
+            "sampler coordinates, so this is compatible with --sample-transformed-parameters."
+        ),
+    )
+    parser.add_argument(
+        "--init-source",
+        choices=["map"],
+        default="map",
+        help="Which point to read from --init-from-results. Currently only 'map' is supported.",
+    )
     parser.add_argument("--target-sigma-floor", type=float, default=1.0e-3)
     parser.add_argument(
         "--include-emulator-variance",
@@ -123,6 +140,42 @@ def _parameter_specs_for_columns(input_columns: list[str]):
     if missing:
         raise ValueError(f"No parameter specification found for input column(s): {missing}")
     return [specs_by_name[column] for column in input_columns]
+
+
+def _decode_hdf5_strings(values: np.ndarray) -> list[str]:
+    result = []
+    for value in values:
+        if isinstance(value, bytes):
+            result.append(value.decode("utf-8"))
+        else:
+            result.append(str(value))
+    return result
+
+
+def _initial_center_from_results(path: Path, input_columns: list[str], *, source: str) -> np.ndarray:
+    if source != "map":
+        raise ValueError(f"Unsupported initialization source: {source!r}")
+    path = path.expanduser().resolve()
+    with h5py.File(path, "r") as handle:
+        if "parameters/names" not in handle:
+            raise KeyError(f"{path} does not contain /parameters/names")
+        if "map/theta" not in handle:
+            raise KeyError(f"{path} does not contain /map/theta")
+        source_names = _decode_hdf5_strings(handle["parameters/names"][...])
+        source_theta = np.asarray(handle["map/theta"][...], dtype=float)
+    if source_theta.shape != (len(source_names),):
+        raise ValueError(
+            f"{path} /map/theta has shape {source_theta.shape}, expected ({len(source_names)},)"
+        )
+    by_name = dict(zip(source_names, source_theta, strict=True))
+    missing = [name for name in input_columns if name not in by_name]
+    if missing:
+        raise ValueError(f"{path} is missing initialization parameter(s): {missing}")
+    theta = np.asarray([by_name[name] for name in input_columns], dtype=float)
+    if not np.all(np.isfinite(theta)):
+        bad = [name for name, value in zip(input_columns, theta, strict=True) if not np.isfinite(value)]
+        raise ValueError(f"{path} contains non-finite initialization value(s): {bad}")
+    return theta
 
 
 def _write_model_changes_file(
@@ -414,7 +467,30 @@ def main() -> None:
     )
 
     rng = np.random.default_rng(args.seed)
-    center_quantiles = np.full(len(input_columns), 0.5, dtype=float)
+    initialization_summary = {
+        "mode": "prior_quantile_center",
+        "init_quantile_sigma": float(args.init_quantile_sigma),
+    }
+    if args.init_from_results is None:
+        center_quantiles = np.full(len(input_columns), 0.5, dtype=float)
+    else:
+        center_theta = _initial_center_from_results(
+            args.init_from_results,
+            input_columns,
+            source=args.init_source,
+        )
+        center_quantiles = transform_to_prior_quantiles(parameter_specs, center_theta[None, :])[0]
+        initialization_summary = {
+            "mode": "results",
+            "source": str(args.init_source),
+            "results_hdf5": str(args.init_from_results.expanduser().resolve()),
+            "center_theta": {name: float(value) for name, value in zip(input_columns, center_theta, strict=True)},
+            "center_quantiles": {
+                name: float(value) for name, value in zip(input_columns, center_quantiles, strict=True)
+            },
+            "init_quantile_sigma": float(args.init_quantile_sigma),
+        }
+    center_quantiles = np.clip(center_quantiles, 1.0e-4, 1.0 - 1.0e-4)
     initial_quantiles = np.clip(
         center_quantiles + args.init_quantile_sigma * rng.normal(size=(args.n_walkers, len(input_columns))),
         1.0e-4,
@@ -598,6 +674,7 @@ def main() -> None:
         "trace_thin": int(trace_thin),
         "seed": int(args.seed),
         "init_quantile_sigma": float(args.init_quantile_sigma),
+        "initialization": initialization_summary,
         "emcee_moves": describe_emcee_moves(args.move),
         "sampler_coordinates": sampler_coordinate_summary(
             parameter_specs,
