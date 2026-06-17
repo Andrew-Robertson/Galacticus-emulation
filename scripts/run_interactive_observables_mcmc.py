@@ -40,11 +40,20 @@ from galacticus_emu.lhs import (
 from galacticus_emu.mcmc_coordinates import (
     SamplerCoordinatePosterior,
     add_sampler_coordinate_arguments,
-    best_physical_sample_from_sampler,
+    best_physical_sample_from_sampler_history,
     physical_log_prob_from_sampler_log_prob,
     physical_to_sampler_coordinates,
     sampler_coordinate_summary,
     sampler_to_physical_coordinates,
+)
+from galacticus_emu.mcmc_backend import (
+    add_emcee_backend_arguments,
+    emcee_backend_run_settings,
+    original_steps_for_saved_chain,
+    prepare_emcee_backend,
+    resolve_emcee_backend_path,
+    run_mcmc_with_backend_settings,
+    trace_chain_thin,
 )
 from galacticus_emu.mcmc_corner import corner_with_log10_priors
 from galacticus_emu.mcmc_moves import add_emcee_move_arguments, build_emcee_moves, describe_emcee_moves
@@ -129,6 +138,7 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Canonical HDF5 results path. Defaults to mcmc-dir/output-prefix_mcmc_results.hdf5.",
     )
+    add_emcee_backend_arguments(parser)
     add_emcee_move_arguments(parser)
     add_sampler_coordinate_arguments(parser)
     return parser.parse_args()
@@ -506,11 +516,32 @@ def main() -> None:
     args.mcmc_dir.mkdir(parents=True, exist_ok=True)
     figures_dir = args.figures_dir or args.mcmc_dir / "figures"
     figures_dir.mkdir(parents=True, exist_ok=True)
+    emcee_backend_path = resolve_emcee_backend_path(
+        args.emcee_backend_hdf5,
+        mcmc_dir=args.mcmc_dir,
+        output_prefix=args.output_prefix,
+    )
+    backend_run = emcee_backend_run_settings(
+        backend_path=emcee_backend_path,
+        n_steps=args.n_steps,
+        burn_in=args.burn_in,
+        thin=args.thin,
+    )
+    if backend_run.enabled and args.save_full_chain:
+        raise ValueError("--save-full-chain is incompatible with the default thinned emcee backend; pass --emcee-backend-hdf5 none to save a full unthinned chain.")
 
     moves = build_emcee_moves(emcee, args.move)
     sampler_kwargs = {"nwalkers": args.n_walkers, "ndim": len(input_columns)}
     if moves is not None:
         sampler_kwargs["moves"] = moves
+    backend = prepare_emcee_backend(
+        emcee,
+        emcee_backend_path,
+        n_walkers=args.n_walkers,
+        n_dim=len(input_columns),
+    )
+    if backend is not None:
+        sampler_kwargs["backend"] = backend
     sampler_posterior = SamplerCoordinatePosterior(
         posterior,
         parameter_specs,
@@ -526,17 +557,36 @@ def main() -> None:
                 vectorize=False,
                 **sampler_kwargs,
             )
-            sampler.run_mcmc(initial_positions, args.n_steps, progress=args.progress, skip_initial_state_check=True)
+            run_mcmc_with_backend_settings(
+                sampler,
+                initial_positions,
+                backend_run=backend_run,
+                n_steps=args.n_steps,
+                progress=args.progress,
+                skip_initial_state_check=True,
+            )
     else:
         sampler = emcee.EnsembleSampler(
             log_prob_fn=sampler_posterior.log_probability_batch,
             vectorize=True,
             **sampler_kwargs,
         )
-        sampler.run_mcmc(initial_positions, args.n_steps, progress=args.progress, skip_initial_state_check=True)
+        run_mcmc_with_backend_settings(
+            sampler,
+            initial_positions,
+            backend_run=backend_run,
+            n_steps=args.n_steps,
+            progress=args.progress,
+            skip_initial_state_check=True,
+        )
 
-    thinned_sampler_chain = sampler.get_chain(thin=args.thin)
-    thinned_sampler_log_prob = sampler.get_log_prob(thin=args.thin)
+    thinned_sampler_chain = sampler.get_chain(thin=backend_run.chain_thin)
+    thinned_sampler_log_prob = sampler.get_log_prob(thin=backend_run.chain_thin)
+    saved_original_steps = original_steps_for_saved_chain(
+        thinned_sampler_chain.shape[0],
+        store_thin=backend_run.store_thin,
+    )
+    saved_burn_in_count = int(np.count_nonzero(saved_original_steps < int(args.burn_in)))
     thinned_chain = sampler_to_physical_coordinates(
         parameter_specs,
         thinned_sampler_chain,
@@ -548,8 +598,8 @@ def main() -> None:
         thinned_sampler_log_prob,
         enabled=args.sample_transformed_parameters,
     )
-    flat_sampler_samples = sampler.get_chain(discard=args.burn_in, thin=args.thin, flat=True)
-    flat_sampler_log_prob = sampler.get_log_prob(discard=args.burn_in, thin=args.thin, flat=True)
+    flat_sampler_samples = sampler.get_chain(discard=backend_run.burn_in_discard, thin=backend_run.chain_thin, flat=True)
+    flat_sampler_log_prob = sampler.get_log_prob(discard=backend_run.burn_in_discard, thin=backend_run.chain_thin, flat=True)
     flat_samples = sampler_to_physical_coordinates(
         parameter_specs,
         flat_sampler_samples,
@@ -604,10 +654,10 @@ def main() -> None:
         posterior_path = args.mcmc_dir / f"{args.output_prefix}_posterior_samples.csv"
         posterior_df.to_csv(posterior_path, index=False)
 
-    best_theta, best_log_probability, best_chain_index = best_physical_sample_from_sampler(
+    best_theta, best_log_probability, best_chain_index = best_physical_sample_from_sampler_history(
         parameter_specs,
-        sampler,
-        burn_in=args.burn_in,
+        thinned_sampler_chain[saved_burn_in_count:],
+        thinned_sampler_log_prob[saved_burn_in_count:],
         enabled=args.sample_transformed_parameters,
     )
     best_params = {name: float(value) for name, value in zip(input_columns, best_theta, strict=True)}
@@ -692,6 +742,13 @@ def main() -> None:
         "save_thinned_chain": bool(args.save_thinned_chain),
         "save_full_chain": bool(args.save_full_chain),
         "save_posterior_csv": bool(args.save_posterior_csv),
+        "emcee_backend_hdf5": str(emcee_backend_path) if emcee_backend_path is not None else None,
+        "emcee_backend_enabled": bool(backend_run.enabled),
+        "emcee_backend_thinned_on_write": bool(backend_run.enabled),
+        "emcee_backend_store_thin": int(backend_run.store_thin),
+        "emcee_backend_saved_steps": int(thinned_sampler_chain.shape[0]),
+        "emcee_backend_proposal_steps_completed": int(thinned_sampler_chain.shape[0] * backend_run.store_thin),
+        "delete_emcee_backend_on_success": bool(args.delete_emcee_backend_on_success),
     }
     if chain_path is not None and log_prob_path is not None:
         summary["chain_path"] = str(chain_path)
@@ -748,16 +805,22 @@ def main() -> None:
     trace_path = figures_dir / f"{args.output_prefix}_trace.png"
     trace_created = False
     if not args.skip_plots and not args.skip_trace_plot:
-        if trace_thin == args.thin:
+        effective_trace_chain_thin = trace_chain_thin(
+            requested_trace_thin=trace_thin,
+            stored_thin=backend_run.store_thin,
+            backend_enabled=backend_run.enabled,
+        )
+        effective_trace_thin = backend_run.store_thin * effective_trace_chain_thin if backend_run.enabled else trace_thin
+        if effective_trace_chain_thin == backend_run.chain_thin:
             trace_chain = thinned_chain
         else:
-            trace_sampler_chain = sampler.get_chain(thin=trace_thin)
+            trace_sampler_chain = sampler.get_chain(thin=effective_trace_chain_thin)
             trace_chain = sampler_to_physical_coordinates(
                 parameter_specs,
                 trace_sampler_chain,
                 enabled=args.sample_transformed_parameters,
             )
-        trace_burn_in = int(np.ceil(args.burn_in / trace_thin))
+        trace_burn_in = int(np.ceil(args.burn_in / effective_trace_thin))
         trace_tau = _trace_plot(
             trace_chain,
             input_columns,
@@ -790,6 +853,11 @@ def main() -> None:
     if not args.skip_plots and not args.skip_best_fit_plot:
         _best_fit_plot(bundle, args.observable, masks, prediction_by_key, best_fit_path)
         best_fit_created = True
+
+    if backend_run.enabled and args.delete_emcee_backend_on_success and emcee_backend_path is not None:
+        emcee_backend_path.unlink(missing_ok=True)
+        summary["emcee_backend_deleted_on_success"] = True
+        summary_path.write_text(json.dumps(summary, indent=2) + "\n")
 
     print(summary_path)
     print(map_changes_path)
