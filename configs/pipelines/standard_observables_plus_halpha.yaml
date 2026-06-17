@@ -688,6 +688,8 @@ stages:
   - name: run_mcmc_all_standard_exploratory
     depends_on:
       - train_standard_emulators
+    slurm:
+      time: "144:00:00"
     description: Run the exploratory all-standard-observables MCMC from a broad prior-centred initialization.
     commands:
       - name: all standard observables exploratory
@@ -708,6 +710,8 @@ stages:
     depends_on:
       - train_standard_emulators
       - run_mcmc_all_standard_exploratory
+    slurm:
+      time: "144:00:00"
     description: Run the production all-standard-observables MCMC initialized around the exploratory MAP.
     commands:
       - name: all standard observables production from exploratory MAP
@@ -775,6 +779,7 @@ stages:
     slurm:
       cpus_per_task: "16"
       mem_per_cpu: 8G
+      time: "144:00:00"
     description: Run Galacticus at the all-standard MAP point in bestFitModel_GalacticusRun.
     commands:
       - name: all-standard MAP Galacticus run
@@ -953,6 +958,8 @@ stages:
     depends_on:
       - train_standard_emulators
       - train_halpha_emulator
+    slurm:
+      time: "144:00:00"
     description: Run the exploratory all-standard plus H-alpha sidecar LF MCMC from a broad prior-centred initialization.
     commands:
       - name: all standard plus H-alpha exploratory
@@ -990,6 +997,8 @@ stages:
       - train_standard_emulators
       - train_halpha_emulator
       - run_mcmc_all_standard_plus_halpha_exploratory
+    slurm:
+      time: "144:00:00"
     description: Run the production all-standard plus H-alpha sidecar LF MCMC initialized around the exploratory joint MAP.
     commands:
       - name: all standard plus H-alpha production from exploratory MAP
@@ -1090,6 +1099,7 @@ stages:
     slurm:
       cpus_per_task: "16"
       mem_per_cpu: 8G
+      time: "144:00:00"
     description: Run Galacticus at the all-standard plus H-alpha MAP point in bestFitModel_GalacticusRun.
     commands:
       - name: all-standard plus H-alpha MAP Galacticus run
