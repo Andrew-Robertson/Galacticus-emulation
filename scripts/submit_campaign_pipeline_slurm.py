@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Mapping, Sequence
+from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
@@ -208,6 +209,10 @@ def _resolve_output_path(path: Path | None, variables: Mapping[str, Any], fallba
     return (root / fallback_suffix).resolve()
 
 
+def _pipeline_output_root(variables: Mapping[str, Any]) -> Path:
+    return Path(str(variables.get("PIPELINE_OUTPUT_ROOT", REPO_ROOT / "pipeline"))).expanduser().resolve()
+
+
 def _slurm_value(stage: Mapping[str, Any], key: str, default: str | None) -> str | None:
     slurm = stage.get("slurm", {}) or {}
     if not isinstance(slurm, Mapping):
@@ -382,6 +387,74 @@ def _submit_stage(script_path: Path, dependency_job_ids: Sequence[str]) -> str:
     return match.group(1)
 
 
+def _write_submission_provenance(path: Path, manifest: Mapping[str, Any]) -> None:
+    invocation = manifest.get("invocation", {})
+    jobs = manifest.get("jobs", [])
+    lines = [
+        "# Pipeline Submission Provenance",
+        "",
+        f"Generated UTC: {invocation.get('generated_at_utc', '')}",
+        f"Submit mode: {manifest.get('submit')}",
+        f"Working directory: `{invocation.get('cwd', '')}`",
+        f"Python executable: `{invocation.get('python_executable', '')}`",
+        f"Config: `{manifest.get('config', '')}`",
+        f"Workflow: `{manifest.get('workflow', '')}`",
+        "",
+        "## Reconstructed Submit Command",
+        "",
+        "```bash",
+        str(invocation.get("reconstructed_command", "")),
+        "```",
+        "",
+        "## Profiles",
+        "",
+    ]
+    for profile in invocation.get("profiles", []):
+        lines.append(f"- `{profile}`")
+    if not invocation.get("profiles", []):
+        lines.append("- none")
+    lines.extend(["", "## Variable Overrides", ""])
+    for override in invocation.get("variable_overrides", []):
+        lines.append(f"- `{override}`")
+    if not invocation.get("variable_overrides", []):
+        lines.append("- none")
+    lines.extend(
+        [
+            "",
+            "## Slurm Defaults",
+            "",
+        ]
+    )
+    slurm_defaults = invocation.get("slurm_defaults", {})
+    if isinstance(slurm_defaults, Mapping):
+        for key in sorted(slurm_defaults):
+            value = slurm_defaults[key]
+            if value is not None:
+                lines.append(f"- `{key}`: `{value}`")
+    lines.extend(
+        [
+            "",
+            "## Jobs",
+            "",
+            "| Job | Job ID | Depends On | Stages | Script |",
+            "| --- | --- | --- | --- | --- |",
+        ]
+    )
+    if isinstance(jobs, list):
+        for job in jobs:
+            if not isinstance(job, Mapping):
+                continue
+            depends_on = ", ".join(str(value) for value in job.get("depends_on", [])) or "-"
+            stages = ", ".join(str(value) for value in job.get("stages", [])) or "-"
+            job_id = str(job.get("job_id") or "")
+            script_path = str(job.get("script_path") or "")
+            lines.append(
+                f"| `{job.get('job', '')}` | `{job_id}` | {depends_on} | {stages} | `{script_path}` |"
+            )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n")
+
+
 def main() -> None:
     args = parse_args()
     config_path = args.config.expanduser().resolve()
@@ -470,11 +543,42 @@ def main() -> None:
         "requested": requested,
         "submitted_jobs": [str(job["name"]) for job in jobs],
         "submit": bool(args.submit),
+        "invocation": {
+            "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+            "cwd": os.getcwd(),
+            "python_executable": sys.executable,
+            "argv": list(sys.argv),
+            "reconstructed_command": shlex.join([sys.executable, *sys.argv]),
+            "default_profiles": [] if args.no_default_profiles else _default_profiles(config),
+            "explicit_profiles": list(args.profile),
+            "profiles": profile_names,
+            "no_default_profiles": bool(args.no_default_profiles),
+            "variable_overrides": list(args.set),
+            "include_dependencies": bool(args.include_dependencies),
+            "slurm_defaults": {
+                "partition": args.partition,
+                "qos": args.qos,
+                "account": args.account,
+                "nodes": args.nodes,
+                "ntasks": args.ntasks,
+                "cpus_per_task": args.cpus_per_task,
+                "mem_per_cpu": args.mem_per_cpu,
+                "mem": args.mem,
+                "time": args.time,
+                "job_prefix": args.job_prefix,
+                "logs_dir": str(logs_dir),
+                "script_dir": str(script_dir),
+                "manifest_path": str(manifest_path),
+            },
+        },
         "jobs": manifest_rows,
     }
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+    provenance_path = _pipeline_output_root(variables) / "SUBMISSION_PROVENANCE.md"
+    _write_submission_provenance(provenance_path, manifest)
     print(f"manifest={manifest_path}")
+    print(f"provenance={provenance_path}")
 
 
 if __name__ == "__main__":
