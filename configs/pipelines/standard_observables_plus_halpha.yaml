@@ -330,6 +330,23 @@ profiles:
       MCMC_SAMPLER_COORDINATE_ARGS:
         - --sample-transformed-parameters
 
+  long_single_observable_mcmcs:
+    variables:
+      # Use the same sampler length as the production joint-observable chains
+      # for the individual standard-observable fits.
+      MCMC_COMMON:
+        - --n-walkers
+        - "128"
+        - --n-steps
+        - "250000"
+        - --burn-in
+        - "25000"
+        - --thin
+        - "250"
+        - --seed
+        - "12345"
+        - --progress
+
 workflows:
   two_phase_science_mcmcs_with_bestfits:
     description: Two-phase all-standard and all-standard-plus-H-alpha MCMCs, followed by EPS Galacticus MAP reruns and overlay plots.
@@ -764,6 +781,40 @@ stages:
           - "300"
           - --marker-summary
           - ${ALL_STANDARD_MCMC_DIR}/${ALL_STANDARD_PREFIX}_mcmc_results.hdf5
+
+  - name: plot_standard_degeneracy_zoom
+    depends_on:
+      - run_mcmc_smf_z0_z3
+      - run_mcmc_sfr_function
+      - run_mcmc_sizes
+      - run_mcmc_bh_velocity_dispersion
+      - run_mcmc_mzr
+      - run_mcmc_all_standard
+    description: Plot a reduced emulator-only corner showing standard-observable degeneracy breaking.
+    commands:
+      - name: standard-observable degeneracy zoom
+        argv:
+          - python
+          - scripts/plot_standard_observable_degeneracy_zoom.py
+          - ${STANDARD_MCMC_ROOT}
+          - --parameter
+          - diskVelocityCharacteristic
+          - --parameter
+          - diskExponent
+          - --parameter
+          - coolingMultiplier
+          - --parameter
+          - stellarPopulationMetalYield
+          - --max-samples
+          - "9000"
+          - --grid-size
+          - "74"
+          - --kde-bandwidth-scale
+          - "1.35"
+          - --combined-posterior
+          - ${ALL_STANDARD_MCMC_DIR}/${ALL_STANDARD_PREFIX}_mcmc_results.hdf5
+          - --output-prefix
+          - standard_observables_degeneracy_zoom_4param_smooth
 
   - name: rerun_standard_best_fit_galacticus
     manual: true
