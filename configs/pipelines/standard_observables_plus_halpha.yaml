@@ -91,6 +91,7 @@ variables:
     - $GALACTICUS_PARAMETER_FILES/hierarchicalParameters/fineTuningFiles/sizes/galacticStructureSolver-simple.xml
     - $GALACTICUS_PARAMETER_FILES/hierarchicalParameters/fineTuningFiles/moreHalos.xml
   STANDARD_BEST_FIT_RUN_DIR: ${ALL_STANDARD_MCMC_DIR}/bestFitModel_GalacticusRun
+  STANDARD_SUBSET_BEST_FIT_RUN_DIR: ${STANDARD_SUBSET_MCMC_DIR}/bestFitModel_GalacticusRun
   COMBINED_BEST_FIT_RUN_DIR: ${COMBINED_MCMC_ROOT}/bestFitModel_GalacticusRun
 
   # Optional emcee proposal moves. Leave empty to use emcee's default
@@ -125,6 +126,7 @@ variables:
     - ${MAP_INIT_QUANTILE_SIGMA}
 
   ACTUAL_STANDARD_HDF5: ${STANDARD_BEST_FIT_RUN_DIR}/${BEST_FIT_GALACTICUS_OUTPUT}
+  ACTUAL_STANDARD_SUBSET_HDF5: ${STANDARD_SUBSET_BEST_FIT_RUN_DIR}/${BEST_FIT_GALACTICUS_OUTPUT}
   ACTUAL_COMBINED_HDF5: ${COMBINED_BEST_FIT_RUN_DIR}/${BEST_FIT_GALACTICUS_OUTPUT}
   ACTUAL_COMBINED_SIDECAR_DIR: ${COMBINED_BEST_FIT_RUN_DIR}/emission_line_dust
   ACTUAL_COMBINED_UNIT_HDF5: ${COMBINED_MCMC_ROOT}/bestFitModel-UNIT/${HALPHA_TAG}_romanUNIT_massFunction.hdf5
@@ -490,6 +492,16 @@ workflows:
           - combined_production
         stages:
           - plot_standard_plus_halpha_corner
+      - name: standard_subset_best_fit_galacticus
+        depends_on:
+          - standard_subset_production
+        stages:
+          - run_standard_subset_best_fit_galacticus
+      - name: standard_subset_best_fit_overlay
+        depends_on:
+          - standard_subset_best_fit_galacticus
+        stages:
+          - plot_standard_subset_best_fit_with_actual
       - name: standard_best_fit_galacticus
         depends_on:
           - all_standard_production
@@ -984,6 +996,54 @@ stages:
       Run Galacticus with ${ALL_STANDARD_MCMC_DIR}/maximum_a_posteriori_model_changes.xml
       on the HPC, then copy the resulting HDF5 file back to ${ACTUAL_STANDARD_HDF5}
       or override ACTUAL_STANDARD_HDF5 when plotting.
+
+  - name: run_standard_subset_best_fit_galacticus
+    depends_on:
+      - run_mcmc_standard_subset
+    slurm:
+      cpus_per_task: "16"
+      mem_per_cpu: 8G
+      time: "144:00:00"
+    description: Run Galacticus at the SMF+SFRF+sizes subset MAP point in bestFitModel_GalacticusRun.
+    commands:
+      - name: SMF+SFRF+sizes MAP Galacticus run
+        argv:
+          - python
+          - scripts/run_best_fit_galacticus_model.py
+          - --mcmc-dir
+          - ${STANDARD_SUBSET_MCMC_DIR}
+          - --output-dir
+          - ${STANDARD_SUBSET_BEST_FIT_RUN_DIR}
+          - --campaign-root
+          - ${ROOT}
+          - --galacticus-executable
+          - ${BEST_FIT_GALACTICUS_EXECUTABLE}
+          - --galacticus-output
+          - ${BEST_FIT_GALACTICUS_OUTPUT}
+          - --no-postprocess-emission-line-dust
+          - --plot-mass-function-results
+
+  - name: plot_standard_subset_best_fit_with_actual
+    depends_on:
+      - run_standard_subset_best_fit_galacticus
+    description: Plot the SMF+SFRF+sizes subset MCMC emulator best fit and the actual Galacticus MAP run.
+    commands:
+      - name: SMF+SFRF+sizes best-fit observables with actual Galacticus
+        argv:
+          - python
+          - scripts/plot_interactive_observables_mcmc_best_fit_overlay.py
+          - --bundle-meta
+          - ${STANDARD_META}
+          - --combined
+          - SMF+SFRF+Sizes=${STANDARD_SUBSET_MCMC_DIR}/${STANDARD_SUBSET_PREFIX}_best_fit_observables.csv
+          - --galacticus-hdf5
+          - ${ACTUAL_STANDARD_SUBSET_HDF5}
+          - --galacticus-label
+          - Galacticus MAP
+          - --output-path
+          - ${STANDARD_SUBSET_MCMC_DIR}/figures/${STANDARD_SUBSET_PREFIX}_best_fit_observables_with_actual.png
+          - --dpi
+          - "250"
 
   - name: run_standard_best_fit_galacticus
     depends_on:
