@@ -77,7 +77,7 @@ FREE_PARAMETER_ORDER = [
 ANALYSIS_CONFIGS = {
     "smf_z0": {
         "analysis": "massFunctionStellarTomczak2014ZFOURGEz0",
-        "label": "Tomczak z~0",
+        "label": r"Tomczak+14 SMF $0.20<z<0.50$",
         "use_training_alpha": True,
         "bad_training_condition": "nonfinite",
         "bad_training_value_fill": "bin_median",
@@ -86,7 +86,7 @@ ANALYSIS_CONFIGS = {
     },
     "smf_z3": {
         "analysis": "massFunctionStellarTomczak2014ZFOURGEz3",
-        "label": "Tomczak z~2",
+        "label": r"Tomczak+14 SMF $1.00<z<1.25$",
         "use_training_alpha": True,
         "bad_training_condition": "nonfinite",
         "bad_training_value_fill": "bin_median",

@@ -61,6 +61,13 @@ from galacticus_emu.mcmc_coordinates import (
 from galacticus_emu.mcmc_corner import corner_with_log10_priors
 from galacticus_emu.mcmc_moves import add_emcee_move_arguments, build_emcee_moves, describe_emcee_moves
 from galacticus_emu.mcmc_trace import make_trace_plot
+from galacticus_emu.observable_plot_metadata import (
+    HALPHA_LF_X_AXIS_LABEL,
+    apply_sidecar_lf_y_display_offset,
+    sidecar_lf_axis_label,
+    sidecar_lf_target_label,
+    sidecar_lf_y_axis_label,
+)
 from galacticus_emu.plotting import set_ylim_from_values
 from galacticus_emu.specs import trinity_parameter_specs
 
@@ -391,16 +398,24 @@ def _plot_best_fit(bundles: dict[str, dict], prediction_by_label: dict[str, tupl
     axes_flat = np.atleast_1d(axes).ravel()
     for axis, (label, bundle) in zip(axes_flat, bundles.items(), strict=False):
         x = np.asarray(bundle["x_plot"], dtype=float)
-        target = np.asarray(bundle["target_plot"], dtype=float)
+        target = apply_sidecar_lf_y_display_offset(bundle, bundle["target_plot"])
         target_sigma = bundle["target_sigma_plot"]
         pred, pred_std = prediction_by_label[label]
-        axis.errorbar(x, target, yerr=target_sigma, fmt="o", color="0.15", label="target")
+        pred = apply_sidecar_lf_y_display_offset(bundle, pred)
+        axis.errorbar(
+            x,
+            target,
+            yerr=target_sigma,
+            fmt="o",
+            color="0.15",
+            label=sidecar_lf_target_label(bundle, bundle.get("sample_label")),
+        )
         axis.plot(x, pred, color="tab:blue", lw=1.8, label="best fit")
         axis.fill_between(x, pred - pred_std, pred + pred_std, color="tab:blue", alpha=0.2)
         set_ylim_from_values(axis, target, pred)
-        axis.set_title(label)
-        axis.set_xlabel(r"$\log_{10}(L/\mathrm{erg}\ \mathrm{s}^{-1})$")
-        axis.set_ylabel(r"$\log_{10}\Phi$")
+        axis.set_title(sidecar_lf_axis_label(bundle, bundle.get("sample_label"), label))
+        axis.set_xlabel(HALPHA_LF_X_AXIS_LABEL if bundle.get("observable") == "halpha_sobral" else r"$\log_{10}(L/\mathrm{erg}\ \mathrm{s}^{-1})$")
+        axis.set_ylabel(sidecar_lf_y_axis_label(bundle))
         axis.grid(alpha=0.22)
         axis.legend(frameon=False, fontsize=8)
     for axis in axes_flat[n_panels:]:

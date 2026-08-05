@@ -14,6 +14,11 @@ from sklearn.preprocessing import StandardScaler
 
 from .gp import fit_scaled_gp, predict_scaled_gp
 from .lhs import ParameterSpec, TruncatedLogNormalPrior, transform_to_prior_quantiles
+from .observable_plot_metadata import (
+    STANDARD_OBSERVABLE_PLOT_METADATA,
+    apply_observable_plot_metadata_overrides,
+    apply_y_display_offset,
+)
 from .persistence import load_emulator_bundle
 from .specs import trinity_parameter_specs
 
@@ -97,7 +102,7 @@ OBSERVABLE_CONFIGS = {
     },
     "smf_z0": {
         "analysis": "massFunctionStellarTomczak2014ZFOURGEz0",
-        "label": "Tomczak+14 SMF z~0",
+        "label": STANDARD_OBSERVABLE_PLOT_METADATA["smf_z0"]["label"],
         "use_training_alpha": True,
         "bad_training_condition": "nonpositive",
         "bad_training_value_fill": "keep",
@@ -108,7 +113,7 @@ OBSERVABLE_CONFIGS = {
     },
     "smf_z3": {
         "analysis": "massFunctionStellarTomczak2014ZFOURGEz3",
-        "label": "Tomczak+14 SMF z~2",
+        "label": STANDARD_OBSERVABLE_PLOT_METADATA["smf_z3"]["label"],
         "use_training_alpha": True,
         "bad_training_condition": "nonpositive",
         "bad_training_value_fill": "keep",
@@ -972,7 +977,7 @@ def train_observables_bundle(
             "x_plot": np.asarray(x_plot, dtype=float),
             "target_plot": np.asarray(target_plot, dtype=float),
             "target_sigma_plot": None if target_noise_plot is None else np.asarray(target_noise_plot, dtype=float),
-            "y_train_preview": _training_preview(y_plot, training_preview_rows),
+            "y_train_preview": _training_preview(y_fit, training_preview_rows),
             "x_axis_label": _format_x_axis_label(attrs),
             "y_axis_label": _format_y_axis_label(attrs, is_log=transform_metadata["y_transform"] == "log10"),
             "y_plot_min": float(config.get("y_plot_min", np.nanmin(y_plot))),
@@ -1092,7 +1097,7 @@ def train_observables_bundle(
         input_ranges=input_ranges,
     )
 
-    return {
+    return apply_observable_plot_metadata_overrides({
         "bundle_type": (
             "interactive_observables_pca_gp"
             if emulator_mode == "pca"
@@ -1118,7 +1123,7 @@ def train_observables_bundle(
         "emulator_mode": emulator_mode,
         "pca_scaling": pca_scaling if emulator_mode == "pca" else None,
         "pca_variance_threshold": None if pca_variance_threshold is None else float(pca_variance_threshold),
-    }
+    })
 
 
 def predict_observables_bundle(bundle: dict, params: dict[str, float]) -> dict[str, dict[str, np.ndarray]]:
@@ -1164,7 +1169,7 @@ def predict_observables_bundle(bundle: dict, params: dict[str, float]) -> dict[s
             y_std = np.sqrt(np.maximum(y_var_scaled, 0.0)) * preprocessor_scale
         predictions[observable_key] = {
             "x_plot": np.asarray(observable["x_plot"], dtype=float),
-            "y_pred_plot": y_pred,
+            "y_pred_plot": apply_y_display_offset(observable, y_pred),
             "y_std_plot": y_std,
         }
     return predictions
@@ -1243,7 +1248,10 @@ def refresh_observables_training_preview(
             )
         else:
             y_preview_source = y_plot
-        observable["y_train_preview"] = _training_preview(y_preview_source, preview_rows)
+        observable["y_train_preview"] = apply_y_display_offset(
+            observable,
+            _training_preview(y_preview_source, preview_rows),
+        )
 
     bundle["hdf5_filename"] = hdf5_filename
     bundle["training_preview_rows"] = int(min(preview_rows, len(samples)))
@@ -1297,6 +1305,7 @@ def bundle_meta(
             observable_key: {
                 "analysis": observable["analysis"],
                 "label": observable["label"],
+                "target_label": observable.get("target_label"),
                 "x_plot": np.asarray(observable["x_plot"], dtype=float).tolist(),
                 "target_plot": np.asarray(observable["target_plot"], dtype=float).tolist(),
                 "target_sigma_plot": None
@@ -1344,4 +1353,4 @@ def load_observables_bundle(path: str | Path) -> dict:
         "interactive_observables_pca_gp",
     }:
         raise ValueError(f"Unexpected bundle_type: {bundle.get('bundle_type')}")
-    return bundle
+    return apply_observable_plot_metadata_overrides(bundle)

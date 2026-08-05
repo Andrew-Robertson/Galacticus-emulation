@@ -59,6 +59,7 @@ from galacticus_emu.mcmc_corner import corner_with_log10_priors
 from galacticus_emu.mcmc_moves import add_emcee_move_arguments, build_emcee_moves, describe_emcee_moves
 from galacticus_emu.mcmc_results import split_thinned_chain, write_mcmc_results_hdf5
 from galacticus_emu.mcmc_trace import make_trace_plot
+from galacticus_emu.observable_plot_metadata import apply_y_display_offset
 from galacticus_emu.plotting import set_ylim_from_values
 from galacticus_emu.specs import trinity_parameter_specs
 
@@ -305,7 +306,7 @@ class BundlePosterior:
                 )
                 y_pred[:, index] = pred
                 y_std[:, index] = pred_std
-            return y_pred, y_std
+            return apply_y_display_offset(observable, y_pred), y_std
 
         n_components = len(observable["models"])
         coefficient_predictions = np.zeros((x_quantiles.shape[0], n_components), dtype=float)
@@ -328,7 +329,7 @@ class BundlePosterior:
         component_variance = coefficient_stds**2
         y_var_scaled = component_variance @ (components**2)
         y_std = np.sqrt(np.maximum(y_var_scaled, 0.0)) * preprocessor_scale[None, :]
-        return y_pred, y_std
+        return apply_y_display_offset(observable, y_pred), y_std
 
     def predict_batch(self, theta: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         theta = np.atleast_2d(theta)
@@ -428,7 +429,14 @@ def _best_fit_plot(
         if target_sigma is not None:
             target_sigma = np.asarray(target_sigma, dtype=float)[mask]
         pred, pred_std = prediction_by_key[key]
-        axis.errorbar(x, target, yerr=target_sigma, fmt="o", color="0.15", label="target")
+        axis.errorbar(
+            x,
+            target,
+            yerr=target_sigma,
+            fmt="o",
+            color="0.15",
+            label=observable.get("target_label", "target"),
+        )
         axis.plot(x, pred, color="tab:blue", lw=1.8, label="best fit")
         axis.fill_between(x, pred - pred_std, pred + pred_std, color="tab:blue", alpha=0.2)
         set_ylim_from_values(axis, target, pred)

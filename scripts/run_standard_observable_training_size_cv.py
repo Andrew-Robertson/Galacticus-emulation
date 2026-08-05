@@ -103,6 +103,11 @@ def parse_args() -> argparse.Namespace:
             "so very uncertain masked/low-count bins do not ruin the RMSE plot scale."
         ),
     )
+    parser.add_argument(
+        "--show-all-bins-line",
+        action="store_true",
+        help="Overplot an aggregate all-bins metric curve. Disabled by default to keep per-bin trends clear.",
+    )
     parser.add_argument("--output-dir", type=Path, default=None)
     return parser.parse_args()
 
@@ -402,6 +407,27 @@ def _method_order(values: pd.Series) -> list[str]:
     return ordered
 
 
+def _add_plot_train_size(metrics: pd.DataFrame) -> pd.DataFrame:
+    metrics = metrics.copy()
+    validation_modes = set(str(value) for value in metrics.get("validation_mode", pd.Series(dtype=str)).dropna())
+    if validation_modes <= {"kfold", "train_rest"}:
+        metrics["_plot_train_size"] = metrics["subset_size"].astype(float)
+        metrics.attrs["_plot_train_size_label"] = "Training sample size"
+    elif "n_train_mean" in metrics:
+        metrics["_plot_train_size"] = metrics["n_train_mean"].astype(float)
+        metrics.attrs["_plot_train_size_label"] = "mean training evaluations"
+    else:
+        metrics["_plot_train_size"] = metrics["subset_size"].astype(float)
+        metrics.attrs["_plot_train_size_label"] = "Training sample size"
+    return metrics
+
+
+def _format_train_size_tick(value: float) -> str:
+    if np.isfinite(value) and abs(value - round(value)) < 1.0e-6:
+        return str(int(round(value)))
+    return f"{value:.0f}"
+
+
 def _plot_observable_metrics(
     metrics: pd.DataFrame,
     *,
@@ -411,8 +437,10 @@ def _plot_observable_metrics(
     max_plotted_bins: int,
     show_training_noise_floor: bool,
     training_noise_floor_affects_ylim: bool,
+    show_all_bins_line: bool,
 ) -> None:
-    observable_metrics = metrics.loc[metrics["observable_key"] == observable_key].copy()
+    observable_metrics = _add_plot_train_size(metrics.loc[metrics["observable_key"] == observable_key])
+    plot_train_size_label = str(observable_metrics.attrs.get("_plot_train_size_label", "Training sample size"))
     if "emulator_type" not in observable_metrics:
         observable_metrics["emulator_type"] = "pca"
     methods = _method_order(observable_metrics["emulator_type"])
@@ -428,13 +456,13 @@ def _plot_observable_metrics(
         bin_rows = bin_metrics.loc[bin_metrics["bin"] == bin_index]
         label = f"{x_axis_label}={bin_rows['x_plot'].iloc[0]:.3g}"
         for method_index, method in enumerate(methods):
-            rows = bin_rows.loc[bin_rows["emulator_type"] == method].sort_values("subset_size")
+            rows = bin_rows.loc[bin_rows["emulator_type"] == method].sort_values("_plot_train_size")
             rmse_rows = rows.loc[np.isfinite(rows["rmse"].to_numpy(dtype=float))]
             r2_rows = rows.loc[np.isfinite(rows["r2"].to_numpy(dtype=float))]
             line_label = label if method_index == 0 else "_nolegend_"
             if not rmse_rows.empty:
                 axes[0].plot(
-                    rmse_rows["subset_size"],
+                    rmse_rows["_plot_train_size"],
                     rmse_rows["rmse"],
                     marker="o",
                     color=color,
@@ -443,7 +471,7 @@ def _plot_observable_metrics(
                 )
             if not r2_rows.empty:
                 axes[1].plot(
-                    r2_rows["subset_size"],
+                    r2_rows["_plot_train_size"],
                     r2_rows["r2"],
                     marker="o",
                     color=color,
@@ -451,10 +479,10 @@ def _plot_observable_metrics(
                     label=line_label,
                 )
         if show_training_noise_floor and "training_sigma_rms" in bin_rows:
-            noise_rows = bin_rows.loc[bin_rows["emulator_type"] == methods[0]].sort_values("subset_size")
+            noise_rows = bin_rows.loc[bin_rows["emulator_type"] == methods[0]].sort_values("_plot_train_size")
             finite_noise = noise_rows.loc[np.isfinite(noise_rows["training_sigma_rms"].to_numpy(dtype=float))]
             if not finite_noise.empty:
-                noise_value = float(finite_noise.sort_values("subset_size")["training_sigma_rms"].iloc[-1])
+                noise_value = float(finite_noise.sort_values("_plot_train_size")["training_sigma_rms"].iloc[-1])
                 noise_tick_values.append(noise_value)
                 transform = blended_transform_factory(axes[0].transAxes, axes[0].transData)
                 axes[0].plot(
@@ -467,13 +495,13 @@ def _plot_observable_metrics(
                     solid_capstyle="butt",
                 )
 
-    if not compare_methods:
-        all_rows = observable_metrics.loc[observable_metrics["bin"] == "all"].sort_values("subset_size")
+    if show_all_bins_line and not compare_methods:
+        all_rows = observable_metrics.loc[observable_metrics["bin"] == "all"].sort_values("_plot_train_size")
         rmse_all = all_rows.loc[np.isfinite(all_rows["rmse"].to_numpy(dtype=float))]
         r2_all = all_rows.loc[np.isfinite(all_rows["r2"].to_numpy(dtype=float))]
         if not rmse_all.empty:
             axes[0].plot(
-                rmse_all["subset_size"],
+                rmse_all["_plot_train_size"],
                 rmse_all["rmse"],
                 color="black",
                 lw=2.2,
@@ -483,7 +511,7 @@ def _plot_observable_metrics(
             )
         if not r2_all.empty:
             axes[1].plot(
-                r2_all["subset_size"],
+                r2_all["_plot_train_size"],
                 r2_all["r2"],
                 color="black",
                 lw=2.2,
@@ -495,16 +523,18 @@ def _plot_observable_metrics(
     axes[0].set_ylabel("RMSE")
     axes[1].set_ylabel(r"$R^2$")
     for axis in axes:
-        axis.set_xlabel("Sobol subset size")
+        axis.set_xlabel(plot_train_size_label)
         axis.set_xscale("log", base=2)
-        positive_subset_sizes = sorted(value for value in observable_metrics["subset_size"].unique() if value > 0)
-        axis.set_xticks(positive_subset_sizes)
-        if positive_subset_sizes:
-            if len(positive_subset_sizes) == 1:
-                axis.set_xlim(positive_subset_sizes[0] / 1.2, positive_subset_sizes[0] * 1.2)
+        positive_train_sizes = sorted(
+            value for value in observable_metrics["_plot_train_size"].unique() if np.isfinite(value) and value > 0
+        )
+        axis.set_xticks(positive_train_sizes)
+        axis.set_xticklabels([_format_train_size_tick(value) for value in positive_train_sizes])
+        if positive_train_sizes:
+            if len(positive_train_sizes) == 1:
+                axis.set_xlim(positive_train_sizes[0] / 1.2, positive_train_sizes[0] * 1.2)
             else:
-                axis.set_xlim(positive_subset_sizes[0] / 1.15, positive_subset_sizes[-1] * 1.15)
-        axis.get_xaxis().set_major_formatter(plt.ScalarFormatter())
+                axis.set_xlim(positive_train_sizes[0] / 1.15, positive_train_sizes[-1] * 1.15)
         axis.grid(alpha=0.25)
     if show_training_noise_floor and noise_tick_values and training_noise_floor_affects_ylim:
         finite_y = observable_metrics["rmse"].to_numpy(dtype=float)
@@ -530,6 +560,12 @@ def _plot_observable_metrics(
             color="0.35",
             clip_on=False,
         )
+    else:
+        finite_y = observable_metrics["rmse"].to_numpy(dtype=float)
+        finite_y = finite_y[np.isfinite(finite_y)]
+        if finite_y.size:
+            ymax = float(np.max(finite_y))
+            axes[0].set_ylim(0.0, ymax * 1.15 if ymax > 0.0 else 1.0)
     axes[1].axhline(0.0, color="0.5", lw=1.0, ls=":")
     finite_r2 = observable_metrics["r2"].to_numpy(dtype=float)
     finite_r2 = finite_r2[np.isfinite(finite_r2)]
@@ -558,8 +594,10 @@ def _plot_observable_calibration(
     x_axis_label: str,
     output_path: Path,
     max_plotted_bins: int,
+    show_all_bins_line: bool,
 ) -> None:
-    observable_metrics = metrics.loc[metrics["observable_key"] == observable_key].copy()
+    observable_metrics = _add_plot_train_size(metrics.loc[metrics["observable_key"] == observable_key])
+    plot_train_size_label = str(observable_metrics.attrs.get("_plot_train_size_label", "Training sample size"))
     if "emulator_type" not in observable_metrics:
         observable_metrics["emulator_type"] = "pca"
     methods = _method_order(observable_metrics["emulator_type"])
@@ -574,13 +612,13 @@ def _plot_observable_calibration(
         bin_rows = bin_metrics.loc[bin_metrics["bin"] == bin_index]
         label = f"{x_axis_label}={bin_rows['x_plot'].iloc[0]:.3g}"
         for method_index, method in enumerate(methods):
-            rows = bin_rows.loc[bin_rows["emulator_type"] == method].sort_values("subset_size")
+            rows = bin_rows.loc[bin_rows["emulator_type"] == method].sort_values("_plot_train_size")
             normalized_rows = rows.loc[np.isfinite(rows["normalized_rmse"].to_numpy(dtype=float))]
             coverage_rows = rows.loc[np.isfinite(rows["coverage_1sigma"].to_numpy(dtype=float))]
             line_label = label if method_index == 0 else "_nolegend_"
             if not normalized_rows.empty:
                 axes[0].plot(
-                    normalized_rows["subset_size"],
+                    normalized_rows["_plot_train_size"],
                     normalized_rows["normalized_rmse"],
                     marker="o",
                     color=color,
@@ -589,7 +627,7 @@ def _plot_observable_calibration(
                 )
             if not coverage_rows.empty:
                 axes[1].plot(
-                    coverage_rows["subset_size"],
+                    coverage_rows["_plot_train_size"],
                     coverage_rows["coverage_1sigma"],
                     marker="o",
                     color=color,
@@ -597,13 +635,13 @@ def _plot_observable_calibration(
                     label=line_label,
                 )
 
-    if not compare_methods:
-        all_rows = observable_metrics.loc[observable_metrics["bin"] == "all"].sort_values("subset_size")
+    if show_all_bins_line and not compare_methods:
+        all_rows = observable_metrics.loc[observable_metrics["bin"] == "all"].sort_values("_plot_train_size")
         normalized_all = all_rows.loc[np.isfinite(all_rows["normalized_rmse"].to_numpy(dtype=float))]
         coverage_all = all_rows.loc[np.isfinite(all_rows["coverage_1sigma"].to_numpy(dtype=float))]
         if not normalized_all.empty:
             axes[0].plot(
-                normalized_all["subset_size"],
+                normalized_all["_plot_train_size"],
                 normalized_all["normalized_rmse"],
                 color="black",
                 lw=2.2,
@@ -613,7 +651,7 @@ def _plot_observable_calibration(
             )
         if not coverage_all.empty:
             axes[1].plot(
-                coverage_all["subset_size"],
+                coverage_all["_plot_train_size"],
                 coverage_all["coverage_1sigma"],
                 color="black",
                 lw=2.2,
@@ -628,16 +666,18 @@ def _plot_observable_calibration(
     axes[1].set_ylabel(r"fraction within $1\sigma_\mathrm{pred}$")
     axes[1].set_ylim(-0.03, 1.03)
     for axis in axes:
-        axis.set_xlabel("Sobol subset size")
+        axis.set_xlabel(plot_train_size_label)
         axis.set_xscale("log", base=2)
-        positive_subset_sizes = sorted(value for value in observable_metrics["subset_size"].unique() if value > 0)
-        axis.set_xticks(positive_subset_sizes)
-        if positive_subset_sizes:
-            if len(positive_subset_sizes) == 1:
-                axis.set_xlim(positive_subset_sizes[0] / 1.2, positive_subset_sizes[0] * 1.2)
+        positive_train_sizes = sorted(
+            value for value in observable_metrics["_plot_train_size"].unique() if np.isfinite(value) and value > 0
+        )
+        axis.set_xticks(positive_train_sizes)
+        axis.set_xticklabels([_format_train_size_tick(value) for value in positive_train_sizes])
+        if positive_train_sizes:
+            if len(positive_train_sizes) == 1:
+                axis.set_xlim(positive_train_sizes[0] / 1.2, positive_train_sizes[0] * 1.2)
             else:
-                axis.set_xlim(positive_subset_sizes[0] / 1.15, positive_subset_sizes[-1] * 1.15)
-        axis.get_xaxis().set_major_formatter(plt.ScalarFormatter())
+                axis.set_xlim(positive_train_sizes[0] / 1.15, positive_train_sizes[-1] * 1.15)
         axis.grid(alpha=0.25)
         handles, labels = axis.get_legend_handles_labels()
         if handles:
@@ -895,6 +935,7 @@ def main() -> None:
                 max_plotted_bins=args.max_plotted_bins,
                 show_training_noise_floor=args.show_training_noise_floor,
                 training_noise_floor_affects_ylim=args.training_noise_floor_affects_ylim,
+                show_all_bins_line=args.show_all_bins_line,
             )
             _plot_observable_calibration(
                 observable_metrics,
@@ -902,6 +943,7 @@ def main() -> None:
                 x_axis_label=str(attrs.get("xAxisLabel", "x")),
                 output_path=output_dir / "figures" / f"{observable_key}_calibration_vs_training_size.png",
                 max_plotted_bins=args.max_plotted_bins,
+                show_all_bins_line=args.show_all_bins_line,
             )
 
     metrics = pd.DataFrame(all_metric_rows)

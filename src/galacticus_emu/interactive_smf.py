@@ -146,9 +146,9 @@ def train_smf_bundle(
         "y_stds": np.asarray(y_stds, dtype=float),
         "kernels": kernels,
         "n_restarts_optimizer": int(n_restarts_optimizer),
-        "x_axis_label": r"log10(Mstar / Msun)",
-        "y_axis_label": r"log10(Phi / Mpc^-3 dex^-1)",
-        "observable_label": "Tomczak+14 z~0 stellar mass function",
+        "x_axis_label": r"$\log_{10}(M_\star/M_\odot)$",
+        "y_axis_label": r"$\log_{10}(\Phi/\mathrm{Mpc}^{-3}\,\mathrm{dex}^{-1})$",
+        "observable_label": r"Tomczak+14 SMF $0.20<z<0.50$",
         "y_plot_min": float(np.floor(np.min(y_all) - 0.25)),
         "y_plot_max": float(np.ceil(np.max(y_all) + 0.25)),
     }

@@ -103,6 +103,7 @@ def _axis_metadata(meta: dict, observable_key: str) -> dict[str, str]:
         "label": observable.get("label", observable_key),
         "x_axis_label": observable.get("x_axis_label", "x"),
         "y_axis_label": observable.get("y_axis_label", "y"),
+        "target_label": observable.get("target_label", "target"),
     }
 
 
@@ -259,12 +260,22 @@ def main() -> None:
         "linewidth": 2.4,
     }
     for axis, observable_key in zip(axes_flat, observable_keys, strict=False):
+        metadata = _axis_metadata(meta, observable_key)
         rows = combined.loc[combined["observable_key"] == observable_key].copy().sort_values("x_plot")
         x = rows["x_plot"].to_numpy(dtype=float)
         target = rows["target_plot"].to_numpy(dtype=float)
         target_sigma = rows["target_sigma_plot"].to_numpy(dtype=float)
         target_sigma = np.where(np.isfinite(target_sigma), target_sigma, np.nan)
-        axis.errorbar(x, target, yerr=target_sigma, fmt="o", color="0.15", ms=4.0, label="target", zorder=4)
+        axis.errorbar(
+            x,
+            target,
+            yerr=target_sigma,
+            fmt="o",
+            color="0.15",
+            ms=4.0,
+            label=metadata.get("target_label") or "target",
+            zorder=4,
+        )
 
         for case_index, (subset_label, subset_frame) in enumerate(subsets):
             style = _style_for_case(subset_label, case_index)
@@ -305,7 +316,6 @@ def main() -> None:
         central_values.append(galacticus_y)
         set_ylim_from_values(axis, *central_values)
 
-        metadata = _axis_metadata(meta, observable_key)
         axis.set_title(metadata["label"])
         axis.set_xlabel(metadata["x_axis_label"])
         axis.set_ylabel(metadata["y_axis_label"])

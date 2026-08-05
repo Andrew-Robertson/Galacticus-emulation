@@ -62,6 +62,7 @@ variables:
   SIZE_MCMC_DIR: ${STANDARD_MCMC_ROOT}/size_mass_vdw2014_sf_q
   BH_MSIGMA_MCMC_DIR: ${STANDARD_MCMC_ROOT}/bh_velocity_dispersion
   MZR_MCMC_DIR: ${STANDARD_MCMC_ROOT}/mzr_blanc2019
+  STANDARD_SUBSET_MCMC_DIR: ${STANDARD_MCMC_ROOT}/smf_sfrf_sizes
   ALL_STANDARD_MCMC_DIR: ${STANDARD_MCMC_ROOT}/all_standard_observables
 
   SMF_PREFIX: mcmc_smf_z0_z3
@@ -69,6 +70,7 @@ variables:
   SIZE_PREFIX: mcmc_size_mass_vdw2014_sf_q
   BH_MSIGMA_PREFIX: mcmc_bh_velocity_dispersion
   MZR_PREFIX: mcmc_mzr_blanc2019
+  STANDARD_SUBSET_PREFIX: mcmc_smf_sfrf_sizes
   ALL_STANDARD_PREFIX: mcmc_all_standard_observables
   HALPHA_PREFIX: mcmc_${HALPHA_TAG}
   COMBINED_PREFIX: mcmc_all_standard_observables_plus_${HALPHA_TAG}
@@ -97,7 +99,16 @@ variables:
   MCMC_SAMPLER_COORDINATE_ARGS: []
   MAP_INIT_QUANTILE_SIGMA: "0.01"
   ALL_STANDARD_EXPLORATORY_MCMC_RESULTS: ${EXPLORATORY_ALL_STANDARD_MCMC_DIR}/${ALL_STANDARD_PREFIX}_mcmc_results.hdf5
+  EXPLORATORY_STANDARD_SUBSET_MCMC_DIR: ${EXPLORATORY_STANDARD_MCMC_ROOT}/smf_sfrf_sizes
+  STANDARD_SUBSET_EXPLORATORY_MCMC_RESULTS: ${EXPLORATORY_STANDARD_SUBSET_MCMC_DIR}/${STANDARD_SUBSET_PREFIX}_mcmc_results.hdf5
   COMBINED_EXPLORATORY_MCMC_RESULTS: ${EXPLORATORY_COMBINED_MCMC_ROOT}/${COMBINED_PREFIX}_mcmc_results.hdf5
+  STANDARD_SUBSET_PRODUCTION_INIT_ARGS:
+    - --init-from-results
+    - ${STANDARD_SUBSET_EXPLORATORY_MCMC_RESULTS}
+    - --init-source
+    - map
+    - --init-quantile-sigma
+    - ${MAP_INIT_QUANTILE_SIGMA}
   ALL_STANDARD_PRODUCTION_INIT_ARGS:
     - --init-from-results
     - ${ALL_STANDARD_EXPLORATORY_MCMC_RESULTS}
@@ -156,6 +167,18 @@ variables:
     - bh_velocity_dispersion
     - --observable
     - mzr_blanc2019
+
+  STANDARD_SUBSET_MCMC_OBSERVABLE_ARGS:
+    - --observable
+    - smf_z0
+    - --observable
+    - smf_z3
+    - --observable
+    - sfr_function_robotham2011
+    - --observable
+    - size_mass_vdw2014_star_forming_z0
+    - --observable
+    - size_mass_vdw2014_quiescent_z0
 
   MCMC_COMMON:
     - --n-walkers
@@ -399,6 +422,96 @@ workflows:
           - standard_best_fit_galacticus
         stages:
           - plot_all_standard_best_fit_with_actual
+      - name: combined_best_fit_overlay
+        depends_on:
+          - combined_best_fit_galacticus
+        stages:
+          - plot_combined_best_fit_with_actual
+
+  paper_final_mcmcs_with_bestfits:
+    description: Final paper workflow with long single-observable standard MCMCs, the SMF+SFRF+sizes subset, all-standard, and all-standard-plus-H-alpha calibrations.
+    jobs:
+      - name: train_standard_emulators
+        stages:
+          - train_standard_emulators
+      - name: train_halpha_emulator
+        stages:
+          - train_halpha_emulator
+      - name: single_standard_mcmcs
+        depends_on:
+          - train_standard_emulators
+        stages:
+          - run_mcmc_smf_z0_z3
+          - run_mcmc_sfr_function
+          - run_mcmc_sizes
+          - run_mcmc_bh_velocity_dispersion
+          - run_mcmc_mzr
+      - name: standard_subset_exploratory
+        depends_on:
+          - train_standard_emulators
+        stages:
+          - run_mcmc_standard_subset_exploratory
+      - name: standard_subset_production
+        depends_on:
+          - standard_subset_exploratory
+        stages:
+          - run_mcmc_standard_subset
+      - name: all_standard_exploratory
+        depends_on:
+          - train_standard_emulators
+        stages:
+          - run_mcmc_all_standard_exploratory
+      - name: all_standard_production
+        depends_on:
+          - all_standard_exploratory
+        stages:
+          - run_mcmc_all_standard
+      - name: combined_exploratory
+        depends_on:
+          - train_standard_emulators
+          - train_halpha_emulator
+        stages:
+          - run_mcmc_all_standard_plus_halpha_exploratory
+      - name: combined_production
+        depends_on:
+          - combined_exploratory
+        stages:
+          - run_mcmc_all_standard_plus_halpha
+      - name: standard_corner
+        depends_on:
+          - single_standard_mcmcs
+          - standard_subset_production
+          - all_standard_production
+        stages:
+          - plot_standard_corner
+      - name: standard_plus_halpha_corner
+        depends_on:
+          - all_standard_production
+          - combined_production
+        stages:
+          - plot_standard_plus_halpha_corner
+      - name: standard_best_fit_galacticus
+        depends_on:
+          - all_standard_production
+        stages:
+          - run_standard_best_fit_galacticus
+      - name: combined_best_fit_galacticus
+        depends_on:
+          - combined_production
+        stages:
+          - run_combined_best_fit_galacticus
+      - name: standard_best_fit_overlay
+        depends_on:
+          - standard_best_fit_galacticus
+        stages:
+          - plot_all_standard_best_fit_with_actual
+      - name: standard_best_fit_comparison_overlay
+        depends_on:
+          - single_standard_mcmcs
+          - standard_subset_production
+          - standard_best_fit_galacticus
+        stages:
+          - plot_standard_best_fit_overlay
       - name: combined_best_fit_overlay
         depends_on:
           - combined_best_fit_galacticus
@@ -723,6 +836,50 @@ stages:
           - ${MCMC_MOVE_ARGS}
           - ${MCMC_SAMPLER_COORDINATE_ARGS}
 
+  - name: run_mcmc_standard_subset_exploratory
+    depends_on:
+      - train_standard_emulators
+    slurm:
+      time: "144:00:00"
+    description: Run the exploratory SMF+SFRF+sizes standard-observable subset MCMC from a broad prior-centred initialization.
+    commands:
+      - name: SMF plus SFRF plus sizes exploratory
+        argv:
+          - python
+          - scripts/run_interactive_observables_mcmc.py
+          - ${STANDARD_BUNDLE}
+          - ${STANDARD_SUBSET_MCMC_OBSERVABLE_ARGS}
+          - --mcmc-dir
+          - ${EXPLORATORY_STANDARD_SUBSET_MCMC_DIR}
+          - --output-prefix
+          - ${STANDARD_SUBSET_PREFIX}
+          - ${MCMC_LONG_EXPLORATORY}
+          - ${MCMC_MOVE_ARGS}
+          - ${MCMC_SAMPLER_COORDINATE_ARGS}
+
+  - name: run_mcmc_standard_subset
+    depends_on:
+      - train_standard_emulators
+      - run_mcmc_standard_subset_exploratory
+    slurm:
+      time: "144:00:00"
+    description: Run the production SMF+SFRF+sizes standard-observable subset MCMC initialized around the exploratory MAP.
+    commands:
+      - name: SMF plus SFRF plus sizes production from exploratory MAP
+        argv:
+          - python
+          - scripts/run_interactive_observables_mcmc.py
+          - ${STANDARD_BUNDLE}
+          - ${STANDARD_SUBSET_MCMC_OBSERVABLE_ARGS}
+          - --mcmc-dir
+          - ${STANDARD_SUBSET_MCMC_DIR}
+          - --output-prefix
+          - ${STANDARD_SUBSET_PREFIX}
+          - ${MCMC_LONG_PRODUCTION}
+          - ${MCMC_MOVE_ARGS}
+          - ${MCMC_SAMPLER_COORDINATE_ARGS}
+          - ${STANDARD_SUBSET_PRODUCTION_INIT_ARGS}
+
   - name: run_mcmc_all_standard
     depends_on:
       - train_standard_emulators
@@ -753,6 +910,7 @@ stages:
       - run_mcmc_sizes
       - run_mcmc_bh_velocity_dispersion
       - run_mcmc_mzr
+      - run_mcmc_standard_subset
       - run_mcmc_all_standard
     description: Overlay standard-observable MCMC posteriors with the all-standard posterior in black.
     commands:
@@ -770,6 +928,8 @@ stages:
           - BH M-sigma=${BH_MSIGMA_MCMC_DIR}/${BH_MSIGMA_PREFIX}_mcmc_results.hdf5
           - --posterior
           - MZR=${MZR_MCMC_DIR}/${MZR_PREFIX}_mcmc_results.hdf5
+          - --posterior
+          - SMF+SFRF+Sizes=${STANDARD_SUBSET_MCMC_DIR}/${STANDARD_SUBSET_PREFIX}_mcmc_results.hdf5
           - --posterior
           - Combined=${ALL_STANDARD_MCMC_DIR}/${ALL_STANDARD_PREFIX}_mcmc_results.hdf5
           - --output-path
@@ -789,6 +949,7 @@ stages:
       - run_mcmc_sizes
       - run_mcmc_bh_velocity_dispersion
       - run_mcmc_mzr
+      - run_mcmc_standard_subset
       - run_mcmc_all_standard
     description: Plot a reduced emulator-only corner showing standard-observable degeneracy breaking.
     commands:
@@ -866,7 +1027,7 @@ stages:
           - --galacticus-hdf5
           - ${ACTUAL_STANDARD_HDF5}
           - --galacticus-label
-          - EPS Galacticus MAP
+          - Galacticus MAP
           - --output-path
           - ${ALL_STANDARD_MCMC_DIR}/figures/${ALL_STANDARD_PREFIX}_best_fit_observables_with_actual.png
           - --dpi
@@ -893,10 +1054,12 @@ stages:
           - BH M-sigma=${BH_MSIGMA_MCMC_DIR}/${BH_MSIGMA_PREFIX}_best_fit_observables.csv
           - --subset
           - MZR=${MZR_MCMC_DIR}/${MZR_PREFIX}_best_fit_observables.csv
+          - --subset
+          - SMF+SFRF+Sizes=${STANDARD_SUBSET_MCMC_DIR}/${STANDARD_SUBSET_PREFIX}_best_fit_observables.csv
           - --galacticus-hdf5
           - ${ACTUAL_STANDARD_HDF5}
           - --galacticus-label
-          - Actual Galacticus MAP
+          - Galacticus MAP
           - --output-path
           - ${ALL_STANDARD_MCMC_DIR}/figures/mcmc_subset_best_fits_on_all_observables.png
           - --dpi
@@ -1213,7 +1376,7 @@ stages:
           - --actual-sidecar-case
           - map_dust
           - --actual-label
-          - EPS Galacticus MAP
+          - Galacticus MAP
           - --standard-output-path
           - ${COMBINED_MCMC_ROOT}/figures/${COMBINED_PREFIX}_best_fit_standard_observables_with_actual.png
           - --sidecar-output-path

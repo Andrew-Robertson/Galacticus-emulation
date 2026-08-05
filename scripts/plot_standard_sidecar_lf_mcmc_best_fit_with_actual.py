@@ -15,6 +15,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from galacticus_emu.observable_plot_metadata import (
+    HALPHA_LF_X_AXIS_LABEL,
+    apply_observable_plot_metadata_overrides,
+    sidecar_lf_axis_label,
+    sidecar_lf_target_label,
+    sidecar_lf_y_axis_label,
+    standard_observable_y_display_offset,
+)
 from galacticus_emu.plotting import set_ylim_from_values
 from plot_interactive_observables_mcmc_best_fit_overlay import (
     _axis_metadata,
@@ -77,7 +85,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--standard-output-path", type=Path, required=True)
     parser.add_argument("--sidecar-output-path", type=Path, required=True)
-    parser.add_argument("--actual-label", default="Actual Galacticus MAP")
+    parser.add_argument("--actual-label", default="Galacticus MAP")
     parser.add_argument("--min-log10-lf", type=float, default=-8.0)
     parser.add_argument("--z-pivot", type=float, default=1.0)
     parser.add_argument("--dpi", type=int, default=200)
@@ -173,10 +181,12 @@ def _actual_sidecar_predictions(
 ) -> dict[str, pd.DataFrame]:
     path = sidecar_dir / "emission_line_dust_lf_long.csv"
     frame = pd.read_csv(path)
-    required = {"observable", "sample_label", "log10_luminosity_center", "phi_mpc3_dex"}
+    required = {"observable", "sample_label", "log10_luminosity_center"}
     missing = sorted(required.difference(frame.columns))
     if missing:
         raise ValueError(f"{path} is missing sidecar LF column(s): {missing}")
+    if "dn_dlnL_mpc3" not in frame.columns and "phi_mpc3_dex" not in frame.columns:
+        raise ValueError(f"{path} must contain dn_dlnL_mpc3 or phi_mpc3_dex")
 
     if "dust_case" in frame.columns:
         cases = sorted(frame["dust_case"].astype(str).unique())
@@ -193,7 +203,10 @@ def _actual_sidecar_predictions(
     predictions = {}
     for (observable, sample_label), group in frame.groupby(["observable", "sample_label"]):
         ordered = group.sort_values("bin_index" if "bin_index" in group.columns else "log10_luminosity_center")
-        phi = ordered["phi_mpc3_dex"].to_numpy(dtype=float)
+        if "phi_mpc3_dex" in ordered:
+            phi = ordered["phi_mpc3_dex"].to_numpy(dtype=float)
+        else:
+            phi = ordered["dn_dlnL_mpc3"].to_numpy(dtype=float) * np.log(10.0)
         predictions[_observable_key(str(observable), str(sample_label))] = pd.DataFrame(
             {
                 "x_plot": ordered["log10_luminosity_center"].to_numpy(dtype=float),
@@ -210,9 +223,7 @@ def _posterior_draw_run_dirs(root: Path) -> list[Path]:
 def _sidecar_axis_label(rows: pd.DataFrame, observable_key: str) -> str:
     observable = str(rows["observable"].iloc[0]) if "observable" in rows else "sidecar LF"
     sample_label = str(rows["sample_label"].iloc[0]) if "sample_label" in rows else observable_key
-    if observable == "halpha_sobral":
-        return f"Halpha Sobral {sample_label}"
-    return f"{observable} {sample_label}"
+    return sidecar_lf_axis_label(observable, sample_label, f"{observable} {sample_label}")
 
 
 def _plot_standard(
@@ -230,12 +241,22 @@ def _plot_standard(
     axes_flat = np.atleast_1d(axes).ravel()
     for axis, observable_key in zip(axes_flat, observable_keys, strict=False):
         rows = predictions[predictions["observable_key"] == observable_key].copy().sort_values("x_plot")
+        y_offset = standard_observable_y_display_offset(observable_key)
         x = rows["x_plot"].to_numpy(dtype=float)
-        target = rows["target_plot"].to_numpy(dtype=float)
+        target = rows["target_plot"].to_numpy(dtype=float) + y_offset
         target_sigma = rows["target_sigma_plot"].to_numpy(dtype=float)
-        pred = rows["prediction_plot"].to_numpy(dtype=float)
+        pred = rows["prediction_plot"].to_numpy(dtype=float) + y_offset
         pred_sigma = rows["prediction_sigma_plot"].to_numpy(dtype=float)
-        axis.errorbar(x, target, yerr=target_sigma, fmt="o", color="0.15", label="target", zorder=4)
+        metadata = _axis_metadata(meta, observable_key)
+        axis.errorbar(
+            x,
+            target,
+            yerr=target_sigma,
+            fmt="o",
+            color="0.15",
+            label=metadata.get("target_label") or "target",
+            zorder=4,
+        )
         axis.plot(x, pred, color="tab:blue", lw=1.8, label="emulator MAP")
         axis.fill_between(x, pred - pred_sigma, pred + pred_sigma, color="tab:blue", alpha=0.2)
         actual_values = []
@@ -244,7 +265,7 @@ def _plot_standard(
                 continue
             actual = actual_predictions[observable_key].sort_values("x_plot")
             actual_x = actual["x_plot"].to_numpy(dtype=float)
-            actual_y = actual["prediction_plot"].to_numpy(dtype=float)
+            actual_y = actual["prediction_plot"].to_numpy(dtype=float) + y_offset
             finite = np.isfinite(actual_x) & np.isfinite(actual_y)
             actual_values.append(actual_y)
             axis.plot(
@@ -258,7 +279,6 @@ def _plot_standard(
                 zorder=zorder,
             )
         set_ylim_from_values(axis, target, pred, *actual_values)
-        metadata = _axis_metadata(meta, observable_key)
         axis.set_title(metadata["label"])
         axis.set_xlabel(metadata["x_axis_label"])
         axis.set_ylabel(metadata["y_axis_label"])
@@ -285,12 +305,22 @@ def _plot_sidecar(
     axes_flat = np.atleast_1d(axes).ravel()
     for axis, observable_key in zip(axes_flat, observable_keys, strict=False):
         rows = predictions[predictions["observable_key"] == observable_key].copy().sort_values("x_plot")
+        observable = str(rows["observable"].iloc[0]) if "observable" in rows else observable_key
+        sample_label = str(rows["sample_label"].iloc[0]) if "sample_label" in rows else observable_key
         x = rows["x_plot"].to_numpy(dtype=float)
         target = rows["target_log10_phi"].to_numpy(dtype=float)
         target_sigma = rows["target_log10_phi_std"].to_numpy(dtype=float)
         pred = rows["prediction_log10_phi"].to_numpy(dtype=float)
         pred_sigma = rows["prediction_log10_phi_std"].to_numpy(dtype=float)
-        axis.errorbar(x, target, yerr=target_sigma, fmt="o", color="0.15", label="target", zorder=4)
+        axis.errorbar(
+            x,
+            target,
+            yerr=target_sigma,
+            fmt="o",
+            color="0.15",
+            label=sidecar_lf_target_label(observable, sample_label),
+            zorder=4,
+        )
         axis.plot(x, pred, color="tab:blue", lw=1.8, label="emulator MAP")
         axis.fill_between(x, pred - pred_sigma, pred + pred_sigma, color="tab:blue", alpha=0.2)
         actual_values = []
@@ -314,8 +344,8 @@ def _plot_sidecar(
             )
         set_ylim_from_values(axis, target, pred, *actual_values)
         axis.set_title(_sidecar_axis_label(rows, observable_key))
-        axis.set_xlabel(r"$\log_{10}(L/\mathrm{erg}\ \mathrm{s}^{-1})$")
-        axis.set_ylabel(r"$\log_{10}\Phi$")
+        axis.set_xlabel(HALPHA_LF_X_AXIS_LABEL if observable == "halpha_sobral" else r"$\log_{10}(L/\mathrm{erg}\ \mathrm{s}^{-1})$")
+        axis.set_ylabel(sidecar_lf_y_axis_label(observable))
         axis.grid(alpha=0.22)
         axis.legend(frameon=False, fontsize=8)
     for axis in axes_flat[len(observable_keys) :]:
@@ -327,7 +357,9 @@ def _plot_sidecar(
 
 def main() -> None:
     args = parse_args()
-    meta = json.loads(args.standard_bundle_meta.expanduser().resolve().read_text())
+    meta = apply_observable_plot_metadata_overrides(
+        json.loads(args.standard_bundle_meta.expanduser().resolve().read_text())
+    )
     standard_predictions = _read_standard_predictions(args.standard_predictions.expanduser().resolve())
     sidecar_predictions = _read_sidecar_predictions(args.sidecar_predictions.expanduser().resolve())
     run_summary = json.loads(args.run_summary.expanduser().resolve().read_text())
