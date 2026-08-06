@@ -16,6 +16,10 @@ import numpy as np
 import pandas as pd
 import h5py
 
+from galacticus_emu.observable_plot_metadata import (
+    apply_observable_plot_metadata_overrides,
+    standard_observable_y_display_offset,
+)
 from galacticus_emu.plotting import set_ylim_from_values
 from plot_observable_mcmc_overlay_getdist import _style_for_case
 
@@ -69,7 +73,7 @@ def _read_bundle_meta(path: Path) -> dict:
             errors.append(f"{candidate_path}: does not exist")
             continue
         try:
-            return json.loads(candidate_path.read_text())
+            return apply_observable_plot_metadata_overrides(json.loads(candidate_path.read_text()))
         except UnicodeDecodeError as error:
             errors.append(
                 f"{candidate_path}: is not a UTF-8 JSON file; if this is a .joblib bundle, "
@@ -169,6 +173,7 @@ def _read_galacticus_predictions(
     combined: pd.DataFrame,
     *,
     min_log10_y: float,
+    apply_display_offsets: bool = False,
 ) -> dict[str, pd.DataFrame]:
     predictions = {}
     with h5py.File(hdf5_path, "r") as handle:
@@ -187,6 +192,8 @@ def _read_galacticus_predictions(
                 is_log=bool(attrs.get("yAxisIsLog", False)),
                 min_log10_y=min_log10_y,
             )
+            if apply_display_offsets:
+                y_actual = y_actual + standard_observable_y_display_offset(observable_key)
             rows = combined.loc[combined["observable_key"] == observable_key].copy().sort_values("x_plot")
             x_reference = rows["x_plot"].to_numpy(dtype=float)
             predictions[observable_key] = pd.DataFrame(
@@ -243,6 +250,7 @@ def main() -> None:
             observable_keys,
             combined,
             min_log10_y=args.galacticus_min_log10_y,
+            apply_display_offsets=True,
         )
     ncols = max(1, int(args.ncols))
     nrows = int(np.ceil(len(observable_keys) / ncols))
