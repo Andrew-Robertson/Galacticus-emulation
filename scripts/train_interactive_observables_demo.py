@@ -24,7 +24,7 @@ from galacticus_emu.interactive_observables import (
 
 
 DEFAULT_CAMPAIGN_ROOT = REPO_ROOT / "runs" / "campaigns" / "sobol_mass_function_emissionlines_dust_19p_512_reduced"
-DEFAULT_OUTPUT_PATH = REPO_ROOT / "playing" / "interactive_observables_demo" / "observables_demo_bundle.joblib"
+DEFAULT_OUTPUT_PATH = REPO_ROOT / "demo_emulators" / "interactive_observables_demo" / "observables_demo_bundle.joblib"
 
 
 def parse_args() -> argparse.Namespace:

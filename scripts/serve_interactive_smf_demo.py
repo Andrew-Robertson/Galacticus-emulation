@@ -13,7 +13,7 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from galacticus_emu.interactive_smf import bundle_meta, load_smf_bundle, predict_smf_bundle
 
-DEFAULT_BUNDLE_PATH = REPO_ROOT / "playing" / "interactive_smf_demo" / "smf_demo_bundle.joblib"
+DEFAULT_BUNDLE_PATH = REPO_ROOT / "demo_emulators" / "interactive_smf_demo" / "smf_demo_bundle.joblib"
 DEFAULT_HTML_PATH = REPO_ROOT / "assets" / "interactive_smf_demo" / "index.html"
 
 

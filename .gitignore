@@ -11,6 +11,9 @@ venv/
 # Local config
 config/paths.toml
 
+# Local scratch outputs
+playing/
+
 # External repositories used during development
 Galacticus-dust-modelling/
 Galacticus-ParameterFiles/
@@ -25,6 +28,21 @@ runs/*
 build/
 dist/
 *.egg-info/
+
+# LaTeX build products
+paper/*.aux
+paper/*.bbl
+paper/*.bcf
+paper/*.blg
+paper/*.fdb_latexmk
+paper/*.fls
+paper/*.log
+paper/*.out
+paper/*.run.xml
+paper/*.synctex.gz
+paper/*.toc
+paper/*.xdv
+paper/_minted-*/
 
 # macOS
 .DS_Store

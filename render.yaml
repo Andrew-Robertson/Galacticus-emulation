@@ -9,4 +9,4 @@ services:
       - key: PYTHON_VERSION
         value: 3.11.9
       - key: INTERACTIVE_SMF_BUNDLE_PATH
-        value: /opt/render/project/src/playing/interactive_smf_demo/smf_demo_bundle.joblib
+        value: /opt/render/project/src/demo_emulators/interactive_smf_demo/smf_demo_bundle.joblib

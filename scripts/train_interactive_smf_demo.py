@@ -13,7 +13,7 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 from galacticus_emu.interactive_smf import DEFAULT_ANALYSIS, bundle_meta, train_smf_bundle
 
 DEFAULT_CAMPAIGN_ROOT = REPO_ROOT / "runs" / "campaigns" / "disk_feedback_velocity_1d_mass_function_emissionlines_dust-mMax1e14_32_hpc_reduced"
-DEFAULT_OUTPUT_PATH = REPO_ROOT / "playing" / "interactive_smf_demo" / "smf_demo_bundle.joblib"
+DEFAULT_OUTPUT_PATH = REPO_ROOT / "demo_emulators" / "interactive_smf_demo" / "smf_demo_bundle.joblib"
 
 
 def parse_args() -> argparse.Namespace:
