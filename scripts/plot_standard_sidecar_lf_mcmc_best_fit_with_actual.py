@@ -21,7 +21,6 @@ from galacticus_emu.observable_plot_metadata import (
     sidecar_lf_axis_label,
     sidecar_lf_target_label,
     sidecar_lf_y_axis_label,
-    standard_observable_y_display_offset,
 )
 from galacticus_emu.plotting import set_ylim_from_values
 from plot_interactive_observables_mcmc_best_fit_overlay import (
@@ -241,11 +240,10 @@ def _plot_standard(
     axes_flat = np.atleast_1d(axes).ravel()
     for axis, observable_key in zip(axes_flat, observable_keys, strict=False):
         rows = predictions[predictions["observable_key"] == observable_key].copy().sort_values("x_plot")
-        y_offset = standard_observable_y_display_offset(observable_key)
         x = rows["x_plot"].to_numpy(dtype=float)
-        target = rows["target_plot"].to_numpy(dtype=float) + y_offset
+        target = rows["target_plot"].to_numpy(dtype=float)
         target_sigma = rows["target_sigma_plot"].to_numpy(dtype=float)
-        pred = rows["prediction_plot"].to_numpy(dtype=float) + y_offset
+        pred = rows["prediction_plot"].to_numpy(dtype=float)
         pred_sigma = rows["prediction_sigma_plot"].to_numpy(dtype=float)
         metadata = _axis_metadata(meta, observable_key)
         axis.errorbar(
@@ -265,7 +263,7 @@ def _plot_standard(
                 continue
             actual = actual_predictions[observable_key].sort_values("x_plot")
             actual_x = actual["x_plot"].to_numpy(dtype=float)
-            actual_y = actual["prediction_plot"].to_numpy(dtype=float) + y_offset
+            actual_y = actual["prediction_plot"].to_numpy(dtype=float)
             finite = np.isfinite(actual_x) & np.isfinite(actual_y)
             actual_values.append(actual_y)
             axis.plot(
@@ -372,6 +370,7 @@ def main() -> None:
         standard_keys,
         standard_predictions,
         min_log10_y=args.min_log10_lf,
+        apply_display_offsets=True,
     )
     standard_overlays = [(args.actual_label, actual_standard, "--", "black", 2.0, 1.0, 6)]
     for extra in args.extra_actual_hdf5:
@@ -382,6 +381,7 @@ def main() -> None:
             standard_keys,
             standard_predictions,
             min_log10_y=args.min_log10_lf,
+            apply_display_offsets=True,
         )
         standard_overlays.append((label, extra_standard, ":", "black", 2.0, 1.0, 6))
 
@@ -397,6 +397,7 @@ def main() -> None:
                 standard_keys,
                 standard_predictions,
                 min_log10_y=args.min_log10_lf,
+                apply_display_offsets=True,
             )
             standard_overlays.append((first_label, draw_standard, "-", "0.35", 0.8, 0.28, 2))
             first_label = None
