@@ -1,0 +1,646 @@
+\documentclass[twocolumn, apj, numberedappendix, iop]{openjournal}
+%% [twocolumn] - two-column mode
+%% [onecolumn] - main text in one-column mode
+%% [apj] - typeset in the style of ApJ.
+%% [numberedappendix] - number appendix sections as A, B, etc.
+%% [iop] - avoids small-caps issues in some table captions.
+
+\usepackage{natbib}
+\usepackage{graphicx,amsmath,amssymb,amstext}
+\usepackage{amsbsy,amsfonts,amsthm,color}
+\usepackage[colorlinks,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+\usepackage[utf8]{inputenc}
+\usepackage{float}
+\usepackage{orcidlink}
+\usepackage{booktabs}
+\usepackage{xspace}
+\usepackage{xcolor}
+
+\definecolor{darkgreen}{rgb}{0.0,0.45,0.0}
+
+\newcommand{\galacticus}{\textsc{Galacticus}\xspace}
+\newcommand{\romanspace}{\textit{Roman}\xspace}
+\newcommand{\ha}{H$\alpha$}
+\newcommand{\oii}{[O\,{\sc ii}]}
+\newcommand{\oiii}{[O\,{\sc iii}]}
+\newcommand{\vect}[1]{\boldsymbol{#1}}
+\def\kpc{\mathrm{\, kpc}}
+\def\mpc{\mathrm{\, Mpc}}
+\def\msun{\mathrm{\, M_\odot}}
+\def\kms{\mathrm{\, km \, s^{-1}}}
+\def\gyr{ \, \mathrm{Gyr}}
+\def\myr{ \, \mathrm{Myr}}
+
+\newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
+\newcommand{\note}[1]{\textcolor{blue}{[NOTE: #1]}}
+
+\begin{document}
+
+\title{A Calibrated \galacticus{} Galaxy Population Model for Roman Grism Survey Simulations\vspace{-4ex}}
+
+\author{Andrew Robertson$^{*}$\orcidlink{0000-0002-0086-0524}}
+\author{Andrew Benson\orcidlink{0000-0001-5501-6008}}
+\email{$^*$email: arobertson@carnegiescience.edu}
+\affiliation{The Observatories of the Carnegie Institution for Science, 813 Santa Barbara Street, Pasadena, 91101, CA, USA}
+
+\begin{abstract}
+Forward modelling the \romanspace{} Grism Survey requires mock galaxy catalogues that are simultaneously realistic in stellar mass, star formation, size, metallicity, black-hole demographics, and emission-line luminosity.
+We present a calibrated \galacticus{} semi-analytic model designed for this purpose.
+Because direct likelihood exploration with \galacticus{} is computationally expensive, we construct Gaussian-process emulators of binned observable predictions from a Sobol training campaign, compressing each observable with principal-component analysis where appropriate.
+We validate the emulators using held-out \galacticus{} runs, calibrate the model to a suite of standard low- and intermediate-redshift galaxy observables, and then extend the calibration to include observed \ha{} luminosity functions.
+The final calibrated model reproduces the calibration data at the level required for Roman mock-catalogue generation, and we use the posterior to predict Roman-relevant tracer number densities and clustering bias.
+\todo{Rewrite abstract once final claims and Roman quantities are fixed.}
+\end{abstract}
+
+\keywords{}
+
+\maketitle
+
+\section{Introduction}
+
+The Nancy Grace Roman Space Telescope will carry out a wide-field near-infrared grism survey over cosmological volumes, providing galaxy redshifts for large-scale structure measurements and a large sample of emission-line galaxies for studies of galaxy evolution \citep{2015arXiv150303757S, 2022ApJ...928....1W}.
+These measurements will extend galaxy redshift surveys to large samples at redshifts where the expansion history and growth of structure are less tightly constrained by existing galaxy surveys.
+This is especially timely given recent DESI baryon-acoustic-oscillation (BAO) measurements.
+DESI first-year BAO data are consistent with $\Lambda$CDM on their own, but when combined with CMB and Type Ia supernova data they show a mild preference for time evolution of the dark energy equation of state \citep{2025JCAP...02..021D}.
+This is not yet conclusive evidence for evolving dark energy, but it does sharpen the case for independent measurements of the distance--redshift relation and growth history.
+Roman is valuable in this context because it will probe these quantities at high redshift, with a different instrument, galaxy selection, and set of observational systematics from existing ground-based spectroscopic surveys.
+
+Roman will obtain these redshifts in a very different way from a targeted spectroscopic survey such as DESI \citep{2016arXiv161100036D}.
+In DESI, robotic fibre positioners place fibre-optic cables on pre-selected galaxies and quasars, so that the spectrograph receives light only from those chosen locations on the sky.
+The Roman grism survey will instead be \emph{slitless}: it will disperse the light from the full field of view, and will therefore obtain spectra for essentially every source that is bright enough to contribute detectable flux.
+This is a powerful feature of the survey, because it avoids a hard preselection of targets and can in principle provide spectra for all sufficiently bright sources in the field.
+It also makes the data more complicated to interpret.
+Because the spectra are dispersed images of the galaxies, spatial and spectral information are mixed together, spectra from neighbouring objects can overlap, and the detectability of an emission line depends not only on its total flux but also on the size and morphology of the galaxy.
+
+The redshifts used for the Roman grism survey will be obtained primarily from strong rest-frame optical emission lines, especially \ha{} and \oiii, with \oii{} also relevant at higher redshift.
+For Roman mock catalogues, the line luminosities must be connected to the underlying galaxy population: stellar masses, star formation rates, gas metallicities, dust attenuation, galaxy sizes, and host halo environments.
+These correlations matter both for cosmological analyses, where the number density and bias of selected tracers are important, and for image-level simulations, where source sizes, line fluxes, continuum emission, and blending determine whether a redshift can be recovered.
+
+There are several possible ways to build such mocks.
+Empirical models such as the \textsc{UniverseMachine} \citep{2019MNRAS.488.3143B} provide a powerful way to connect galaxies to dark matter halos, and newer empirical frameworks such as \textsc{diffsky} extend this approach to star-formation histories and spectral-energy-distribution modelling.
+These models are extremely useful, but they are designed to be flexible descriptions of the galaxy--halo connection rather than direct calculations of the baryonic processes that regulate galaxy formation.
+Semi-analytic models offer a complementary route.
+In a semi-analytic model, galaxies are evolved along dark matter halo merger trees using approximate, physically motivated prescriptions for baryonic processes \citep[e.g.][]{2006RPPh...69.3101B, 2015ARA&A..53...51S}.
+These models are far less expensive than hydrodynamical simulations, but still encode explicit calculations for gas cooling, star formation, feedback, metal enrichment, galaxy sizes, black-hole growth, and nebular emission.
+For Roman mock catalogues, this is attractive because the same model can be asked to predict many correlated properties of each galaxy.
+
+In this paper we calibrate a \galacticus{} galaxy-formation model intended both for Roman grism mock generation and for broader applications requiring physically motivated, self-consistent galaxy catalogues.
+We make use of a broad set of calibration data because they constrain different aspects of the galaxy formation model. We focus on low and intermediate-redshift calibration data, because these measurements are typically better understood than the corresponding high-redshift constraints.
+At the same time, we include \ha{} luminosity functions at higher redshift, because emission-line galaxies are central to the Roman grism survey and because a model calibrated only to the lower-redshift galaxy population is not necessarily adequate for this application.
+
+\galacticus{} is much less expensive than a hydrodynamical simulation, but it is still too expensive to run directly inside an MCMC analysis.
+In \citet{2026OJAp....955306R}, we tried a different acceleration strategy: rather than evolving a large ensemble of merger trees, and the galaxies within them, for every likelihood evaluation, we calibrated \galacticus{} using small sets of galaxies at a few fixed halo masses.
+That approach is most natural for quantities for which there are observational estimates of the galaxy distribution at fixed halo mass, with stellar mass being the clearest example \citep[e.g. observationally-inferred stellar-to-halo mass relations from][]{2012ApJ...744..159L, 2019MNRAS.488.3143B}.
+The resulting calibration produced a good match to the observed stellar mass function.
+One might hope that matching stellar mass functions at several redshifts would also constrain the predicted star-formation rates to match observations, because the model must form the correct amount of stellar mass between those redshifts.
+In practice, this is not sufficient: the integrated amount of star formation can be approximately correct even if the instantaneous distribution of star-formation rates is not.
+The model in \citet{2026OJAp....955306R} therefore matched stellar mass functions more successfully than \ha{} luminosity functions.
+
+For the Roman grism survey this distinction matters, because the redshift sample is built from emission-line detections.
+Here we therefore use full \galacticus{} runs to compute the observables that enter the likelihood, including emission-line luminosity functions, but replace repeated direct model evaluations with an emulator.
+We construct this emulator from a finite training set of \galacticus{} runs, test its accuracy with held-out cross-validation runs, use it to sample the posterior distribution of the model parameters, and then check representative posterior models with direct \galacticus{} evaluations.
+
+The paper is organized as follows.
+Section~\ref{sec:model} describes the \galacticus{} model, the varied parameters, and the training campaign.
+Section~\ref{sec:emulator} describes the emulator construction and validation.
+Section~\ref{sec:standard-calibration} presents the calibration to standard galaxy-population observables.
+Section~\ref{sec:emission-lines} describes the emission-line and dust extension and the joint calibration including \ha{} luminosity functions.
+Section~\ref{sec:roman} presents Roman Grism Survey predictions from the calibrated model.
+Section~\ref{sec:discussion} discusses the interpretation and limitations of the calibration.
+We summarize in Section~\ref{sec:conclusions}.
+
+\section{Model and Training Campaign}
+\label{sec:model}
+
+\subsection{The \galacticus{} Model}
+
+We use \galacticus{}, a semi-analytic model of galaxy formation \citep{2012NewA...17..175B}.
+For a given dark matter halo accretion and merger history, encoded in the so-called \emph{merger tree} \citep{1993MNRAS.262..627L}, \galacticus{} follows the formation and evolution of the galaxies associated with each halo and subhalo.
+The calculation includes parameterised prescriptions for gas cooling, star formation, stellar feedback, AGN feedback, galaxy sizes, galaxy mergers, black-hole growth, and metal enrichment.
+
+The fixed modelling choices used here are mostly the same as in \citet{2026OJAp....955306R}. By fixed modelling choices, we mean choices such as the prescriptions for disk star formation, gas cooling, black hole accretion, and stellar and AGN feedback. Compared with \citet{2026OJAp....955306R}, we vary a substantially larger set of numerical parameters within this model, as described in Section~\ref{sec:varied-parameters}. We therefore focus here on the fixed modelling choices that differ from \citet{2026OJAp....955306R} and on the parameters varied during the calibration. The \galacticus{} code is open source, and the complete parameter files used in this work will be made publicly available alongside the paper.\footnote{\todo{Add repository/version and parameter-file URL or Zenodo DOI.}}
+
+
+
+The main fixed model choice that differs from \citet{2026OJAp....955306R} is the treatment of galaxy sizes.
+In that work, galaxy component sizes were computed using an iterative equilibrium calculation, in which the baryons contribute to the gravitational potential used to determine component radii.
+In the larger-volume runs needed here, this typically produced a small sub-population of galaxies with unrealistically small sizes, with scale lengths roughly 10--100 times smaller than typical galaxies of the same stellar mass.
+We therefore use a simpler size calculation, in which component radii are determined from their specific angular momentum in the dark matter halo potential, without allowing the baryons to modify that potential.\footnote{Specifically, \citet{2026OJAp....955306R} used
+\texttt{galacticStructureSolverEquilibrium},
+whereas here we use
+\texttt{galacticStructureSolverSimple};
+see the
+\href{https://galacticus.readthedocs.io/en/latest/physics/galacticStructureSolver.html\#galacticstructuresolverfixed}{Galacticus documentation}.}
+%The origin of the small-size tail is not yet fully understood, but one possibility is that the \emph{pseudo-angular-momentum} treatment used for spheroid sizes is being applied outside the regime where it is physically appropriate, given that these systems are not typically rotationally supported.
+
+\subsection{Merger Trees and Halo Sampling}
+\label{sec:tree-sampling}
+
+For the training runs, \galacticus{} is run on extended Press--Schechter merger trees.
+We evolve the trees down to $z=0$, where they contain 17,385 distinct host halos over the mass range $10^{11}<M_{\rm halo}/\msun<3\times10^{14}$.
+Their masses follow a Sheth--Tormen halo mass function \citep{1999MNRAS.308..119S}, with $a=0.791$, $p=0.218$, and normalisation $0.302$, the parameter values from \citet{2019MNRAS.485.5010B}.
+Each of these $z=0$ host halos contains a central galaxy and may also host satellite galaxies. The calculation follows the complete merger tree of each $z=0$ halo, including all progenitor branches.
+The abundance of host halos over this mass range corresponds to an effective comoving volume of $V_{\rm eff}\simeq 1.3\times10^6\,\mpc^3$, equivalent to a cubic box with side length $\simeq 109\,\mpc$.
+Because the calibrated model is intended to generate Roman mocks using the UNIT simulations \citep{2019MNRAS.487...48C}, we use a merger-tree mass resolution of $2\times10^{10}\,\msun$, similar to the minimum halo mass resolved in UNIT.
+For the same reason, the merger trees are rebinned onto the UNIT simulation output times, following the approach of \citet{2012MNRAS.419.3590B}.
+
+The use of extended Press--Schechter trees is mainly a practical choice.
+It gives direct control over both the number of simulated halos and their mass distribution, which is useful when the goal is to build smooth training data for mass functions, size relations, emission-line luminosity functions, and other binned summary statistics.
+In Section~\ref{sec:nbody-comparison} we include a comparison with a calculation based on merger trees extracted from the UNIT $N$-body simulation \citep{2019MNRAS.487...48C}, to assess the size of the effect for selected observables.
+\todo{Update this sentence once the final EPS-versus-UNIT comparison figure and observable set are fixed.}
+
+
+\subsection{Calibrated Galacticus Parameters}
+\label{sec:varied-parameters}
+
+Our aim is to calibrate a model suitable for mock-catalogue generation by matching several galaxy observables simultaneously. To achieve this, we calibrate a broad set of 20 \galacticus{} parameters. These parameters control gas cooling, star formation, stellar feedback, black-hole seeding, accretion and feedback, reincorporation of ejected gas, the major/minor merger classification and sizes of merger remnants, the movement of angular momentum during disk instabilities, and the stellar metal yield.
+
+This philosophy differs from the calibration strategy often adopted for cosmological hydrodynamical simulations such as EAGLE, IllustrisTNG, and COLIBRE \citep[e.g.][]{2015MNRAS.446..521S, 2018MNRAS.475..624N, 2026MNRAS.548ag375S}, where a relatively small set of observables is typically used for calibration, allowing other galaxy properties to provide a stringent test of the model. That is a valuable objective, but it is not the primary goal of this work. Instead, because our focus is on constructing realistic mock catalogues, we prioritise reproducing a broad range of observed galaxy properties as accurately as possible. The free parameters are listed in Table~\ref{tab:parameters}.
+
+\begin{table*}
+\centering
+\scriptsize
+\caption{
+Parameters varied in the emulator training campaign.
+Here \(\mathcal{LN}_{[a,b]}(x_0,\sigma_{\ln})\) denotes a log-normal prior truncated to \([a,b]\), with median \(x_0\) and logarithmic width \(\sigma_{\ln}\), while \(\mathcal{U}_{[a,b]}\) denotes a uniform prior.
+Units for dimensional parameters are shown in the parameter column, and priors are given for the numerical value in those units.
+}
+\label{tab:parameters}
+\begin{tabular}{@{}p{0.21\textwidth}p{0.52\textwidth}p{0.21\textwidth}@{}}
+\toprule
+Parameter & Description & Prior \\
+\midrule
+\noalign{\vskip 1.8\baselineskip}
+\multicolumn{3}{@{}l}{\normalfont Star formation and stellar populations} \\
+\(\nu_{\rm SF,d}/\mathrm{Gyr}^{-1}\) & Disk star-formation frequency normalization & \(\mathcal{LN}_{[0.1,10]}(1,2)\) \\
+\(\epsilon_{\star,{\rm sph}}\) & Spheroid star-formation efficiency per dynamical time & \(\mathcal{LN}_{[10^{-4},1]}(0.01,4)\) \\
+\(y_Z\) & Stellar metal yield & \(\mathcal{LN}_{[0.01,0.04]}(0.02,0.5)\) \\[0.8\baselineskip]
+\multicolumn{3}{@{}l}{\normalfont Stellar feedback} \\
+\(V_{\rm out,d}/\mathrm{km\,s^{-1}}\) & Disk stellar-feedback velocity scale & \(\mathcal{LN}_{[25,300]}(150,0.5)\) \\
+\(\alpha_{\rm out,d}\) & Disk stellar-feedback velocity exponent & \(\mathcal{U}_{[0,4]}\) \\
+\(V_{\rm out,sph}/\mathrm{km\,s^{-1}}\) & Spheroid stellar-feedback velocity scale & \(\mathcal{LN}_{[10,150]}(50,1)\) \\[0.8\baselineskip]
+\multicolumn{3}{@{}l}{\normalfont Gas cooling and recycling} \\
+\(f_{\rm cool}\) & Gas cooling-rate multiplier & \(\mathcal{LN}_{[0.05,1.2]}(0.5,1)\) \\
+\(r_{\rm core}/R_{\rm vir}\) & Hot-gas core radius in units of virial radius & \(\mathcal{LN}_{[0.03,1]}(0.3,1)\) \\
+\(\gamma_{\rm reinc}\) & Ejected-gas reincorporation normalization & \(\mathcal{LN}_{[1,25]}(5,0.5)\) \\
+\(\delta_{\rm reinc,1}\) & Redshift exponent in the Henriques reincorporation model & \(\mathcal{U}_{[-2,4]}\) \\
+\(\delta_{\rm reinc,2}\) & Virial-velocity exponent in the Henriques reincorporation model & \(\mathcal{U}_{[-1,5]}\) \\[0.8\baselineskip]
+\multicolumn{3}{@{}l}{\normalfont Mergers and disk instabilities} \\
+\(f_{\rm major}\) & Mass-ratio threshold for major mergers & \(\mathcal{LN}_{[0.1,0.5]}(0.25,0.5)\) \\
+\(f_{\rm orbit}\) & Orbital-energy factor for merger-remnant sizes & \(\mathcal{LN}_{[0.25,4]}(1,0.5)\) \\
+\(f_{j,{\rm sph}}^{\rm bar}\) & Angular-momentum fraction retained by the spheroid in bar instabilities & \(\mathcal{LN}_{[0.05,0.95]}(0.2,0.5)\) \\[0.8\baselineskip]
+\multicolumn{3}{@{}l}{\normalfont Supermassive black holes} \\
+\(M_{\rm BH,seed}/\mathrm{M_\odot}\) & Black-hole seed mass & \(\mathcal{LN}_{[100,100\,000]}(3000,4)\) \\
+\(\epsilon_{\rm BH,radio}\) & Radio-mode black-hole heating efficiency & \(\mathcal{LN}_{[0.03,1]}(0.3,0.5)\) \\
+\(\epsilon_{\rm BH,wind}\) & Black-hole wind feedback efficiency & \(\mathcal{LN}_{[0.00024,0.024]}(0.0024,1)\) \\
+\(\alpha_{\rm Bondi,sph}\) & Bondi accretion enhancement for spheroid gas & \(\mathcal{LN}_{[0.05,100]}(5,2)\) \\
+\(\alpha_{\rm Bondi,hot}\) & Bondi accretion enhancement for hot-halo gas & \(\mathcal{LN}_{[0.05,100]}(6,2)\) \\
+\(x_{\rm thin,max}\) & Upper transition value for $\dot{M}c^2/ L_{\rm Edd}$ for switched thin-disk/ADAF model & \(\mathcal{LN}_{[0.03,30]}(3,2)\) \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\subsection{Emulator Training Set}
+\label{sec:sobol-design}
+
+The emulator training set consists of $N_{\rm train}=1024$ \galacticus{} model evaluations, with parameter values drawn from a scrambled Sobol sequence \citep{1967USSR...7...86S, 1997AnSta..25.1541O}.\footnote{The design was generated with \texttt{scipy.stats.qmc.Sobol}, using \texttt{scramble=True}, \texttt{seed=42}, and \texttt{random\_base2(m=10)}.}
+Compared with random sampling, this provides a more uniform coverage of parameter space, reducing the likelihood of large unsampled regions and generally improving emulator accuracy for a fixed number of model evaluations.
+We generate Sobol points in the unit hypercube and transform each coordinate through the inverse cumulative distribution function of the corresponding parameter prior.
+As a result, the training density follows the prior density specified in Table~\ref{tab:parameters}, while retaining the space-filling properties of the Sobol design in prior-quantile space.
+The choice of 1024 training evaluations represents a compromise between reducing emulator error across the 20-dimensional parameter space and keeping the computational cost of the \galacticus{} runs manageable.
+In Section~\ref{sec:emulator-validation}, we quantify how emulator accuracy improves with training-set size by considering the first 64, 128, 256, 512, and 1024 points of the Sobol sequence. The first $2^m$ points of a Sobol sequence are themselves designed to provide good coverage of parameter space, making them a natural choice for this comparison.
+%\todo{Add typical wall time per run and total computing resources if useful.}
+
+\section{Observable Vector Emulation}
+\label{sec:emulator}
+
+\subsection{Observable Vectors}
+
+Each \galacticus{} evaluation produces a catalogue of galaxies at a set of output times.
+From these galaxies we can compute binned observable vectors, such as a stellar mass function or a size--mass relation.
+The emulator is trained to reproduce these vectors as a function of the varied \galacticus{} parameters.
+The particular observable vectors used for calibration are described in Sections~\ref{sec:standard-calibration} and \ref{sec:emission-lines}; in this section we use the low-redshift stellar mass function as a single concrete example, with the goal of providing intuition for the emulation process, as well as demonstrating how choices around the quantities we aim to emulate affect our emulator accuracy.
+
+For each model evaluation, \galacticus{} returns both an estimate of the predicted observable vector and an estimate of the uncertainty on that vector.
+This uncertainty arises because each observable is constructed from a finite simulated galaxy population, with the relevant uncertainty model depending on the observable being analysed.
+We use this information when training the emulator, so that noisier training outputs are treated as less precise estimates of the underlying model prediction.
+
+For observables whose native values are positive densities or relations plotted logarithmically, we transform the model and target values into log-space before emulation.
+For the stellar mass functions shown below, this means that the emulator is learning the logarithm of the number density in each stellar-mass bin.
+\todo{Make the treatment of non-positive values exact per observable using the metadata: nonpositive vs zero-only, bin-median vs keep, bad-training sigma, and minimum sigma.}
+
+\subsection{Principal-Component Compression}
+
+One possible approach would be to build a separate Gaussian process for every bin of every observable: for example, one emulator for the number density of galaxies at $M_\star\simeq10^{10}\msun$, another at $M_\star\simeq2\times10^{10}\msun$, and so on.
+This is straightforward, but it treats neighbouring bins as independent targets even though changes in \galacticus{} parameters usually move the predictions coherently across an observable.
+For example, a change in feedback strength may shift the amplitude, slope, or knee of a stellar mass function, rather than perturbing each stellar-mass bin independently.
+
+We therefore use principal-component analysis (PCA) to compress each observable vector before emulation.
+This reduces the number of Gaussian processes that must be trained and evaluated, and can also improve performance when the training set is sparse because the emulator is asked to learn the dominant coherent modes of variation rather than noise or poorly constrained bin-to-bin fluctuations.
+PCA--GP emulators are commonly used for expensive simulation outputs with many correlated bins, including recent applications to cosmological and galaxy-formation inference \citep[e.g.][]{2026arXiv260107306R}.
+For a given observable, let
+\begin{equation}
+  \mathbf{y}(\boldsymbol{\theta})
+  =
+  \left(y_1(\boldsymbol{\theta}), \ldots, y_{N_{\rm bin}}(\boldsymbol{\theta})\right)
+\end{equation}
+be the vector of model predictions in the bins used for that observable, after applying any pre-processing used for the emulator.
+For the low-redshift stellar mass function, for example, $y_b(\boldsymbol{\theta})=\log_{10}\Phi_b(\boldsymbol{\theta})$, where $\Phi_b$ is the predicted number density in the $b$th stellar-mass bin.
+For each \galacticus{} run in the training set we have one such vector, so the training data for this observable form an $N_{\rm train}\times N_{\rm bin}$ matrix.
+We standardise each bin using the training-set mean and scale, fit a PCA basis, and retain the number of components required to explain 99 per cent of the training-set variance.
+The emulator therefore predicts the PCA coefficients,
+\begin{equation}
+  \mathbf{y}(\boldsymbol{\theta}) \simeq
+  \boldsymbol{\mu}
+  + \mathbf{S}
+  \left[
+    \mathbf{m}_{\rm PCA}
+    + \sum_{k=1}^{K} a_k(\boldsymbol{\theta}) \mathbf{e}_k
+  \right],
+\end{equation}
+where $\boldsymbol{\mu}$ and $\mathbf{S}$ are the bin-wise standardisation vectors, $\mathbf{m}_{\rm PCA}$ is the PCA mean in standardised space, $\mathbf{e}_k$ are the retained PCA components, and $a_k$ are the PCA coefficients.
+\todo{Check notation against actual implementation: scikit-learn StandardScaler followed by PCA; inverse transform uses coefficient predictions times component matrix plus PCA mean, then undo standardisation.}
+
+For comparison and diagnostic plots, we also trained bin-by-bin Gaussian-process emulators.
+The main calibration results use PCA emulators with a 99 per cent variance threshold; the cross-validation tests below show why this is a reasonable choice.
+
+\subsection{Gaussian-Process Regression}
+\label{sec:gp-regression}
+
+Each retained PCA coefficient is modelled with a Gaussian process as a function of the input parameters.
+The same basic GP choices are used for the emulators compared below, so that the validation tests mainly probe the effects of training-set size and PCA compression.
+The GP inputs are not the physical parameter values themselves, but the corresponding prior quantiles.
+That is, for parameter $\theta_i$ with prior cumulative distribution function $P_i(<\theta_i)$, we train the emulator using
+\begin{equation}
+  u_i = P_i(<\theta_i),
+\end{equation}
+so that every training point lies in the unit hypercube defined by $0<u_i<1$.
+This is the space in which the Sobol design was constructed, and is therefore the space in which the training data are most nearly space filling.
+It also avoids asking the GP to learn across raw parameters with very different units, ranges, and prior shapes; a fixed distance in $u_i$ corresponds to the same amount of prior probability for each parameter.
+
+Before fitting each GP, the target coefficient is standardised by subtracting its training-set mean and dividing by its training-set standard deviation.
+The kernel specifies the covariance between the values of the function at two points in parameter space.
+We use a Mat\'ern kernel with $\nu=2.5$, multiplied by a constant amplitude, and allow a separate length scale for each input parameter.
+For two points in prior-quantile space, $\mathbf{u}$ and $\mathbf{u}'$, the kernel is
+\begin{equation}
+  k(\mathbf{u},\mathbf{u}')
+  =
+  A
+  \left(1+\sqrt{5}r+\frac{5r^2}{3}\right)
+  \exp\left(-\sqrt{5}r\right),
+\end{equation}
+where
+\begin{equation}
+  r^2 = \sum_i \left(\frac{u_i-u_i'}{\ell_i}\right)^2.
+\end{equation}
+Here $A$ is the covariance amplitude and $\ell_i$ is the length scale associated with the $i$th \galacticus{} parameter.
+Small values of $\ell_i$ allow the emulator prediction to vary rapidly as that parameter is changed, while large values correspond to a smoother, less sensitive dependence.
+For each PCA coefficient, the kernel hyperparameters are therefore the overall covariance amplitude and the 20 length scales describing how rapidly that coefficient changes as each \galacticus{} parameter is varied in prior-quantile space.
+We choose these hyperparameters by maximising the GP log marginal likelihood \citep{2006gpml.book.....R}.
+In practice this maximisation is carried out with the L-BFGS-B algorithm, subject to the bounds on the kernel amplitude and length scales.
+Because the log marginal likelihood can have multiple local optima, we repeat the optimisation from four additional starting points, randomly drawn within the allowed hyperparameter bounds, and keep the solution with the largest log marginal likelihood.
+\todo{Check whether any final runs use an added white-noise kernel; the current default does not.}
+
+Where available, we include the estimated uncertainty in the training outputs by adding a diagonal noise term to the GP covariance matrix \citep[e.g.][]{2006gpml.book.....R}.
+In the notation used by \texttt{scikit-learn}, this diagonal variance contribution is the \texttt{alpha} parameter; here we refer to its square root as the training-output uncertainty.
+These uncertainties are provided by the \galacticus{} output analyses for each binned observable, using the covariance model associated with that analysis.
+For example, the stellar mass function analysis uses a binomial covariance model rather than a simple Poisson error estimate.
+For a bin-by-bin emulator, if the transformed observable value in bin $b$ has training-output uncertainty $\sigma_b$, the corresponding variance $\sigma_b^2$ is passed directly to the GP for that bin.
+For the PCA emulator, we instead need an approximate variance for each PCA coefficient.
+
+Let $y_b$ be the transformed observable in bin $b$, and let the standardised observable be
+\begin{equation}
+  z_b = \frac{y_b-\mu_b}{s_b},
+\end{equation}
+where $\mu_b$ and $s_b$ are the mean and standard deviation used in the pre-processing step.
+If the variance of $y_b$ is $\sigma_b^2$, then the variance of $z_b$ is
+\begin{equation}
+  {\rm Var}(z_b) = \frac{\sigma_b^2}{s_b^2}.
+\end{equation}
+The PCA coefficient for component $k$ is
+\begin{equation}
+  a_k = \sum_b e_{kb}\,(z_b-\bar{z}_b),
+\end{equation}
+where $e_{kb}$ is the $b$th element of the $k$th PCA component.
+Neglecting covariance between bins in the training uncertainty, we assign this coefficient the variance
+\begin{equation}
+  {\rm Var}(a_k) \simeq \sum_b e_{kb}^2\,\frac{\sigma_b^2}{s_b^2}.
+\end{equation}
+This is the variance used as the diagonal noise term when fitting the GP for PCA coefficient $a_k$.
+
+The distinction between emulator uncertainty and model uncertainty is important for the calibration.
+A GP prediction has both a mean and a predictive variance.
+The predictive variance is small near well-measured, densely sampled regions of the training set, and grows where the training data are sparse, noisy, or require extrapolation.
+When this uncertainty is included in the likelihood, an imprecise emulator should therefore weaken the constraints on the \galacticus{} parameters rather than force the MCMC towards a spuriously precise answer.
+This is only true if the emulator uncertainty is reasonably calibrated, which is why the held-out validation tests in Section~\ref{sec:emulator-validation} are a necessary part of the inference rather than only a technical check.
+
+\subsection{Emulator Validation}
+\label{sec:emulator-validation}
+
+We validate the emulator using \emph{five-fold cross-validation}.
+The \galacticus{} training runs are divided into five equally sized subsets.
+For each fold, the emulator is trained on four subsets and evaluated on the remaining subset, so that every \galacticus{} evaluation is predicted once by an emulator that was not trained using that model.
+Unless otherwise stated, all validation results in this section are based on the combined predictions from these five folds.
+
+This has two purposes.
+First, it checks that the emulator can reproduce direct \galacticus{} calculations at new parameter values.
+Second, it lets us assess how choices made in constructing the emulator affect its predictive accuracy, including both the size of the training set and the representation of the observable vectors.
+Figure~\ref{fig:SMF-holdout-demo} illustrates this validation procedure for the low-redshift stellar mass function.
+The grey curves show the range of \galacticus{} predictions across the training set, while the coloured points show several validation models.
+The corresponding coloured curves show the emulator predictions for the same parameter values.
+
+To quantify this comparison, we consider individual bins of the observable vector.
+For a given bin, we compare the emulator prediction, $m_i$, with the direct \galacticus{} value, $g_i$, for each validation model $i$.
+The root-mean-square error,
+\begin{equation}
+  {\rm RMSE} = \left[\frac{1}{N_{\rm val}}\sum_i (m_i-g_i)^2\right]^{1/2},
+\end{equation}
+measures the typical vertical scatter about the one-to-one relation between emulator and direct \galacticus{} predictions.
+We also use the coefficient of determination,
+\begin{equation}
+  R^2 = 1 - \frac{\sum_i (m_i-g_i)^2}{\sum_i (g_i-\bar{g})^2},
+\end{equation}
+where $\bar{g}$ is the mean direct \galacticus{} value over all validation models.
+This compares the emulator error with the intrinsic variation of the \galacticus{} predictions in that bin: $R^2=1$ corresponds to perfect predictions, while $R^2=0$ corresponds to doing no better than predicting the mean \galacticus{} value for all parameter choices.
+For the stellar mass functions shown below, both $m_i$ and $g_i$ are values of $\log_{10}\Phi$ in a fixed stellar-mass bin, so the RMSE is measured in dex.
+
+Figure~\ref{fig:example_predicted_vs_heldout} shows this bin-level comparison for three representative stellar-mass bins from Figure~\ref{fig:SMF-holdout-demo}.
+The plotted points should lie close to the one-to-one line if the emulator is accurate.
+The RMSE values measure the absolute scatter about this line, while the $R^2$ values measure how small that scatter is relative to the variation in the direct \galacticus{} predictions.
+
+Figure~\ref{fig:training_size} shows how these diagnostics depend on training-set size and emulator construction for several representative stellar-mass bins.
+We compare emulators trained on the first 64, 128, 256, 512, and 1024 points of the Sobol sequence.
+Because the first $2^m$ points of a Sobol sequence are themselves designed to provide good coverage of parameter space, these subsets provide a natural sequence of training sets for assessing the effect of increasing the training-set size.
+Emulator accuracy improves substantially as the training set grows from 64 to 1024 models, although the rate of improvement decreases for the larger training sets.
+This suggests that substantially reducing the remaining emulator error would require a much denser sampling of the 20-dimensional parameter space, with a correspondingly much larger training campaign.
+We therefore adopt the 1024-run training set as a practical compromise between emulator accuracy and computational cost.
+
+Figure~\ref{fig:training_size} also compares different levels of PCA compression.
+We retain 99 per cent of the PCA variance in the fiducial emulator, which keeps the number of GP models manageable while preserving the coherent response of neighbouring bins.
+The same broad behaviour is seen in held-out tests of the other standard observables, although the absolute emulator accuracy varies between observables and bins.
+
+
+\begin{figure*}
+\centering
+\includegraphics[width=0.85\textwidth]{/Users/arobertson/Documents/Projects/GalacticusEmu/Galacticus-emulation/runs/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced/cross_validation/pca_threshold_smf_z0_kfold5_64_to_1024/figures/smf_z0_pca99_holdout_curves_highlight_bins.pdf}
+\caption{
+Example of held-out validation for the low-$z$ stellar mass function.
+Thin grey curves show the range of \galacticus{} predictions across the training set.
+Black points show the observed stellar mass function from \citet{2014ApJ...783...85T}.
+Coloured points show direct \galacticus{} predictions for example held-out parameter choices.
+The corresponding coloured curves show emulator predictions for the same parameter choices, where in each case the emulator was trained without using the corresponding \galacticus{} evaluation.
+The shaded regions show the emulator uncertainty.
+The five example held-out models are selected only for visualisation: for each held-out model we compute the mean direct value of $\log_{10}\Phi$ across the plotted stellar-mass bins, rank the held-out models by this quantity, and choose examples at approximately evenly spaced quantiles of the ranking.
+The validation metrics use the full held-out sample.
+Vertical dotted lines mark the stellar-mass bins used for the bin-level validation metrics in Figures~\ref{fig:example_predicted_vs_heldout} and \ref{fig:training_size}.
+}
+\label{fig:SMF-holdout-demo}
+\end{figure*}
+
+\begin{figure*}
+\centering
+\includegraphics[width=0.85\textwidth]{/Users/arobertson/Documents/Projects/GalacticusEmu/Galacticus-emulation/runs/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced/cross_validation/pca_threshold_smf_z0_kfold5_64_to_1024/figures/smf_z0_pca99_parity_highlight_bins_random_quarter.pdf}
+\caption{
+Predicted versus held-out values of the low-$z$ stellar mass function at the three stellar-mass bins highlighted in Figure~\ref{fig:SMF-holdout-demo}.
+The $x$-axis values are the direct \galacticus{} predictions, while the $y$-axis shows the emulator predictions (with their uncertainty) at the same parameter values. The dashed lines show equality.
+The RMSE and $R^2$ values quoted in each panel summarise the accuracy of these held-out predictions, using the definitions given in Section~\ref{sec:emulator-validation}.
+For clarity, the figure shows a random 25 per cent of the held-out comparisons.
+}
+\label{fig:example_predicted_vs_heldout}
+\end{figure*}
+
+\begin{figure*}
+\centering
+\includegraphics[width=0.85\textwidth]{/Users/arobertson/Documents/Projects/GalacticusEmu/Galacticus-emulation/runs/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced/cross_validation/pca_threshold_smf_z0_kfold5_64_to_1024/figures/smf_z0_pca_threshold_rmse_r2_vs_training_size.pdf}
+\caption{
+Held-out emulator accuracy for the $z\simeq0$ stellar mass function as a function of the number of \galacticus{} training runs.
+The top row shows the coefficient of determination, $R^2$, and the bottom row shows the root-mean-square error in $\log_{10}\Phi$.
+The columns correspond to the representative stellar-mass bins highlighted in Figure~\ref{fig:SMF-holdout-demo}.
+Different curves compare PCA-GP emulators with different PCA variance thresholds to a bin-by-bin GP emulator.
+The improvement from smaller training subsets to the full 1024-run training set motivates the larger final campaign used for the paper calibration, while the similarity of the PCA-GP variants supports the 99 per cent PCA variance threshold used in the fiducial emulator.
+}
+\label{fig:training_size}
+\end{figure*}
+
+\section{Calibration to Standard Galaxy Observables}
+\label{sec:standard-calibration}
+
+The standard-observable calibration uses stellar mass functions, the local star-formation-rate function, star-forming and quiescent size--mass relations, the black-hole--halo-mass relation, and the gas-phase mass--metallicity relation.
+The final standard-observable set used in the combined standard calibration is:
+\begin{itemize}
+\item stellar mass functions from ZFOURGE/CANDELS \citep{2014ApJ...783...85T},
+\item the star-formation-rate function from \todo{Robotham et al. citation},
+\item the star-forming and quiescent size--mass relations from \citet{2014ApJ...788...28V},
+\item the black-hole--halo-mass relation derived from \todo{Trinity/UniverseMachine citation and exact redshift}, restricted to $12 < \log_{10}(M_{\rm halo}/M_\odot) < 13.8$,
+\item the gas-phase mass--metallicity relation from \todo{Blanc et al. citation}.
+\end{itemize}
+\todo{Add exact redshift ranges for each observable. Confirm whether the training bundle also includes Li \& White and BH--velocity-dispersion observables that are not used in the final combined likelihood.}
+
+\subsection{Likelihood}
+
+We sample the posterior distribution of the varied \galacticus{} parameters using the emulator predictions in place of direct \galacticus{} evaluations.
+For an observable block $j$ with data vector $\mathbf{d}_j$, emulator prediction $\mathbf{m}_j(\boldsymbol{\theta})$, and covariance matrix $\mathbf{C}_j$, the likelihood contribution is
+\begin{equation}
+  -2\ln \mathcal{L}_j =
+  \left[\mathbf{d}_j-\mathbf{m}_j(\boldsymbol{\theta})\right]^T
+  \mathbf{C}_j^{-1}
+  \left[\mathbf{d}_j-\mathbf{m}_j(\boldsymbol{\theta})\right]
+  + \ln |\mathbf{C}_j| + {\rm const.}
+\end{equation}
+The covariance includes the observational covariance where available.
+In runs that include emulator variance, the GP predictive variance is added to the covariance in observable space.
+This means that the MCMC is not only fitting the emulator mean prediction.
+It is also informed by where the emulator is uncertain, so regions of parameter space with poorly constrained predictions contribute less sharply to the likelihood.
+\todo{Confirm exact covariance treatment in each MCMC script: diagonal vs full covariance, target covariance, emulator variance default for standard-only versus LF/common runs.}
+
+The standard-observable MCMC uses 128 walkers.
+For individual observable subsets we run 10,000 steps, discard the first 2,000 as burn-in, and thin by a factor of 10.
+For the combined standard-observable calibration we run 50,000 steps, discard the first 10,000 steps, and thin by a factor of 10.
+\todo{State whether default emcee StretchMove or transformed-parameter/DE mixture was used in the final production run.}
+
+\subsection{Single-Observable and Joint Constraints}
+
+\begin{figure*}
+\centering
+\includegraphics[width=\textwidth,trim={0 1cm 0 0},clip]{/Users/arobertson/Documents/Projects/GalacticusEmu/Galacticus-emulation/runs/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced/automatedPipeline_transformedParams_finalPaper_definitive/MCMCs_production_from_exploratory_MAP/standard_observables/smf_sfrf_sizes/figures/smf_sfrf_sizes_corner_observable_composite.pdf}
+\caption{
+An example of combining multiple observables to break degeneracies in the emulator calibration. Left: posterior constraints on a subset of six model parameters from fits to the stellar mass functions alone, the star formation rate function alone, galaxy sizes alone, and their combination. The grey dashed curves in the 1D marginal panels show the adopted priors. Right: shaded regions show the central 68 per cent intervals of the emulator-predicted mean relations obtained by drawing parameters from each posterior, compared with the observational data. These bands reflect posterior uncertainty in the calibrated model parameters, and do not include observational noise or emulator uncertainty. Faint grey curves show the predictions from the 1024 training runs, illustrating the range spanned by the prior over model parameters. The combined calibration retains good agreement with all fitted observables while reducing the parameter degeneracies present in the single-observable fits.
+}
+\label{fig:combining_constraints}
+\end{figure*}
+
+We first calibrate to individual observable groups to understand which physical parameters are constrained by which data.
+We then calibrate to all standard observables jointly.
+Comparing the single-observable posteriors to the joint posterior shows where the observables prefer consistent regions of parameter space and where the joint model must compromise.
+
+\begin{figure*}
+\centering
+% \includegraphics[width=\textwidth]{figures/fig_standard_corner.pdf}
+\caption{
+Posterior constraints from individual standard-observable calibrations and the joint standard-observable calibration.
+\todo{Use polished version of standard-observables GetDist overlay. Consider putting full 20-parameter version in appendix and a reduced set in the main text.}
+}
+\label{fig:standard-corner}
+\end{figure*}
+
+\subsection{Posterior Predictive Fits}
+
+Figure~\ref{fig:standard-predictive} compares the posterior predictive model to the standard calibration observables.
+The figure should show both the standard-only calibration and the later standard-plus-\ha{} calibration, so that the reader can see whether adding emission-line luminosity functions degrades the fit to the standard galaxy-population data.
+We also compare the emulator prediction at the maximum-a-posteriori point to a direct \galacticus{} run at the same parameter values.
+
+\begin{figure*}
+\centering
+% \includegraphics[width=\textwidth]{figures/fig_standard_posterior_predictive.pdf}
+\caption{
+Posterior predictive comparison for the standard observables.
+\todo{Desired styling: data points; standard-only emulator MAP or posterior band; standard+H-alpha emulator MAP or posterior band; direct Galacticus MAP validation for the final model.}
+}
+\label{fig:standard-predictive}
+\end{figure*}
+
+\section{Emission Lines, Dust, and Joint Calibration}
+\label{sec:emission-lines}
+
+\subsection{Emission-Line and Dust Model}
+
+To connect the calibrated galaxy population to Roman grism observables, we augment the standard \galacticus{} outputs with emission-line luminosities and dust attenuation.
+The training campaign runs sidecar post-processing for emission-line luminosity functions using the \texttt{emission\_line\_dust} products.
+The current \ha{} calibration uses the Sobral \ha{} luminosity functions in four redshift samples, labeled Z1--Z4 in the pipeline.
+\todo{Describe exactly how intrinsic line luminosities are computed, how dust is applied, and which dust parameters are varied. Add relation to Galacticus-dust-modelling package if appropriate.}
+
+\subsection{\ha{} Luminosity-Function Emulator}
+
+The \ha{} luminosity-function emulator is trained from the sidecar emission-line-dust table.
+For the fiducial configuration, we use the first dust draw, train on the four Sobral redshift samples, retain PCA components explaining 99 per cent of the variance, use GP training uncertainties, and optimise GP hyperparameters as described in Section~\ref{sec:emulator}.
+\todo{Confirm final dust-draw choice and the exact sidecar training-row accounting.}
+
+\subsection{Joint Standard-plus-\ha{} Calibration}
+
+We then sample the posterior using both the standard-observable emulator and the \ha{} luminosity-function emulator.
+The joint calibration uses the same standard-observable set as Section~\ref{sec:standard-calibration} and adds the Sobral \ha{} luminosity functions.
+The final emulators are trained on the 1024-run Sobol campaign described in Section~\ref{sec:sobol-design}; no posterior-focused \galacticus{} evaluations are added to the training set.
+For the production inference we use a two-stage MCMC procedure.
+An exploratory run first identifies the dominant high-posterior region, and the production chain is then initialised around the maximum-posterior sample found in that exploration.
+This avoids spending a large fraction of the production run with walkers trapped in secondary, much lower-posterior regions that mix only slowly with the main mode.
+The production MCMC uses 128 walkers and includes emulator variance in the likelihood.
+\todo{Confirm final production step count, burn-in, thinning, and transformed-parameter move mixture for the combined standard-plus-\ha{} chain.}
+
+\begin{figure*}
+\centering
+% \includegraphics[width=\textwidth]{figures/fig_halpha_predictive.pdf}
+\caption{
+\ha{} luminosity-function comparison for the final joint calibration.
+\todo{Use final MAP/predictive plot with emulator uncertainty and direct Galacticus MAP validation. Consider adding standard-only prediction if available.}
+}
+\label{fig:halpha-predictive}
+\end{figure*}
+
+\begin{figure*}
+\centering
+% \includegraphics[width=\textwidth]{figures/fig_final_calibrated_model.pdf}
+\caption{
+Summary of the final calibrated model across standard observables and \ha{} luminosity functions.
+\todo{This may be redundant with Figures~\ref{fig:standard-predictive} and \ref{fig:halpha-predictive}; decide once figure drafts exist.}
+}
+\label{fig:final-summary}
+\end{figure*}
+
+
+\section{Discussion}
+\label{sec:discussion}
+
+\subsection{What the Calibration Establishes}
+
+The calibration demonstrates that a single \galacticus{} parameter set can reproduce a broad set of standard galaxy-population observables while also matching the observed \ha{} luminosity functions used to anchor Roman grism mocks.
+The direct \galacticus{} validation runs are important because they test the full model at the inferred parameter values rather than only the emulator.
+
+\subsection{Comparison with $N$-body Merger Trees}
+\label{sec:nbody-comparison}
+
+The calibration runs use extended Press--Schechter trees because they allow controlled, repeatable sampling of the halo mass function.
+This choice is not meant to imply that EPS trees capture every aspect of halo assembly in an $N$-body simulation.
+\todo{Add comparison between the fiducial EPS-tree calculation and an otherwise similar calculation using $N$-body merger trees. The useful figure is probably not a parameter-inference figure, but a direct observable comparison showing whether the EPS choice changes the calibrated observables at a level that matters for this paper.}
+
+\subsection{Limitations}
+
+Several limitations should be kept explicit.
+First, the emission-line luminosity functions used here are part of the calibration data, so Roman number-density predictions are not independent tests of the \ha{} luminosity function.
+Second, the emulator is trained over a finite parameter volume, and posterior inferences near prior boundaries or poorly sampled regions should be treated cautiously.
+Third, the likelihood assumes a particular treatment of observational covariance, emulator uncertainty, and possible systematics between heterogeneous datasets.
+Fourth, the final mock catalogues will depend not only on the calibrated \galacticus{} model but also on lightcone construction, survey selection, spectral contamination, detector effects, and image simulation.
+
+\subsection{Future Work}
+
+The next step is to populate a $4\times4\,{\rm deg}^2$ lightcone with mock galaxies drawn from the calibrated model and pass the resulting catalogue through Roman grism image simulations.
+Those image-level mocks will provide a public downstream data product and will support analysis development within the Roman Project Infrastructure Team.
+
+Inference being cheap allows one to try fitting to different subsets of calibration data, and see where tensions arise, as done in \citet{2026MNRAS.546ag198B}.
+
+
+
+\section{Conclusions}
+\label{sec:conclusions}
+
+\begin{enumerate}
+\item We constructed a 20-parameter emulator training campaign of 1024 \galacticus{} evaluations for galaxy-population and emission-line mock calibration, using a scrambled Sobol design and extended Press--Schechter trees with controlled sampling of the $z=0$ halo mass function.
+\item We built PCA-GP emulators of binned observable vectors, using prior-quantile inputs, standardised observable outputs, PCA compression, and Gaussian-process regression of the retained coefficients.
+\item Held-out \galacticus{} evaluations and training-size tests validate the emulator for posterior inference over the calibration observables.
+\item The standard-observable calibration constrains the model using stellar mass functions, the star-formation-rate function, size--mass relations, the black-hole--halo-mass relation, and the mass--metallicity relation.
+\item Adding \ha{} luminosity functions produces a final calibrated model suitable for Roman grism mock-catalogue generation, with direct \galacticus{} MAP runs confirming the emulator-based solution.
+\item The calibrated posterior implies Roman-relevant tracer number densities, redshift distributions, and clustering biases that can be propagated into future lightcone and image simulations.
+\end{enumerate}
+
+\todo{Rewrite conclusions after figures are final; keep to 4--6 claims.}
+
+\section*{Acknowledgements}
+
+\todo{Add funding, Roman PIT acknowledgement language, and HPC acknowledgement.}
+
+\section*{Software}
+
+This work made use of \todo{Astropy, emcee, GetDist, h5py, Matplotlib, NumPy, pandas, scikit-learn, SciPy, and any Galacticus-specific packages. Add citations.}
+
+\bibliographystyle{aasjournal}
+\bibliography{bibliography}
+
+\appendix
+
+\section{Paper Figure Workflow}
+\label{app:figure-workflow}
+
+Paper figures are generated by dedicated scripts under \texttt{paper/figure\_scripts/}, using either frozen extracted inputs in \texttt{paper/figure\_data/} or explicitly documented products from the campaign directories.
+Each script should write a stable PDF and PNG into \texttt{paper/figures/}.
+This keeps the paper plots reproducible while allowing publication-specific choices of panel layout, axis limits, labels, colours, and annotations.
+
+\begin{table*}
+\centering
+\caption{Planned paper figures and source products.}
+\label{tab:figure-plan}
+\begin{tabular}{p{0.16\textwidth}p{0.38\textwidth}p{0.36\textwidth}}
+\toprule
+Figure & Purpose & Source or script \\
+\midrule
+Fig.~\ref{fig:SMF-holdout-demo} & Intuition-building held-out emulator validation for the $z\simeq0$ stellar mass function & \texttt{run\_smf\_z0\_pca\_threshold\_cv.py}: \texttt{smf\_z0\_pca99\_holdout\_curves\_highlight\_bins.png} \\
+Fig.~\ref{fig:example_predicted_vs_heldout} & Show bin-level held-out emulator accuracy in representative bins & \texttt{run\_smf\_z0\_pca\_threshold\_cv.py}: \texttt{smf\_z0\_pca99\_parity\_highlight\_bins\_random\_quarter.png} \\
+Fig.~\ref{fig:training_size} & Show RMSE and $R^2$ versus $N_{\rm train}$ for representative bins and emulator choices & \texttt{run\_smf\_z0\_pca\_threshold\_cv.py}: \texttt{smf\_z0\_pca\_threshold\_rmse\_r2\_vs\_training\_size.png} \\
+Fig.~\ref{fig:standard-corner} & Compare subset and joint standard-observable posteriors & \texttt{plot\_observable\_mcmc\_overlay\_getdist.py} output \\
+Fig.~\ref{fig:standard-predictive} & Show standard-observable fits for standard-only and joint calibrations & \texttt{plot\_interactive\_observables\_mcmc\_best\_fit\_overlay.py} and final actual-\galacticus{} products \\
+Fig.~\ref{fig:halpha-predictive} & Show \ha{} luminosity functions in the final joint calibration & \texttt{plot\_standard\_sidecar\_lf\_mcmc\_best\_fit\_with\_actual.py} output \\
+Fig.~\ref{fig:roman-predictions} & Roman GRS number density, redshift distribution, and bias & \todo{New script from calibrated posterior and lightcone/tracer-selection products} \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\section{Emulator Implementation Details to Verify}
+
+\begin{itemize}
+\item Exact GP kernel used by \texttt{fit\_scaled\_gp}.
+\item Exact treatment of observational covariance and emulator variance in each MCMC script.
+\item Per-observable PCA component counts selected by the 99 per cent variance threshold.
+\item Per-observable handling of non-finite, zero, or non-positive training values.
+\item Final production MCMC settings for the exploratory and MAP-initialised production stages.
+\item Whether standard-observable and emission-line emulators use the same input parameter vector after adding dust/emission-line parameters.
+\end{itemize}
+
+\end{document}
