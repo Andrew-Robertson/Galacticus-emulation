@@ -1,0 +1,87 @@
+J/A+A/575/A40       [OII] luminosity function                (Comparat+, 2015)
+================================================================================
+The 0.1<z<1.65 evolution of the bright end of the [OII] luminosity function.
+    Comparat J., Richard J., Kneib J.-P., Ilbert O., Gonzalez-Perez V.,
+    Tresse L., Zoubian J., Arnouts S., Bacon R., Brownstein J.R., Baugh C.,
+    Delubac T., Ealet A., Escoffier S., Ge J., Jullo E., Lacey C., Ross N.P.,
+    Schlegel D., Schneider D.P., Steele O., Tasca L., Yeche C., Lesser M.,
+    Jiang Z., Jing Y., Fan Z., Fan X., Ma J., Nie J., Wang J., Wu Z., Zhang T.,
+    Zhou X., Zhou Z., Zou H.
+   <Astron. Astrophys. 575, A40 (2015)>
+   =2015A&A...575A..40C
+================================================================================
+ADC_Keywords: Surveys ; Galaxy catalogs ; Redshifts
+Keywords: catalogs - surveys - galaxies: luminosity function, mass function -
+          cosmology: observations - galaxies: statistics - galaxy evolution
+
+Abstract:
+    We present the [OII] luminosity function measured in the redshift
+    range 0.1<z<1.65 with unprecedented depth and accuracy. Our
+    measurements are based on medium resolution flux-calibrated spectra of
+    emission line galaxies with the FORS2 instrument at VLT and with the
+    SDSS-III/BOSS spectrograph. The FORS2 spectra and the corresponding
+    catalog containing redshifts and line fluxes are released along with
+    this paper. In this work we use a novel method to combine the
+    aforementioned surveys with GAMA, zCOSMOS and VVDS, which have
+    different target selection, producing a consistent weighting scheme to
+    derive the [OII] luminosity function. The measured luminosity function
+    is in good agreement with previous independent estimates. The
+    comparison with two state-of-the-art semi-analytical models is good,
+    which is encouraging for the production of mock catalogs of [OII] flux
+    limited surveys. We observe the bright end evolution over 8.5Gyr: we
+    measure the decrease of logL* from 42.4erg/s at redshift 1.44 to
+    41.2 at redshift 0.165 and we find that the faint end slope flattens
+    when redshift decreases. This measurement confirms the feasibility of
+    the target selection of future baryonic acoustic oscillation surveys
+    aiming at observing [OII] flux limited samples.
+
+Description:
+    To measure the luminosity function (LF), we collected publicly available
+    [OII] flux-calibrated spectroscopy from which no [OII] LF was
+    previously derived.
+
+File Summary:
+--------------------------------------------------------------------------------
+ FileName      Lrecl  Records   Explanations
+--------------------------------------------------------------------------------
+ReadMe            80        .   This file
+catalog.dat       32     1453   Spectroscopic redshifts acquired using the
+                                 ESO VLT/FORS2 facility
+lf.dat           176       51   Luminosity functions for seven redshift ranges
+--------------------------------------------------------------------------------
+
+Byte-by-byte Description of file: catalog.dat
+--------------------------------------------------------------------------------
+   Bytes Format Units   Label     Explanations
+--------------------------------------------------------------------------------
+   3- 12  F10.6 deg     RAdeg     Right ascension (J2000)
+  16- 23  F8.6  deg     DEdeg     Declination (J2000)
+  27- 32  F6.4  ---     z         [0/4.82] Spectrosocpic redshift
+--------------------------------------------------------------------------------
+
+Byte-by-byte Description of file: lf.dat
+--------------------------------------------------------------------------------
+   Bytes Format Units    Label     Explanations
+--------------------------------------------------------------------------------
+   1-  5  F5.3  ---      z.min     [0.1/1.34] Lower boundary of redshift range
+       6  A1    ---      ---       [-]
+   7- 11  F5.3  ---      z.max     [0.24/1.65] Upper boundary of redshift range
+  13- 18  F6.3  [10-7W]  logLmin   [40/48] Minimum log10 of the [OII] luminosity
+  20- 25  F6.3  [10-7W]  logLmax   [40/48] Maximum log10 of the [OII] luminosity
+  26- 46 F21.18 [10-7W]  logL      [40/48] Mean log10 of the [OII] luminosity
+  48- 71 E24.19 Mpc-3    phi       Density {phi} of [OII] tracer (Mpc^-3^/dlogL)
+  73- 96 E24.19 Mpc-3  e_phi       rms uncertainty on phi (in Mpc^-3^/dlogL)
+  98-121 E24.19 ---      jkES      Share of the jack-knife error,
+                                    i.e. the sample variance
+ 123-146 E24.19 ---      galES     Share of the Poisson error due to the finite
+                                    number of galaxies used
+ 148-171 E24.19 ---      wES       Share of the error on the completeness weight
+ 173-176  I4    ---      Ngal      [1/1273] Number of galaxies used to obtain
+                                    this measurement of the density
+--------------------------------------------------------------------------------
+
+Acknowledgements:
+    Johan Comparat, johan.comparat(at)gmail.com
+
+================================================================================
+(End)                                        Patricia Vannier [CDS]  05-Jan-2015
