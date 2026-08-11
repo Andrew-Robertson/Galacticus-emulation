@@ -159,6 +159,7 @@
     }
     .button-row {
       display: flex;
+      flex-wrap: wrap;
       gap: 10px;
       margin: 0 0 16px;
     }
@@ -244,9 +245,8 @@
   <div class="page">
     <h1>Interactive Multi-Observable Galacticus Demo</h1>
     <p class="subhead">
-      A live view of the Sobol 19-parameter emulator trained on several low-redshift observables at once:
-      two stellar mass functions, star-forming and quiescent size relations, the Blanc mass-metallicity
-      relation, and the Robotham star-formation-rate function.
+      A live view of a saved Galacticus emulator bundle trained on several observables at once. Move
+      the parameter sliders to update the GP predictions, target comparisons, and emulator uncertainty bands.
     </p>
     <div class="layout">
       <section class="panel controls">
@@ -256,6 +256,7 @@
         </div>
         <div class="button-row">
           <button class="action-button" id="best-fit-button" type="button" disabled>Set to combined best-fit</button>
+          <button class="action-button" id="galacticus-defaults-button" type="button" disabled title="Reset sliders to the model-default values exposed by the demo metadata.">Set to Galacticus defaults</button>
         </div>
         <div id="sliders"></div>
         <div class="meta-box" id="meta-box">Loading emulator metadata…</div>
@@ -282,6 +283,7 @@
     const statusEl = document.getElementById("status");
     const uncertaintyToggle = document.getElementById("toggle-uncertainty");
     const bestFitButton = document.getElementById("best-fit-button");
+    const galacticusDefaultsButton = document.getElementById("galacticus-defaults-button");
     const plotRect = { left: 66, right: 18, top: 26, bottom: 44 };
     let meta = null;
     let latestRequestId = 0;
@@ -384,6 +386,14 @@
       schedulePrediction();
     }
 
+    function trainingCurveStroke(metaBlock) {
+      const baseAlpha = 0.12;
+      const referenceCount = 128;
+      const count = Math.max(1, metaBlock.y_train_preview.length);
+      const alpha = Math.min(baseAlpha, baseAlpha * referenceCount / count);
+      return `rgba(29,38,48,${alpha.toFixed(4)})`;
+    }
+
     function drawSinglePlot(svg, observableKey, prediction) {
       clear(svg);
       const width = svg.viewBox.baseVal.width;
@@ -450,7 +460,7 @@
         clippedGroup.appendChild(createSvgElement("path", {
           d: linePath(xValues, curve, xScale, yScale),
           fill: "none",
-          stroke: "rgba(29,38,48,0.12)",
+          stroke: trainingCurveStroke(metaBlock),
           "stroke-width": 1.1
         }));
       });
@@ -482,6 +492,7 @@
       if (metaBlock.target_sigma_plot) {
         metaBlock.target_plot.forEach((value, index) => {
           const sigma = metaBlock.target_sigma_plot[index];
+          if (!Number.isFinite(value) || !Number.isFinite(sigma)) return;
           const cx = xScale(xValues[index]);
           const yLow = yScale(value - sigma);
           const yHigh = yScale(value + sigma);
@@ -496,6 +507,7 @@
         });
       }
       metaBlock.target_plot.forEach((value, index) => {
+        if (!Number.isFinite(value)) return;
         clippedGroup.appendChild(createSvgElement("circle", {
           cx: xScale(xValues[index]),
           cy: yScale(value),
@@ -572,11 +584,14 @@
       });
 
       metaBox.innerHTML = `
-        <strong>${meta.observable_keys.length}</strong> observables from the 19D Sobol campaign.<br>
+        <strong>${meta.observable_keys.length}</strong> observables from a ${meta.input_columns.length}D campaign.<br>
+        Training preview: ${meta.training_preview_rows || "stored"} curves shown as fed to the emulator.<br>
+        Default reset: ${meta.galacticus_default_source || "not available"}.<br>
         Prediction latency: ${meta.prediction_benchmark ? meta.prediction_benchmark.milliseconds_per_prediction.toFixed(2) + " ms" : "n/a"} per request.<br>
         Training noise model: known per-bin variances passed through the GP <code>alpha</code> term.
       `;
       bestFitButton.disabled = !meta.best_fit_params;
+      galacticusDefaultsButton.disabled = !meta.galacticus_default_params;
 
       meta.input_columns.forEach((column) => {
         document.getElementById(`slider-${column}`).addEventListener("input", () => {
@@ -642,6 +657,12 @@
     bestFitButton.addEventListener("click", () => {
       if (meta && meta.best_fit_params) {
         applyParams(meta.best_fit_params);
+      }
+    });
+
+    galacticusDefaultsButton.addEventListener("click", () => {
+      if (meta && meta.galacticus_default_params) {
+        applyParams(meta.galacticus_default_params);
       }
     });
 

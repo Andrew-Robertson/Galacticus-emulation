@@ -58,7 +58,8 @@ The `mode` field in a manifest is descriptive metadata. It does not change execu
 - `scripts/playground/`: exploratory science diagnostics and one-off comparison plots
 - `scripts/legacy/`: older or superseded helpers kept for reference
 - `config/paths.example.toml`: machine-specific paths and defaults
-- `demo_emulators/`: curated saved emulator artifacts used by live interactive demos
+- `demo_emulators/`: small checked-in emulator artifacts used by legacy live demos
+- `docs/interactive_emulator_app.md`: local app guide for the definitive campaign-backed interactive demo
 - `data/manifests/`: JSON manifests describing one Galacticus evaluation
 - `data/summaries/`: reduced outputs suitable for emulator training
 - `runs/`: generated changes files, logs, and run products
@@ -91,6 +92,17 @@ The top-level `scripts/` directory is intended to contain the main workflow entr
 Plotting helpers now live under `scripts/plotting/`, and exploratory diagnostics such as mass-metallicity, `M-\sigma`, and Faber-Jackson checks live under `scripts/playground/`.
 Older or superseded workflow helpers that are not the recommended starting point live under `scripts/legacy/`.
 As a rule of thumb, keep a script at top level only when it is a reusable workflow CLI that another user should run directly. Put one-off diagnostics, comparison plots, and exploratory checks in `scripts/playground/` or `paper/figure_scripts/` if they exist solely to build manuscript figures. Generated outputs belong in `playing/` or `runs/`, not in `scripts/`.
+
+## Interactive Emulator App
+
+The recommended local slider app uses the definitive example campaign under
+`runs/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced`:
+
+```bash
+python scripts/serve_pipeline_emulator_app.py
+```
+
+See [docs/interactive_emulator_app.md](docs/interactive_emulator_app.md) for the app URLs, bundle discovery rules, and how to point the app at a different campaign.
 
 ## HPC HDF5 Reduction
 

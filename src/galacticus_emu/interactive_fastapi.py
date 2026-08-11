@@ -34,18 +34,44 @@ def _default_project_root() -> Path:
 
 
 PROJECT_ROOT = _default_project_root()
+DEFAULT_EXAMPLE_CAMPAIGN_ROOT = (
+    PROJECT_ROOT / "runs" / "campaigns" / "sobol_1024_20p_simpleSizes_moreHalos_reduced"
+)
+DEFAULT_EXAMPLE_EMULATOR_ROOT = DEFAULT_EXAMPLE_CAMPAIGN_ROOT / "pipeline" / "emulators"
 DEFAULT_SMF_BUNDLE_PATH = PROJECT_ROOT / "demo_emulators" / "interactive_smf_demo" / "smf_demo_bundle.joblib"
 DEFAULT_SMF_HTML_PATH = PROJECT_ROOT / "assets" / "interactive_smf_demo" / "index.html"
 DEFAULT_HALPHA_BUNDLE_PATH = (
     PROJECT_ROOT / "demo_emulators" / "interactive_halpha_demo" / "halpha_demo_bundle_8draws.joblib"
 )
 DEFAULT_HALPHA_HTML_PATH = PROJECT_ROOT / "assets" / "interactive_halpha_demo" / "index.html"
-DEFAULT_OBSERVABLES_BUNDLE_PATH = (
+DEFAULT_DEMO_OBSERVABLES_BUNDLE_PATH = (
     PROJECT_ROOT / "demo_emulators" / "interactive_observables_demo" / "observables_demo_bundle_pca.joblib"
 )
+DEFAULT_EXAMPLE_OBSERVABLES_BUNDLE_PATH = (
+    DEFAULT_EXAMPLE_EMULATOR_ROOT
+    / "standard_observables"
+    / "pca_99"
+    / "standard_observables_bundle.joblib"
+)
+DEFAULT_OBSERVABLES_BUNDLE_PATH = (
+    DEFAULT_EXAMPLE_OBSERVABLES_BUNDLE_PATH
+    if DEFAULT_EXAMPLE_OBSERVABLES_BUNDLE_PATH.exists()
+    else DEFAULT_DEMO_OBSERVABLES_BUNDLE_PATH
+)
 DEFAULT_OBSERVABLES_HTML_PATH = PROJECT_ROOT / "assets" / "interactive_observables_demo" / "index.html"
-DEFAULT_SIDECAR_LF_BUNDLE_PATH = (
+DEFAULT_DEMO_SIDECAR_LF_BUNDLE_PATH = (
     PROJECT_ROOT / "demo_emulators" / "interactive_sidecar_lf_demo" / "sidecar_lf_demo_bundle.joblib"
+)
+DEFAULT_EXAMPLE_SIDECAR_LF_BUNDLE_PATH = (
+    DEFAULT_EXAMPLE_EMULATOR_ROOT
+    / "emission_line_lfs"
+    / "pca_99"
+    / "halpha_sobral_1dustdraw_pca99.joblib"
+)
+DEFAULT_SIDECAR_LF_BUNDLE_PATH = (
+    DEFAULT_EXAMPLE_SIDECAR_LF_BUNDLE_PATH
+    if DEFAULT_EXAMPLE_SIDECAR_LF_BUNDLE_PATH.exists()
+    else DEFAULT_DEMO_SIDECAR_LF_BUNDLE_PATH
 )
 DEFAULT_SIDECAR_LF_HTML_PATH = DEFAULT_OBSERVABLES_HTML_PATH
 DEFAULT_OBSERVABLES_ORDER = [
