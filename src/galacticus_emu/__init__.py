@@ -25,6 +25,12 @@ from .interactive_observables import (
     predict_observables_bundle,
     train_observables_bundle,
 )
+from .interactive_sidecar_lf import (
+    benchmark_sidecar_lf_bundle,
+    bundle_meta as bundle_meta_sidecar_lf,
+    load_sidecar_lf_bundle,
+    predict_sidecar_lf_bundle,
+)
 from .lhs import (
     NormalPrior,
     ParameterSpec,
@@ -67,12 +73,15 @@ __all__ = [
     "build_galacticus_commands",
     "benchmark_halpha_bundle",
     "benchmark_observables_bundle",
+    "benchmark_sidecar_lf_bundle",
     "bundle_meta",
     "bundle_meta_halpha",
     "bundle_meta_observables",
+    "bundle_meta_sidecar_lf",
     "default_parameter_specs",
     "load_halpha_bundle",
     "load_observables_bundle",
+    "load_sidecar_lf_bundle",
     "load_paths_config",
     "load_smf_bundle",
     "load_smf_campaign",
@@ -81,6 +90,7 @@ __all__ = [
     "predict_smf_bundle",
     "predict_observables_bundle",
     "predict_halpha_bundle",
+    "predict_sidecar_lf_bundle",
     "summarize_campaign",
     "summarize_trinity_campaign",
     "save_emulator_bundle",

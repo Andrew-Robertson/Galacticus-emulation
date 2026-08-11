@@ -12,6 +12,9 @@ from .interactive_halpha import bundle_meta as halpha_bundle_meta
 from .interactive_halpha import load_halpha_bundle, predict_halpha_bundle
 from .interactive_observables import bundle_meta as observables_bundle_meta
 from .interactive_observables import load_observables_bundle, predict_observables_bundle
+from .interactive_observables import refresh_observables_training_preview
+from .interactive_sidecar_lf import bundle_meta as sidecar_lf_bundle_meta
+from .interactive_sidecar_lf import load_sidecar_lf_bundle, predict_sidecar_lf_bundle
 from .interactive_smf import bundle_meta as smf_bundle_meta
 from .interactive_smf import load_smf_bundle, predict_smf_bundle
 
@@ -41,6 +44,20 @@ DEFAULT_OBSERVABLES_BUNDLE_PATH = (
     PROJECT_ROOT / "demo_emulators" / "interactive_observables_demo" / "observables_demo_bundle_pca.joblib"
 )
 DEFAULT_OBSERVABLES_HTML_PATH = PROJECT_ROOT / "assets" / "interactive_observables_demo" / "index.html"
+DEFAULT_SIDECAR_LF_BUNDLE_PATH = (
+    PROJECT_ROOT / "demo_emulators" / "interactive_sidecar_lf_demo" / "sidecar_lf_demo_bundle.joblib"
+)
+DEFAULT_SIDECAR_LF_HTML_PATH = DEFAULT_OBSERVABLES_HTML_PATH
+DEFAULT_OBSERVABLES_ORDER = [
+    "smf_liwhite2009_sdss",
+    "sfr_function_robotham2011",
+    "mzr_blanc2019",
+    "bh_velocity_dispersion",
+    "size_mass_vdw2014_star_forming_z0",
+    "size_mass_vdw2014_quiescent_z0",
+    "smf_z0",
+    "smf_z3",
+]
 
 
 def _env_path(name: str, default: Path) -> Path:
@@ -50,6 +67,13 @@ def _env_path(name: str, default: Path) -> Path:
     return default.resolve()
 
 
+def _env_flag(name: str, default: bool = True) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() not in {"0", "false", "no", "off"}
+
+
 def _inject_api_base(html_text: str, api_base: str) -> str:
     script = f'  <script>window.API_BASE = "{api_base}";</script>\n'
     if "</head>" in html_text:
@@ -57,8 +81,8 @@ def _inject_api_base(html_text: str, api_base: str) -> str:
     return script + html_text
 
 
-def _bundle_enabled(path: Path) -> bool:
-    return path.exists()
+def _bundle_enabled(flag_name: str, path: Path) -> bool:
+    return _env_flag(flag_name, default=True) and path.exists()
 
 
 @lru_cache(maxsize=1)
@@ -92,6 +116,63 @@ def observables_html_path() -> Path:
 
 
 @lru_cache(maxsize=1)
+def sidecar_lf_bundle_path() -> Path:
+    return _env_path("INTERACTIVE_SIDECAR_LF_BUNDLE_PATH", DEFAULT_SIDECAR_LF_BUNDLE_PATH)
+
+
+@lru_cache(maxsize=1)
+def sidecar_lf_html_path() -> Path:
+    return _env_path("INTERACTIVE_SIDECAR_LF_HTML_PATH", DEFAULT_SIDECAR_LF_HTML_PATH)
+
+
+@lru_cache(maxsize=1)
+def observables_hdf5_filename() -> str | None:
+    return os.environ.get("INTERACTIVE_OBSERVABLES_HDF5_FILENAME")
+
+
+@lru_cache(maxsize=1)
+def observables_training_preview_rows() -> str | None:
+    return os.environ.get("INTERACTIVE_OBSERVABLES_TRAINING_PREVIEW_ROWS")
+
+
+@lru_cache(maxsize=1)
+def observables_order() -> list[str]:
+    value = os.environ.get("INTERACTIVE_OBSERVABLES_ORDER")
+    if not value:
+        return list(DEFAULT_OBSERVABLES_ORDER)
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+@lru_cache(maxsize=1)
+def observables_best_fit_summary_path() -> Path | None:
+    value = os.environ.get("INTERACTIVE_OBSERVABLES_BEST_FIT_SUMMARY_PATH")
+    if not value:
+        return None
+    return Path(value).expanduser().resolve()
+
+
+@lru_cache(maxsize=1)
+def observables_default_params_path() -> Path | None:
+    value = os.environ.get("INTERACTIVE_OBSERVABLES_DEFAULT_PARAMS_PATH")
+    if not value:
+        return None
+    return Path(value).expanduser().resolve()
+
+
+@lru_cache(maxsize=1)
+def sidecar_lf_training_preview_rows() -> str | None:
+    return os.environ.get("INTERACTIVE_SIDECAR_LF_TRAINING_PREVIEW_ROWS")
+
+
+@lru_cache(maxsize=1)
+def sidecar_lf_best_fit_summary_path() -> Path | None:
+    value = os.environ.get("INTERACTIVE_SIDECAR_LF_BEST_FIT_SUMMARY_PATH")
+    if not value:
+        return None
+    return Path(value).expanduser().resolve()
+
+
+@lru_cache(maxsize=1)
 def get_smf_bundle() -> dict:
     path = smf_bundle_path()
     if not path.exists():
@@ -112,7 +193,31 @@ def get_observables_bundle() -> dict:
     path = observables_bundle_path()
     if not path.exists():
         raise FileNotFoundError(path)
-    return load_observables_bundle(path)
+    bundle = load_observables_bundle(path)
+    ordered_keys = [
+        key
+        for key in observables_order()
+        if key in bundle["observable_keys"]
+    ]
+    ordered_keys.extend(key for key in bundle["observable_keys"] if key not in ordered_keys)
+    bundle["observable_keys"] = ordered_keys
+    preview_rows = observables_training_preview_rows()
+    if preview_rows:
+        bundle = refresh_observables_training_preview(
+            bundle,
+            training_preview_rows=preview_rows,
+            hdf5_filename=observables_hdf5_filename(),
+            use_training_targets=True,
+        )
+    return bundle
+
+
+@lru_cache(maxsize=1)
+def get_sidecar_lf_bundle() -> dict:
+    path = sidecar_lf_bundle_path()
+    if not path.exists():
+        raise FileNotFoundError(path)
+    return load_sidecar_lf_bundle(path)
 
 
 @lru_cache(maxsize=1)
@@ -130,11 +235,17 @@ def get_observables_html() -> str:
     return _inject_api_base(observables_html_path().read_text(), "/observables")
 
 
+@lru_cache(maxsize=1)
+def get_sidecar_lf_html() -> str:
+    return _inject_api_base(sidecar_lf_html_path().read_text(), "/sidecar-lfs")
+
+
 def _enabled_demos() -> dict[str, bool]:
     return {
-        "smf": _bundle_enabled(smf_bundle_path()),
-        "halpha": _bundle_enabled(halpha_bundle_path()),
-        "observables": _bundle_enabled(observables_bundle_path()),
+        "smf": _bundle_enabled("INTERACTIVE_SMF_ENABLED", smf_bundle_path()),
+        "halpha": _bundle_enabled("INTERACTIVE_HALPHA_ENABLED", halpha_bundle_path()),
+        "observables": _bundle_enabled("INTERACTIVE_OBSERVABLES_ENABLED", observables_bundle_path()),
+        "sidecar_lfs": _bundle_enabled("INTERACTIVE_SIDECAR_LF_ENABLED", sidecar_lf_bundle_path()),
     }
 
 
@@ -164,7 +275,16 @@ def _landing_page() -> str:
             """
             <a class="card" href="/observables">
               <h2>Interactive Observable Suite</h2>
-              <p>Nineteen Galacticus sliders and live predictions for stellar mass functions, size relations, the MZR, and the SFR function.</p>
+              <p>Galacticus parameter sliders and live predictions for stellar mass functions, size relations, the MZR, and related observables.</p>
+            </a>
+            """
+        )
+    if demos["sidecar_lfs"]:
+        cards.append(
+            """
+            <a class="card" href="/sidecar-lfs">
+              <h2>Interactive Emission-Line LFs</h2>
+              <p>Galacticus and dust-parameter sliders with live PCA-GP predictions for saved sidecar luminosity-function emulators.</p>
             </a>
             """
         )
@@ -173,7 +293,7 @@ def _landing_page() -> str:
             """
             <div class="card disabled">
               <h2>No demo bundles found</h2>
-              <p>Set one of <code>INTERACTIVE_SMF_BUNDLE_PATH</code>, <code>INTERACTIVE_HALPHA_BUNDLE_PATH</code>, or <code>INTERACTIVE_OBSERVABLES_BUNDLE_PATH</code> to a saved bundle before starting the app.</p>
+              <p>Set one of <code>INTERACTIVE_SMF_BUNDLE_PATH</code>, <code>INTERACTIVE_HALPHA_BUNDLE_PATH</code>, <code>INTERACTIVE_OBSERVABLES_BUNDLE_PATH</code>, or <code>INTERACTIVE_SIDECAR_LF_BUNDLE_PATH</code> to a saved bundle before starting the app.</p>
             </div>
             """
         )
@@ -294,12 +414,25 @@ def create_app() -> FastAPI:
             "smf_bundle_path": str(smf_bundle_path()),
             "halpha_bundle_path": str(halpha_bundle_path()),
             "observables_bundle_path": str(observables_bundle_path()),
+            "sidecar_lf_bundle_path": str(sidecar_lf_bundle_path()),
+            "observables_hdf5_filename": observables_hdf5_filename(),
+            "observables_training_preview_rows": observables_training_preview_rows(),
+            "observables_best_fit_summary_path": None
+            if observables_best_fit_summary_path() is None
+            else str(observables_best_fit_summary_path()),
+            "observables_default_params_path": None
+            if observables_default_params_path() is None
+            else str(observables_default_params_path()),
+            "sidecar_lf_training_preview_rows": sidecar_lf_training_preview_rows(),
+            "sidecar_lf_best_fit_summary_path": None
+            if sidecar_lf_best_fit_summary_path() is None
+            else str(sidecar_lf_best_fit_summary_path()),
         }
 
     @app.get("/smf")
     @app.get("/smf/", include_in_schema=False)
     def smf_page():
-        if not _bundle_enabled(smf_bundle_path()):
+        if not _bundle_enabled("INTERACTIVE_SMF_ENABLED", smf_bundle_path()):
             raise HTTPException(status_code=404, detail="SMF demo bundle not available.")
         return HTMLResponse(get_smf_html())
 
@@ -327,7 +460,7 @@ def create_app() -> FastAPI:
     @app.get("/halpha")
     @app.get("/halpha/", include_in_schema=False)
     def halpha_page():
-        if not _bundle_enabled(halpha_bundle_path()):
+        if not _bundle_enabled("INTERACTIVE_HALPHA_ENABLED", halpha_bundle_path()):
             raise HTTPException(status_code=404, detail="Halpha demo bundle not available.")
         return HTMLResponse(get_halpha_html())
 
@@ -375,14 +508,20 @@ def create_app() -> FastAPI:
     @app.get("/observables")
     @app.get("/observables/", include_in_schema=False)
     def observables_page():
-        if not _bundle_enabled(observables_bundle_path()):
+        if not _bundle_enabled("INTERACTIVE_OBSERVABLES_ENABLED", observables_bundle_path()):
             raise HTTPException(status_code=404, detail="Observables demo bundle not available.")
         return HTMLResponse(get_observables_html())
 
     @app.get("/observables/api/meta")
     def observables_meta():
         try:
-            return JSONResponse(observables_bundle_meta(get_observables_bundle()))
+            return JSONResponse(
+                observables_bundle_meta(
+                    get_observables_bundle(),
+                    best_fit_summary_path=observables_best_fit_summary_path(),
+                    default_params_path=observables_default_params_path(),
+                )
+            )
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail=f"Observables bundle not found: {exc}") from exc
 
@@ -401,6 +540,53 @@ def create_app() -> FastAPI:
             params[column] = float(value)
 
         prediction = predict_observables_bundle(bundle, params)
+        return {
+            "params": params,
+            "predictions": {
+                observable_key: {
+                    "x_plot": payload["x_plot"].tolist(),
+                    "y_pred_plot": payload["y_pred_plot"].tolist(),
+                    "y_std_plot": payload["y_std_plot"].tolist(),
+                }
+                for observable_key, payload in prediction.items()
+            },
+        }
+
+    @app.get("/sidecar-lfs")
+    @app.get("/sidecar-lfs/", include_in_schema=False)
+    def sidecar_lf_page():
+        if not _bundle_enabled("INTERACTIVE_SIDECAR_LF_ENABLED", sidecar_lf_bundle_path()):
+            raise HTTPException(status_code=404, detail="Sidecar LF demo bundle not available.")
+        return HTMLResponse(get_sidecar_lf_html())
+
+    @app.get("/sidecar-lfs/api/meta")
+    def sidecar_lf_meta():
+        try:
+            return JSONResponse(
+                sidecar_lf_bundle_meta(
+                    get_sidecar_lf_bundle(),
+                    best_fit_summary_path=sidecar_lf_best_fit_summary_path(),
+                    training_preview_rows=sidecar_lf_training_preview_rows(),
+                )
+            )
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=f"Sidecar LF bundle not found: {exc}") from exc
+
+    @app.get("/sidecar-lfs/api/predict")
+    def sidecar_lf_predict(request: Request):
+        try:
+            bundle = get_sidecar_lf_bundle()
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=f"Sidecar LF bundle not found: {exc}") from exc
+
+        params = {}
+        for column in bundle["parameter_names"]:
+            value = request.query_params.get(column)
+            if value is None:
+                raise HTTPException(status_code=422, detail=f"Missing required query parameter: {column}")
+            params[column] = float(value)
+
+        prediction = predict_sidecar_lf_bundle(bundle, params)
         return {
             "params": params,
             "predictions": {
