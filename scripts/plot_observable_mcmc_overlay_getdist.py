@@ -34,10 +34,10 @@ from fit_halpha_sobol_pca_gp_cv import DUST_INPUT_PARAMETER_SPECS
 
 
 DEFAULT_STYLE = {
-    "SMF pair": {"color": "#1b9e77", "label": "SMF pair"},
-    "SFRF": {"color": "#d95f02", "label": "SFR function"},
-    "Size pair": {"color": "#7570b3", "label": "Size pair"},
-    "SMF z0+z3": {"color": "#1f77b4", "label": "SMF z0+z3"},
+    "SMF pair": {"color": "#1b9e77", "label": "SMFs"},
+    "SFRF": {"color": "#d95f02", "label": "SFRF"},
+    "Size pair": {"color": "#7570b3", "label": "Sizes"},
+    "SMF z0+z3": {"color": "#1f77b4", "label": "SMFs"},
     "Sizes": {"color": "#2ca02c", "label": "Sizes"},
     "BH-halo": {"color": "#d62728", "label": "BH-halo"},
     "MZR": {"color": "#9467bd", "label": "MZR"},
@@ -106,11 +106,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dpi", type=int, default=None)
     parser.add_argument("--axes-labelsize", type=float, default=None)
     parser.add_argument("--tick-labelsize", type=float, default=None)
+    parser.add_argument(
+        "--tick-length-scale",
+        type=float,
+        default=1.0,
+        help="Multiplicative scale for Matplotlib tick lengths and widths after the GetDist plot is drawn.",
+    )
     parser.add_argument("--legend-fontsize", type=float, default=None)
     parser.add_argument(
         "--legend-loc",
         default="upper right",
-        help="GetDist legend location, e.g. 'upper right', 'upper center', or 'best'.",
+        help="GetDist legend location, e.g. 'upper right', 'upper center', or 'best'. Use 'none' to suppress.",
     )
     parser.add_argument(
         "--x-labelpad",
@@ -624,6 +630,27 @@ def _apply_axis_label_padding(plotter, *, x_labelpad: float | None, y_labelpad: 
             axis.yaxis.labelpad = y_labelpad
 
 
+def _apply_tick_scale(plotter, *, tick_length_scale: float) -> None:
+    if tick_length_scale == 1.0:
+        return
+    subplots = getattr(plotter, "subplots", None)
+    if subplots is None:
+        return
+    for axis in np.asarray(subplots, dtype=object).ravel():
+        if axis is None:
+            continue
+        axis.tick_params(
+            which="major",
+            length=3.5 * tick_length_scale,
+            width=0.8 * tick_length_scale,
+        )
+        axis.tick_params(
+            which="minor",
+            length=2.0 * tick_length_scale,
+            width=0.6 * tick_length_scale,
+        )
+
+
 def _style_for_case(case_name: str, fallback_index: int) -> dict[str, object]:
     if case_name in DEFAULT_STYLE:
         return dict(DEFAULT_STYLE[case_name])
@@ -778,17 +805,24 @@ def main() -> None:
     if args.filled:
         plotter.settings.alpha_filled_add = 0.4
         plotter.settings.solid_colors = contour_colors
+    suppress_legend = str(args.legend_loc).strip().lower() in {"none", "off", "false"}
     plotter.triangle_plot(
         roots,
         params=plot_parameter_names,
         filled=args.filled,
         contour_colors=contour_colors,
-        legend_labels=legend_labels,
-        legend_loc=args.legend_loc,
+        legend_labels=None if suppress_legend else legend_labels,
+        legend_loc=None if suppress_legend else args.legend_loc,
         line_args=line_args,
         markers=marker_values,
         marker_args={"color": "0.25", "lw": plot_style["marker_line_width"] * linewidth_scale, "ls": "--"},
     )
+    if suppress_legend:
+        for legend in list(plotter.fig.legends):
+            legend.remove()
+        for axis in np.asarray(plotter.subplots, dtype=object).ravel():
+            if axis is not None and axis.get_legend() is not None:
+                axis.get_legend().remove()
     _overlay_priors_and_rotate_labels(
         plotter,
         ranges,
@@ -801,6 +835,7 @@ def main() -> None:
     )
     _overlay_labeled_markers(plotter, markers_by_case, case_order)
     _apply_axis_label_padding(plotter, x_labelpad=args.x_labelpad, y_labelpad=args.y_labelpad)
+    _apply_tick_scale(plotter, tick_length_scale=float(args.tick_length_scale))
     args.output_path.parent.mkdir(parents=True, exist_ok=True)
     export_kwargs = {}
     if args.dpi is not None:

@@ -33,6 +33,8 @@ from galacticus_emu import (
     transform_from_prior_quantiles,
     transform_to_prior_quantiles,
 )
+from galacticus_emu.mcmc_corner import corner_with_log10_priors
+from galacticus_emu.mcmc_trace import make_trace_plot
 
 
 MEAN_OUTPUT_COLUMNS = [
@@ -190,17 +192,24 @@ def _fit_emulator_models(table: pd.DataFrame, train_indices: np.ndarray, paramet
     return models
 
 
-def _make_trace_plot(samples: np.ndarray, labels: list[str], output_path: Path) -> None:
-    n_steps, n_walkers, n_dim = samples.shape
-    fig, axes = plt.subplots(n_dim, 1, figsize=(9, 2.0 * n_dim), sharex=True, constrained_layout=True)
-    if n_dim == 1:
-        axes = [axes]
-    for axis, label, dim_index in zip(axes, labels, range(n_dim), strict=True):
-        axis.plot(samples[:, :, dim_index], alpha=0.25, linewidth=0.6)
-        axis.set_ylabel(label)
-    axes[-1].set_xlabel("Step")
-    fig.savefig(output_path, dpi=180)
-    plt.close(fig)
+def _make_trace_plot(
+    samples: np.ndarray,
+    labels: list[str],
+    output_path: Path,
+    *,
+    parameter_specs=None,
+    burn_in: int = 0,
+) -> dict[str, float]:
+    return make_trace_plot(
+        samples,
+        labels,
+        output_path,
+        parameter_specs=parameter_specs,
+        burn_in=burn_in,
+        row_height=2.0,
+        alpha=0.25,
+        linewidth=0.6,
+    )
 
 
 def main() -> None:
@@ -290,10 +299,25 @@ def main() -> None:
     (emulator_root / "run_summary.json").write_text(json.dumps(summary, indent=2) + "\n")
 
     trace_path = figures_root / "emulator_mcmc_trace.png"
-    _make_trace_plot(samples, input_columns, trace_path)
+    trace_tau = _make_trace_plot(
+        samples,
+        input_columns,
+        trace_path,
+        parameter_specs=parameter_specs,
+        burn_in=args.burn_in,
+    )
+    summary["trace_autocorrelation_time"] = trace_tau
+    summary["trace_autocorrelation_time_burn_in"] = int(args.burn_in)
+    (emulator_root / "run_summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     corner_path = figures_root / "emulator_mcmc_corner.png"
     if corner is not None:
-        corner_fig = corner.corner(flat_samples, labels=input_columns, truths=best_theta)
+        corner_fig = corner_with_log10_priors(
+            corner,
+            chain_df,
+            input_columns,
+            parameter_specs,
+            truths=best_theta,
+        )
         corner_fig.savefig(corner_path, dpi=180)
         plt.close(corner_fig)
 
