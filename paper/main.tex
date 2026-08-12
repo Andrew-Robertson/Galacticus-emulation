@@ -20,6 +20,7 @@
 
 \newcommand{\galacticus}{\textsc{Galacticus}\xspace}
 \newcommand{\romanspace}{\textit{Roman}\xspace}
+\newcommand{\emcee}{\texttt{emcee}}
 \newcommand{\ha}{H$\alpha$}
 \newcommand{\oii}{[O\,{\sc ii}]}
 \newcommand{\oiii}{[O\,{\sc iii}]}
@@ -337,6 +338,24 @@ This is only true if the emulator uncertainty is reasonably calibrated, which is
 \subsection{Emulator Validation}
 \label{sec:emulator-validation}
 
+\begin{figure*}
+\centering
+\includegraphics[width=0.85\textwidth]{/Users/arobertson/Documents/Projects/GalacticusEmu/Galacticus-emulation/runs/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced/cross_validation/pca_threshold_smf_z0_kfold5_64_to_1024/figures/smf_z0_pca99_holdout_curves_highlight_bins.pdf}
+\caption{
+Example of held-out validation for the low-$z$ stellar mass function.
+Thin grey curves show the range of \galacticus{} predictions across the training set.
+Black points show the observed stellar mass function from \citet{2014ApJ...783...85T}.
+Coloured points show direct \galacticus{} predictions for example held-out parameter choices.
+The corresponding coloured curves show emulator predictions for the same parameter choices, where in each case the emulator was trained without using the corresponding \galacticus{} evaluation.
+The shaded regions show the emulator uncertainty.
+The five example held-out models are selected only for visualisation: for each held-out model we compute the mean direct value of $\log_{10}\Phi$ across the plotted stellar-mass bins, rank the held-out models by this quantity, and choose examples at approximately evenly spaced quantiles of the ranking.
+The validation metrics use the full held-out sample.
+Vertical dotted lines mark the stellar-mass bins used for the bin-level validation metrics in Figures~\ref{fig:example_predicted_vs_heldout} and \ref{fig:training_size}.
+}
+\label{fig:SMF-holdout-demo}
+\end{figure*}
+
+
 We validate the emulator using \emph{five-fold cross-validation}.
 The \galacticus{} training runs are divided into five equally sized subsets.
 For each fold, the emulator is trained on four subsets and evaluated on the remaining subset, so that every \galacticus{} evaluation is predicted once by an emulator that was not trained using that model.
@@ -382,23 +401,6 @@ The same broad behaviour is seen in held-out tests of the other standard observa
 
 \begin{figure*}
 \centering
-\includegraphics[width=0.85\textwidth]{/Users/arobertson/Documents/Projects/GalacticusEmu/Galacticus-emulation/runs/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced/cross_validation/pca_threshold_smf_z0_kfold5_64_to_1024/figures/smf_z0_pca99_holdout_curves_highlight_bins.pdf}
-\caption{
-Example of held-out validation for the low-$z$ stellar mass function.
-Thin grey curves show the range of \galacticus{} predictions across the training set.
-Black points show the observed stellar mass function from \citet{2014ApJ...783...85T}.
-Coloured points show direct \galacticus{} predictions for example held-out parameter choices.
-The corresponding coloured curves show emulator predictions for the same parameter choices, where in each case the emulator was trained without using the corresponding \galacticus{} evaluation.
-The shaded regions show the emulator uncertainty.
-The five example held-out models are selected only for visualisation: for each held-out model we compute the mean direct value of $\log_{10}\Phi$ across the plotted stellar-mass bins, rank the held-out models by this quantity, and choose examples at approximately evenly spaced quantiles of the ranking.
-The validation metrics use the full held-out sample.
-Vertical dotted lines mark the stellar-mass bins used for the bin-level validation metrics in Figures~\ref{fig:example_predicted_vs_heldout} and \ref{fig:training_size}.
-}
-\label{fig:SMF-holdout-demo}
-\end{figure*}
-
-\begin{figure*}
-\centering
 \includegraphics[width=0.85\textwidth]{/Users/arobertson/Documents/Projects/GalacticusEmu/Galacticus-emulation/runs/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced/cross_validation/pca_threshold_smf_z0_kfold5_64_to_1024/figures/smf_z0_pca99_parity_highlight_bins_random_quarter.pdf}
 \caption{
 Predicted versus held-out values of the low-$z$ stellar mass function at the three stellar-mass bins highlighted in Figure~\ref{fig:SMF-holdout-demo}.
@@ -422,43 +424,8 @@ The improvement from smaller training subsets to the full 1024-run training set 
 \label{fig:training_size}
 \end{figure*}
 
-\section{Calibration to Standard Galaxy Observables}
+\section{Calibration to multiple galaxy observables}
 \label{sec:standard-calibration}
-
-The standard-observable calibration uses stellar mass functions, the local star-formation-rate function, star-forming and quiescent size--mass relations, the black-hole--halo-mass relation, and the gas-phase mass--metallicity relation.
-The final standard-observable set used in the combined standard calibration is:
-\begin{itemize}
-\item stellar mass functions from ZFOURGE/CANDELS \citep{2014ApJ...783...85T},
-\item the star-formation-rate function from \todo{Robotham et al. citation},
-\item the star-forming and quiescent size--mass relations from \citet{2014ApJ...788...28V},
-\item the black-hole--halo-mass relation derived from \todo{Trinity/UniverseMachine citation and exact redshift}, restricted to $12 < \log_{10}(M_{\rm halo}/M_\odot) < 13.8$,
-\item the gas-phase mass--metallicity relation from \todo{Blanc et al. citation}.
-\end{itemize}
-\todo{Add exact redshift ranges for each observable. Confirm whether the training bundle also includes Li \& White and BH--velocity-dispersion observables that are not used in the final combined likelihood.}
-
-\subsection{Likelihood}
-
-We sample the posterior distribution of the varied \galacticus{} parameters using the emulator predictions in place of direct \galacticus{} evaluations.
-For an observable block $j$ with data vector $\mathbf{d}_j$, emulator prediction $\mathbf{m}_j(\boldsymbol{\theta})$, and covariance matrix $\mathbf{C}_j$, the likelihood contribution is
-\begin{equation}
-  -2\ln \mathcal{L}_j =
-  \left[\mathbf{d}_j-\mathbf{m}_j(\boldsymbol{\theta})\right]^T
-  \mathbf{C}_j^{-1}
-  \left[\mathbf{d}_j-\mathbf{m}_j(\boldsymbol{\theta})\right]
-  + \ln |\mathbf{C}_j| + {\rm const.}
-\end{equation}
-The covariance includes the observational covariance where available.
-In runs that include emulator variance, the GP predictive variance is added to the covariance in observable space.
-This means that the MCMC is not only fitting the emulator mean prediction.
-It is also informed by where the emulator is uncertain, so regions of parameter space with poorly constrained predictions contribute less sharply to the likelihood.
-\todo{Confirm exact covariance treatment in each MCMC script: diagonal vs full covariance, target covariance, emulator variance default for standard-only versus LF/common runs.}
-
-The standard-observable MCMC uses 128 walkers.
-For individual observable subsets we run 10,000 steps, discard the first 2,000 as burn-in, and thin by a factor of 10.
-For the combined standard-observable calibration we run 50,000 steps, discard the first 10,000 steps, and thin by a factor of 10.
-\todo{State whether default emcee StretchMove or transformed-parameter/DE mixture was used in the final production run.}
-
-\subsection{Single-Observable and Joint Constraints}
 
 \begin{figure*}
 \centering
@@ -468,6 +435,77 @@ An example of combining multiple observables to break degeneracies in the emulat
 }
 \label{fig:combining_constraints}
 \end{figure*}
+
+To build intuition for the way in which calibrating to multiple observables helps break degeneracies between different \galacticus{} parameters, we first calibrate a model to just three different types of observable: stellar mass functions, stellar mass -- size relations, and the star formation rate function. Specifically, we use
+\begin{itemize}
+\item stellar mass functions from ZFOURGE/CANDELS \citep{2014ApJ...783...85T} for redshifts $0.2 < z < 0.5$ and $1 < z < 1.25$,
+\item the low-$z$ star-formation-rate function from GAMA \citep{2011MNRAS.416.2640R},
+\item the low-$z$ size--mass relations for (separately) star-forming and quiescent galaxies from 3D-HST+CANDELS \citep{2014ApJ...788...28V}.
+\end{itemize}
+
+Each observable is calculated for each of our 1024 training runs, and \todo{verbose description of PCA}.
+
+We \todo{give specifics of emulators: PCA components. Is there a sensible way to summarise section 3 here for all the other observables? I want to sort of show it as an example that then justifies what we use for all observables. Also, somewhere we need to give specific details about filling in missing values. Could use the highest-Mstar bin for quiescent galaxies as an example, because you can see in the training data that a bunch of the lines converge on this one point. Explain that we imposed this by hand, though with a very large training data uncertainty.}
+
+
+
+\subsection{MCMC sampling}
+
+We sample the posterior distribution using Markov chain Monte Carlo (MCMC), implemented with the affine-invariant ensemble sampler \emcee{} \citep{ForemanMackey:2013io}. Each MCMC uses 128 walkers, initialized in a small region around a point expected to lie close to the maximum of the posterior density. This point is determined from a preliminary \emcee{} run with 128 walkers and 75,000 steps. During an initial burn-in phase, the walkers rapidly disperse from this small region and explore the posterior distribution. Initializing the walkers in this way reduces the likelihood of walkers becoming trapped around low-probability local maxima.
+
+For the production runs, we use 250,000 steps per walker, discarding the initial 25,000 steps as burn-in. We assess convergence using the integrated autocorrelation time, $\tau$ \citep{Sokal1997}, estimated separately for each of the 20 sampled parameters. For the single-observable fits used to illustrate parameter degeneracies (see Fig.~\ref{fig:combining_constraints}), the post-burn-in chains extend for at least 25 times the largest measured autocorrelation time. For our final calibration, which jointly fits all calibration observables, the corresponding ratio is 73. We therefore consider the chains sufficiently long for the posterior inferences presented here.
+
+The emulator predictions are used in place of direct \galacticus{} evaluations. This dramatically speeds up inference, because calling the emulator takes a few milliseconds, while a complete \galacticus{} evaluation takes hundreds of CPU hours.
+
+\subsection{The likelihood}
+
+The MCMC likelihood is evaluated in the same transformed observable space in
+which the emulators are trained.  For stellar mass functions, the star
+formation rate function, and the H$\alpha$ luminosity functions, this is
+$\log_{10}$ number density.  For the size--mass relations and black-hole
+relation, the fitted quantities are already logarithmic quantities,
+$\log_{10} R_{\rm eff}$ and $\log_{10} M_{\rm BH}$, respectively.  For the
+mass--metallicity relation, the fitted quantity is $12+\log_{10}({\rm O/H})$.
+
+For each observable bin $i$, we assume a Gaussian likelihood in this
+transformed space,
+\begin{equation}
+  \ln \mathcal{L}
+  =
+  -\frac{1}{2}
+  \sum_i
+  \left[
+    \frac{\left(d_i - m_i(\boldsymbol{\theta})\right)^2}
+         {\sigma_{{\rm data},i}^2 + \sigma_{{\rm emu},i}^2(\boldsymbol{\theta})}
+    +
+    \ln\left(2\pi\left[\sigma_{{\rm data},i}^2
+    + \sigma_{{\rm emu},i}^2(\boldsymbol{\theta})\right]\right)
+  \right].
+\end{equation}
+Here $d_i$ is the target value (inferred from observations), $m_i(\boldsymbol{\theta})$ is the emulator
+mean prediction, $\sigma_{{\rm data},i}$ is the observational uncertainty,
+and $\sigma_{{\rm emu},i}(\boldsymbol{\theta})$ is the GP predictive
+uncertainty.  The data and emulator uncertainties are therefore added in
+quadrature in the transformed observable space.
+
+Although the underlying Galacticus output files can contain full covariance
+matrices, the final MCMC likelihood uses only their diagonal elements.  Thus
+we neglect correlations between bins and between different observable blocks.
+The observational uncertainties for logarithmic number densities are obtained
+by propagating the diagonal linear-space covariance into log space.  A minimum
+uncertainty floor of $10^{-3}$ is imposed in the transformed observable space.
+
+The final calibration combines 113 standard-observable bins with 55
+H$\alpha$ luminosity-function bins.  The H$\alpha$ likelihood is evaluated in
+$\log_{10}[\Phi/({\rm Mpc}^{-3}\,{\rm dex}^{-1})]$, using the Sobral et al.
+target uncertainties propagated into this log-space quantity.  Emulator
+uncertainties are included for both the standard-observable and H$\alpha$
+emulators.
+
+
+\subsection{Single-Observable and Joint Constraints}
+
+
 
 We first calibrate to individual observable groups to understand which physical parameters are constrained by which data.
 We then calibrate to all standard observables jointly.
