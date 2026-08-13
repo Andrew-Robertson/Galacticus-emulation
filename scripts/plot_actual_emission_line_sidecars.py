@@ -17,6 +17,11 @@ import pandas as pd
 
 from galacticus_emu.plotting import set_ylim_from_values
 from plot_comparat_oii_example import _load_comparat_lf
+from fit_sidecar_lf_pca_holdout_demo import (
+    TARGET_ERROR_MODE_LEGACY,
+    TARGET_ERROR_MODES,
+    _linear_upper_excursion_to_log10_error,
+)
 from plot_khostovan_hbeta_oiii_example import _load_khostovan_lf
 
 
@@ -44,6 +49,16 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=None,
         help="Reduced Galacticus HDF5 file containing /analyses H-alpha Sobral target data.",
+    )
+    parser.add_argument(
+        "--halpha-target-error-mode",
+        choices=TARGET_ERROR_MODES,
+        default=TARGET_ERROR_MODE_LEGACY,
+        help=(
+            "How to convert H-alpha Sobral target LF errors into log10(Phi) space. "
+            "The default preserves legacy plots; use sobral_log_table for the "
+            "Sobral table's log-space errors."
+        ),
     )
     parser.add_argument(
         "--comparat-vizier-dir",
@@ -98,7 +113,14 @@ def _linear_std_to_log10(value: np.ndarray, sigma: np.ndarray, min_log10_phi: fl
     return np.where((clipped > 0.0) & np.isfinite(sigma), sigma / (clipped * np.log(10.0)), np.nan)
 
 
-def _halpha_target(path: Path | None, sample_label: str, x_plot: np.ndarray, min_log10_phi: float) -> pd.DataFrame:
+def _halpha_target(
+    path: Path | None,
+    sample_label: str,
+    x_plot: np.ndarray,
+    min_log10_phi: float,
+    *,
+    target_error_mode: str,
+) -> pd.DataFrame:
     if path is None:
         return pd.DataFrame()
     analysis = f"luminosityFunctionHalphaSobral2013HiZELS{sample_label.upper()}"
@@ -122,7 +144,10 @@ def _halpha_target(path: Path | None, sample_label: str, x_plot: np.ndarray, min
         "log10_phi": np.log10(np.maximum(target_phi, 10.0**min_log10_phi)),
     }
     if target_sigma is not None:
-        rows["log10_phi_sigma"] = _linear_std_to_log10(target_phi, target_sigma[order], min_log10_phi)
+        if target_error_mode == TARGET_ERROR_MODE_SOBRAL_LOG:
+            rows["log10_phi_sigma"] = _linear_upper_excursion_to_log10_error(target_phi, target_sigma[order])
+        else:
+            rows["log10_phi_sigma"] = _linear_std_to_log10(target_phi, target_sigma[order], min_log10_phi)
     return pd.DataFrame(rows)
 
 
@@ -167,11 +192,18 @@ def _target_for(
     x_plot: np.ndarray,
     *,
     halpha_target_hdf5: Path | None,
+    halpha_target_error_mode: str,
     comparat_vizier_dir: Path,
     min_log10_phi: float,
 ) -> pd.DataFrame:
     if observable == "halpha_sobral":
-        return _halpha_target(halpha_target_hdf5, sample_label, x_plot, min_log10_phi)
+        return _halpha_target(
+            halpha_target_hdf5,
+            sample_label,
+            x_plot,
+            min_log10_phi,
+            target_error_mode=halpha_target_error_mode,
+        )
     if observable in {"hbeta_oiii_khostovan", "oii_khostovan"}:
         return _khostovan_target(observable, sample_label)
     if observable == "oii_comparat":
@@ -202,6 +234,7 @@ def _plot_observable(
     output_path: Path,
     *,
     halpha_target_hdf5: Path | None,
+    halpha_target_error_mode: str,
     comparat_vizier_dir: Path,
     min_log10_phi: float,
     dpi: int,
@@ -249,6 +282,7 @@ def _plot_observable(
                 sample_label,
                 panel_reference["log10_luminosity_center"].to_numpy(dtype=float),
                 halpha_target_hdf5=halpha_target_hdf5,
+                halpha_target_error_mode=halpha_target_error_mode,
                 comparat_vizier_dir=comparat_vizier_dir,
                 min_log10_phi=min_log10_phi,
             )
@@ -303,6 +337,7 @@ def main() -> None:
             observable,
             output_path,
             halpha_target_hdf5=args.halpha_target_hdf5.expanduser().resolve() if args.halpha_target_hdf5 else None,
+            halpha_target_error_mode=args.halpha_target_error_mode,
             comparat_vizier_dir=args.comparat_vizier_dir.expanduser().resolve(),
             min_log10_phi=args.min_log10_phi,
             dpi=args.dpi,

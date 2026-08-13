@@ -1,8 +1,33 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import joblib
+
+
+def _patch_numpy_bit_generator_unpickling() -> Callable[[], None]:
+    try:
+        import numpy.random._pickle as numpy_random_pickle
+    except Exception:
+        return lambda: None
+
+    original = getattr(numpy_random_pickle, "__bit_generator_ctor", None)
+    if original is None or getattr(original, "_galacticus_emu_compat", False):
+        return lambda: None
+
+    def compat_bit_generator_ctor(bit_generator_name="MT19937"):
+        if isinstance(bit_generator_name, type):
+            bit_generator_name = bit_generator_name.__name__
+        return original(bit_generator_name)
+
+    compat_bit_generator_ctor._galacticus_emu_compat = True  # type: ignore[attr-defined]
+    numpy_random_pickle.__bit_generator_ctor = compat_bit_generator_ctor
+
+    def restore() -> None:
+        numpy_random_pickle.__bit_generator_ctor = original
+
+    return restore
 
 
 def sanitize_output_name(name: str) -> str:
@@ -42,4 +67,8 @@ def save_emulator_bundle(
 
 
 def load_emulator_bundle(input_path: str | Path):
-    return joblib.load(Path(input_path))
+    restore_numpy_unpickling = _patch_numpy_bit_generator_unpickling()
+    try:
+        return joblib.load(Path(input_path))
+    finally:
+        restore_numpy_unpickling()

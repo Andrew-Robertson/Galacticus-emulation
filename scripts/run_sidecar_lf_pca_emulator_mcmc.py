@@ -31,6 +31,8 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 
 from fit_sidecar_lf_pca_holdout_demo import (
+    TARGET_ERROR_MODE_LEGACY,
+    TARGET_ERROR_MODES,
     _alpha_log10,
     _bin_metadata,
     _input_columns,
@@ -103,6 +105,16 @@ def parse_args() -> argparse.Namespace:
         help="After other filters, keep the first N dust rows per Galacticus evaluation.",
     )
     parser.add_argument("--min-log10-lf", type=float, default=-8.0)
+    parser.add_argument(
+        "--target-error-mode",
+        choices=TARGET_ERROR_MODES,
+        default=TARGET_ERROR_MODE_LEGACY,
+        help=(
+            "How to convert H-alpha Sobral target LF errors into log10(Phi) space. "
+            "The default preserves legacy runs; use sobral_log_table for the "
+            "Sobral table's log-space errors."
+        ),
+    )
     parser.add_argument("--use-training-alpha", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--min-training-log10-sigma", type=float, default=1.0e-4)
     parser.add_argument("--max-training-log10-sigma", type=float, default=2.0)
@@ -454,7 +466,14 @@ def main() -> None:
             raise ValueError(f"Could not infer a single sample label for {sample_label!r}")
         bin_metadata = _bin_metadata(long_table, args.observable, sample_labels[0], output_columns)
         x_plot = bin_metadata["log10_luminosity_center"].to_numpy(dtype=float)
-        target_plot, target_std_plot = _target_curve(campaign_root, args.observable, sample_labels[0], x_plot, args.min_log10_lf)
+        target_plot, target_std_plot = _target_curve(
+            campaign_root,
+            args.observable,
+            sample_labels[0],
+            x_plot,
+            args.min_log10_lf,
+            target_error_mode=args.target_error_mode,
+        )
         y, _floor = _log10_with_floor(table[output_columns].to_numpy(dtype=float), args.min_log10_lf)
         alpha = None
         if args.use_training_alpha:
@@ -477,6 +496,7 @@ def main() -> None:
             target_std_plot=target_std_plot,
             args=args,
         )
+        bundles[sample_labels[0]]["target_error_mode"] = args.target_error_mode
         output_by_label[sample_labels[0]] = output_columns
         target_by_label[sample_labels[0]] = target_plot
 
@@ -622,6 +642,7 @@ def main() -> None:
             "parameter_names": parameter_names,
             "parameter_specs": parameter_specs,
             "slow_count": slow_count,
+            "target_error_mode": args.target_error_mode,
             "bundles": bundles,
             "best_theta": {name: float(value) for name, value in zip(parameter_names, best_theta, strict=True)},
             "sampler_coordinates": sampler_coordinate_summary(
@@ -642,6 +663,7 @@ def main() -> None:
         "n_dimensions": len(parameter_specs),
         "n_training_rows": int(len(table)),
         "include_emulator_variance": bool(args.include_emulator_variance),
+        "target_error_mode": args.target_error_mode,
         "n_walkers": int(args.n_walkers),
         "n_steps": int(args.n_steps),
         "burn_in": int(args.burn_in),

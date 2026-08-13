@@ -25,6 +25,11 @@ from sklearn.preprocessing import StandardScaler
 from galacticus_emu.gp import fit_scaled_gp, predict_scaled_gp
 
 
+TARGET_ERROR_MODE_LEGACY = "legacy_linear_propagation"
+TARGET_ERROR_MODE_SOBRAL_LOG = "sobral_log_table"
+TARGET_ERROR_MODES = (TARGET_ERROR_MODE_LEGACY, TARGET_ERROR_MODE_SOBRAL_LOG)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Quick PCA holdout demo for sidecar emission-line LF tables.")
     parser.add_argument("campaign_root", type=Path)
@@ -57,6 +62,17 @@ def parse_args() -> argparse.Namespace:
         help="Choose enough PCA components to explain this variance fraction, e.g. 0.99. Overrides --pca-components.",
     )
     parser.add_argument("--min-log10-lf", type=float, default=-8.0)
+    parser.add_argument(
+        "--target-error-mode",
+        choices=TARGET_ERROR_MODES,
+        default=TARGET_ERROR_MODE_LEGACY,
+        help=(
+            "How to convert H-alpha Sobral target LF errors into log10(Phi) space. "
+            "The default preserves the historical derivative propagation from the "
+            "Galacticus linear target covariance. Use sobral_log_table to recover "
+            "the Sobral table's log-space error from the stored linear upper excursion."
+        ),
+    )
     parser.add_argument("--max-example-curves", type=int, default=5)
     parser.add_argument("--use-training-alpha", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--min-training-log10-sigma", type=float, default=1.0e-4)
@@ -194,7 +210,23 @@ def _bin_metadata(long_table: pd.DataFrame, observable: str, sample_label: str, 
     return subset.loc[_bin_indices(columns)].reset_index()
 
 
-def _hdf5_halpha_target(campaign_root: Path, sample_label: str, x_plot: np.ndarray, min_log10_lf: float) -> tuple[np.ndarray, np.ndarray | None]:
+def _linear_upper_excursion_to_log10_error(values: np.ndarray, std: np.ndarray) -> np.ndarray:
+    sigma = np.full_like(values, np.nan, dtype=float)
+    valid = np.isfinite(values) & np.isfinite(std) & (values > 0.0) & (std >= 0.0)
+    sigma[valid] = np.log10(1.0 + std[valid] / values[valid])
+    return sigma
+
+
+def _hdf5_halpha_target(
+    campaign_root: Path,
+    sample_label: str,
+    x_plot: np.ndarray,
+    min_log10_lf: float,
+    *,
+    target_error_mode: str = TARGET_ERROR_MODE_LEGACY,
+) -> tuple[np.ndarray, np.ndarray | None]:
+    if target_error_mode not in TARGET_ERROR_MODES:
+        raise ValueError(f"Unknown target_error_mode={target_error_mode!r}; choose from {TARGET_ERROR_MODES}.")
     path = _first_galacticus_file(campaign_root)
     if path is None:
         return np.full_like(x_plot, np.nan, dtype=float), None
@@ -215,7 +247,16 @@ def _hdf5_halpha_target(campaign_root: Path, sample_label: str, x_plot: np.ndarr
     matched_x = target_x[order]
     if not np.allclose(matched_x, x_plot, rtol=0.0, atol=1.0e-6):
         return np.full_like(x_plot, np.nan, dtype=float), None
-    return _linear_to_log10(target_phi[order], min_log10_lf), _linear_std_to_log10(target_phi[order], target_std[order], min_log10_lf) if target_std is not None else None
+    target_phi = target_phi[order]
+    target_log10 = _linear_to_log10(target_phi, min_log10_lf)
+    if target_std is None:
+        return target_log10, None
+    target_std = target_std[order]
+    if target_error_mode == TARGET_ERROR_MODE_SOBRAL_LOG:
+        target_sigma_log10 = _linear_upper_excursion_to_log10_error(target_phi, target_std)
+    else:
+        target_sigma_log10 = _linear_std_to_log10(target_phi, target_std, min_log10_lf)
+    return target_log10, target_sigma_log10
 
 
 def _khostovan_lf_table(observable: str) -> pd.DataFrame:
@@ -286,11 +327,19 @@ def _target_curve(
     sample_label: str | None,
     x_plot: np.ndarray,
     min_log10_lf: float,
+    *,
+    target_error_mode: str = TARGET_ERROR_MODE_LEGACY,
 ) -> tuple[np.ndarray, np.ndarray | None]:
     if sample_label is None:
         return np.full_like(x_plot, np.nan, dtype=float), None
     if observable == "halpha_sobral":
-        return _hdf5_halpha_target(campaign_root, sample_label, x_plot, min_log10_lf)
+        return _hdf5_halpha_target(
+            campaign_root,
+            sample_label,
+            x_plot,
+            min_log10_lf,
+            target_error_mode=target_error_mode,
+        )
     if observable in {"hbeta_oiii_khostovan", "oii_khostovan"}:
         return _khostovan_target(observable, sample_label, x_plot)
     return np.full_like(x_plot, np.nan, dtype=float), None
@@ -590,7 +639,14 @@ def main() -> None:
         if bin_metadata is not None
         else np.arange(len(output_columns), dtype=float)
     )
-    target_plot, target_std_plot = _target_curve(campaign_root, args.observable, sample_label, x_plot, args.min_log10_lf)
+    target_plot, target_std_plot = _target_curve(
+        campaign_root,
+        args.observable,
+        sample_label,
+        x_plot,
+        args.min_log10_lf,
+        target_error_mode=args.target_error_mode,
+    )
     input_columns = _input_columns(table)
     x = table[input_columns].to_numpy(dtype=float)
     y_linear = table[output_columns].to_numpy(dtype=float)
@@ -692,6 +748,7 @@ def main() -> None:
         "x_plot": x_plot.tolist(),
         "target_log10_phi": target_plot.tolist(),
         "target_log10_phi_std": None if target_std_plot is None else target_std_plot.tolist(),
+        "target_error_mode": args.target_error_mode,
         "log10_floor_linear": floor,
         "pca_components_requested": int(args.pca_components),
         "pca_variance_threshold": None if args.pca_variance_threshold is None else float(args.pca_variance_threshold),

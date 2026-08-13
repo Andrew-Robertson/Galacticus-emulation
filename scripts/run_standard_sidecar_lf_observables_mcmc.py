@@ -49,6 +49,7 @@ from galacticus_emu.mcmc_backend import (
 from galacticus_emu.mcmc_corner import corner_with_log10_priors
 from galacticus_emu.mcmc_moves import add_emcee_move_arguments, build_emcee_moves, describe_emcee_moves
 from galacticus_emu.mcmc_results import split_thinned_chain, write_mcmc_results_hdf5
+from galacticus_emu.persistence import load_emulator_bundle
 from run_interactive_observables_mcmc import (
     BundlePosterior,
     _best_fit_plot as _standard_best_fit_plot,
@@ -307,6 +308,7 @@ def _write_sidecar_prediction_rows(
                     "observable_key": key,
                     "observable": observable["observable"],
                     "sample_label": observable["sample_label"],
+                    "target_error_mode": observable.get("target_error_mode", "legacy_linear_propagation"),
                     "bin_index": int(bin_index),
                     "x_plot": float(x_value),
                     "target_log10_phi": float(target_value),
@@ -329,9 +331,13 @@ def main() -> None:
         raise ValueError("--trace-thin must be >= 1 when supplied")
 
     standard_bundle = load_observables_bundle(args.standard_bundle_path)
-    sidecar_bundle = joblib.load(args.sidecar_bundle_path)
+    sidecar_bundle = load_emulator_bundle(args.sidecar_bundle_path)
     if sidecar_bundle.get("bundle_type") != "sidecar_lf_pca_gp":
         raise ValueError(f"{args.sidecar_bundle_path} is not a sidecar_lf_pca_gp bundle")
+    sidecar_target_error_mode = sidecar_bundle.get("training_options", {}).get(
+        "target_error_mode",
+        "legacy_linear_propagation",
+    )
 
     standard_input_columns = list(standard_bundle["input_columns"])
     slow_parameter_specs = _parameter_specs_for_columns(standard_input_columns)
@@ -596,6 +602,7 @@ def main() -> None:
         "n_sidecar_data": int(sidecar_posterior.target_vector.size),
         "include_emulator_variance": bool(args.include_emulator_variance),
         "target_sigma_floor": float(args.target_sigma_floor),
+        "sidecar_target_error_mode": sidecar_target_error_mode,
         "n_walkers": int(args.n_walkers),
         "n_steps": int(args.n_steps),
         "burn_in": int(args.burn_in),
@@ -646,6 +653,7 @@ def main() -> None:
             "parameter_names": parameter_names,
             "parameter_specs": parameter_specs,
             "slow_count": slow_count,
+            "sidecar_target_error_mode": sidecar_target_error_mode,
             "masks": masks,
             "best_theta": summary["best_theta"],
             "sampler_coordinates": summary["sampler_coordinates"],

@@ -18,6 +18,8 @@ import numpy as np
 from sklearn.exceptions import ConvergenceWarning
 
 from fit_sidecar_lf_pca_holdout_demo import (
+    TARGET_ERROR_MODE_LEGACY,
+    TARGET_ERROR_MODES,
     _alpha_log10,
     _bin_metadata,
     _input_columns,
@@ -59,6 +61,16 @@ def parse_args() -> argparse.Namespace:
         help="After other filters, keep the first N dust rows per Galacticus evaluation.",
     )
     parser.add_argument("--min-log10-lf", type=float, default=-8.0)
+    parser.add_argument(
+        "--target-error-mode",
+        choices=TARGET_ERROR_MODES,
+        default=TARGET_ERROR_MODE_LEGACY,
+        help=(
+            "How to convert H-alpha Sobral target LF errors into log10(Phi) space. "
+            "The default preserves legacy runs; use sobral_log_table for the "
+            "Sobral table's log-space errors."
+        ),
+    )
     parser.add_argument("--use-training-alpha", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--min-training-log10-sigma", type=float, default=1.0e-4)
     parser.add_argument("--max-training-log10-sigma", type=float, default=2.0)
@@ -96,6 +108,7 @@ def _json_safe_meta(bundle: dict) -> dict:
                 "observable_key": value["observable_key"],
                 "observable": value["observable"],
                 "sample_label": value["sample_label"],
+                "target_error_mode": value.get("target_error_mode"),
                 "n_bins": int(len(value["x_plot"])),
                 "pca_components_actual": int(value["pca_components_actual"]),
                 "pca_variance_threshold": value["pca_variance_threshold"],
@@ -141,7 +154,14 @@ def main() -> None:
             sample_label = sample_labels[0]
             bin_metadata = _bin_metadata(long_table, observable, sample_label, output_columns)
             x_plot = bin_metadata["log10_luminosity_center"].to_numpy(dtype=float)
-            target_plot, target_std_plot = _target_curve(campaign_root, observable, sample_label, x_plot, args.min_log10_lf)
+            target_plot, target_std_plot = _target_curve(
+                campaign_root,
+                observable,
+                sample_label,
+                x_plot,
+                args.min_log10_lf,
+                target_error_mode=args.target_error_mode,
+            )
             y, _floor = _log10_with_floor(table[output_columns].to_numpy(dtype=float), args.min_log10_lf)
             alpha = None
             if args.use_training_alpha:
@@ -168,6 +188,7 @@ def main() -> None:
             sidecar_bundle["observable"] = observable
             sidecar_bundle["key"] = key
             sidecar_bundle["label"] = f"{observable} {sample_label}"
+            sidecar_bundle["target_error_mode"] = args.target_error_mode
             observables[key] = sidecar_bundle
             observable_groups[observable].append(key)
 
@@ -188,6 +209,7 @@ def main() -> None:
             "dust_draw_index": args.dust_draw_index,
             "max_dust_draws_per_eval": args.max_dust_draws_per_eval,
             "min_log10_lf": args.min_log10_lf,
+            "target_error_mode": args.target_error_mode,
             "use_training_alpha": args.use_training_alpha,
             "min_training_log10_sigma": args.min_training_log10_sigma,
             "max_training_log10_sigma": args.max_training_log10_sigma,
