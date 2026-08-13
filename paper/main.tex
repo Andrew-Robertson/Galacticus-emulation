@@ -15,6 +15,7 @@
 \usepackage{booktabs}
 \usepackage{xspace}
 \usepackage{xcolor}
+\usepackage{multirow}
 
 \definecolor{darkgreen}{rgb}{0.0,0.45,0.0}
 
@@ -209,7 +210,7 @@ Compared with random sampling, this provides a more uniform coverage of paramete
 We generate Sobol points in the unit hypercube and transform each coordinate through the inverse cumulative distribution function of the corresponding parameter prior.
 As a result, the training density follows the prior density specified in Table~\ref{tab:parameters}, while retaining the space-filling properties of the Sobol design in prior-quantile space.
 The choice of 1024 training evaluations represents a compromise between reducing emulator error across the 20-dimensional parameter space and keeping the computational cost of the \galacticus{} runs manageable.
-In Section~\ref{sec:smf-example}, we quantify how emulator accuracy improves with training-set size by building emulators from subsets of the 1024 training runs.
+Section~\ref{sec:smf-example} uses the low-redshift stellar mass function as a concrete example to illustrate how emulator accuracy changes with training-set size.
 
 \subsection{Emission-Line And Dust Post-Processing}
 \label{sec:dust-postprocessing}
@@ -225,21 +226,115 @@ The current \ha{} calibration uses the Sobral \ha{} luminosity functions in four
 \subsection{Set Of Calibration Observables}
 \label{sec:calibration-observable-set}
 
-Each \galacticus{} evaluation produces a catalogue of galaxies at a set of output times.
-From these galaxies we can compute binned observable vectors, such as a stellar mass function or a size--mass relation.
-The emulator is trained to reproduce these vectors as a function of the varied \galacticus{} parameters.
-The calibration observables include stellar mass functions, the star-formation-rate function, size--mass relations, black-hole scaling relations, the gas-phase mass--metallicity relation, and the Sobral \ha{} luminosity functions.
-A compact per-observable summary is deferred to Appendix~\ref{app:observable-details}; in this section we describe the common emulation machinery.
+Each \galacticus{} evaluation produces a catalogue of galaxies at a set of
+output times. From these galaxies we compute binned observable vectors, such as
+stellar mass functions, luminosity functions, size--mass relations, and scaling
+relations. The emulator is trained to reproduce these vectors as a function of
+the varied \galacticus{} parameters.
 
-For each model evaluation, \galacticus{} returns both an estimate of the predicted observable vector and an estimate of the uncertainty on that vector.
-This uncertainty arises because each observable is constructed from a finite simulated galaxy population, with the relevant uncertainty model depending on the observable being analysed.
-We use this information when training the emulator, so that noisier training outputs are treated as less precise estimates of the underlying model prediction.
+The final calibration uses the observable set listed in
+Table~\ref{tab:calibration-observable-summary}. For number-density observables
+we denote the binned differential number density by $\Phi$, with the argument
+indicating the quantity being binned, for example $\Phi(M_\star)$ for a stellar
+mass function and $\Phi(L_{\mathrm{H}\alpha})$ for an \ha{} luminosity function.
+The final column of the table gives the transformed quantity passed to the
+emulator and used in the likelihood. This is also the space in which the
+emulator-validation RMSE values in Table~\ref{tab:emulator-validation-summary}
+are measured. For example, an RMSE of 0.1 for a luminosity or mass function
+means 0.1 dex in $\log_{10}\Phi$, not a linear number-density error.
+
+For each model evaluation, we also estimate the uncertainty on the predicted observable vector. This uncertainty arises because each observable is constructed from a finite simulated galaxy population, with the relevant uncertainty model depending on the observable being analysed. We use this information when training the emulator, so that noisier training outputs are treated as less precise estimates of the underlying model prediction. \todo{Could potentially describe the noise models used in a table or appendix or similar.}
+
+
+
+\begin{table*}
+\centering
+\caption{
+Calibration observables used in this work.
+The final joint fit uses all listed observables.
+$N_{\rm bin}$ is the number of binned data-vector elements entering the emulator
+and likelihood for the corresponding row.
+The emulated quantity defines the space used for emulator training and posterior
+inference, and is the space in which validation RMSE values are computed.}
+\label{tab:calibration-observable-summary}
+\begin{tabular}{@{}p{0.3\textwidth}p{0.18\textwidth}p{0.18\textwidth}p{0.13\textwidth}r@{}}
+\toprule
+Calibration observable & Reference data & Emulated quantity & Redshift & $N_{\rm bin}$ \\
+\midrule
+\multirow{2}{0.3\textwidth}{Stellar mass function}
+  & \multirow{2}{0.18\textwidth}{\citet{2014ApJ...783...85T}}
+  & \multirow{2}{0.18\textwidth}{$\log_{10}\Phi(M_\star)$}
+  & $0.20<z<0.50$ & 14 \\
+  & & & $1.00<z<1.25$ & 11 \\
+\addlinespace[0.5em]
+
+Star-formation-rate function
+  & \citet{2011MNRAS.416.2640R}
+  & $\log_{10}\Phi(\dot{M}_\star)$
+  & $0.013<z<0.1$ & 25 \\
+\addlinespace[0.5em]
+
+Size--mass relation (star-forming)
+  & \multirow{2}{0.18\textwidth}{\citet{2014ApJ...788...28V}}
+  & $\log_{10}R_{\rm eff}(M_\star)$
+  & $0<z<0.5$ & 4 \\
+
+Size--mass relation (quiescent)
+  & 
+  & $\log_{10}R_{\rm eff}(M_\star)$
+  & $0<z<0.5$ & 5 \\
+\addlinespace[0.5em]
+
+Black-hole--velocity-dispersion relation
+  & \citet{2013ApJ...764..184M}
+  & $\log_{10}M_{\rm BH}(\sigma_\star)$
+  & $z \approx 0$ & 5 \\
+  \addlinespace[0.5em]
+
+Gas-phase mass--metallicity relation
+  & \citet{2019ApJ...877....6B}
+  & $12+\log_{10}({\rm O/H})$
+  & $z \approx 0$ & 49 \\
+\addlinespace[0.5em]
+
+\multirow{4}{0.3\textwidth}{\ha{} luminosity function}
+  & \multirow{4}{0.18\textwidth}{\citet{2013MNRAS.428.1128S}}
+  & \multirow{4}{0.18\textwidth}{$\log_{10}\Phi(L_{\mathrm{H}\alpha})$}
+  & $z=0.40$ & 18 \\
+  & & & $z=0.84$ & 9 \\
+  & & & $z=1.47$ & 13 \\
+  & & & $z=2.23$ & 15 \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
 
 \subsubsection{Observable-Space Transformations}
 
-For observables whose native values are positive densities or relations plotted logarithmically, we transform the model and target values into log-space before emulation.
-For the stellar mass functions shown below, this means that the emulator is learning the logarithm of the number density in each stellar-mass bin.
-\todo{Make the treatment of non-positive values exact per observable using the metadata: nonpositive vs zero-only, bin-median vs keep, bad-training sigma, and minimum sigma.}
+For observables that span a large dynamic range across \galacticus{} parameter
+space, we emulate logarithmic quantities.  For number-density observables this
+means emulating $\log_{10}\Phi$ rather than $\Phi$ itself.  At fixed stellar
+mass, star formation rate, or emission-line luminosity, changes in the
+\galacticus{} parameters can produce order-of-magnitude changes in the
+predicted number density.  The logarithmic transformation therefore gives a
+smoother emulator target across parameter space and makes emulator errors more closely related to fractional differences in $\Phi$, matching the scale on which luminosity
+and mass functions are usually compared.
+
+We use the same approach for other positive quantities with broad dynamic
+range.  The size--mass relations are emulated as $\log_{10}R_{\rm eff}$ and
+the black-hole scaling relation as $\log_{10}M_{\rm BH}$.  The gas-phase
+mass--metallicity relation is already conventionally expressed as
+$12+\log_{10}({\rm O/H})$, and is emulated in that form.
+
+Some training-set predictions are undefined after these transformations. For
+example, a model may produce no galaxies in a stellar-mass-function bin, so that
+$\log_{10}\Phi$ is undefined, or no quiescent galaxies at
+$M_\star \simeq 10^{11.2} \msun$, so that the median half-light radius in that bin
+is undefined. These cases arise when an observational bin is included in the
+calibration data but a particular \galacticus{} model produces no corresponding
+galaxies, most often at the high-mass or high-luminosity end and in sparsely
+populated subsamples. We therefore replace non-positive number densities by a small positive floor before taking the logarithm. For undefined binned quantities such as median sizes, we replace the missing value with a representative value derived from the valid training-set predictions and assign it a large training uncertainty, so that the assigned value carries very little weight when fitting the emulator. The detailed floor and missing-value procedure is described in Appendix~\ref{app:missing-values}.
+
 
 \subsubsection{Principal-Component Compression}
 
@@ -413,7 +508,7 @@ We therefore adopt the 1024-run training set as a practical compromise between e
 
 Figure~\ref{fig:training_size} also compares different levels of PCA compression.
 We retain 99 per cent of the PCA variance in the fiducial emulator, which keeps the number of GP models manageable while preserving the coherent response of neighbouring bins.
-The same broad behaviour is seen in held-out tests of the other calibration observables, although the absolute emulator accuracy varies between observables and bins.
+We use this example to build intuition for the validation procedure; the final check on the emulator at the calibrated parameter values is the direct \galacticus{} validation described in Section~\ref{sec:direct-map-validation}.
 
 
 \begin{figure*}
@@ -500,6 +595,23 @@ A minimum uncertainty floor of $10^{-3}$ is imposed in the transformed observabl
 The final calibration combines 113 non-\ha{} observable bins with 55 \ha{} luminosity-function bins.
 The \ha{} likelihood is evaluated in $\log_{10}[\Phi/({\rm Mpc}^{-3}\,{\rm dex}^{-1})]$, using the Sobral et al. target uncertainties propagated into this log-space quantity.
 Emulator uncertainties are included for all observable blocks in the final calibration.
+
+For number-density observables whose target uncertainties are supplied in
+linear space, we convert the diagonal uncertainty to log space using
+first-order propagation,
+\begin{equation}
+  \sigma_{\log_{10}\Phi}
+  \simeq
+  \frac{\sigma_\Phi}{\Phi\ln 10}.
+\end{equation}
+For the Sobral et al. \ha{} luminosity functions we instead use the tabulated
+uncertainties in $\log_{10}\Phi$ directly.
+
+This gives a simple Gaussian likelihood in the transformed observable space.
+The approximation is most appropriate when the fractional uncertainties are
+moderate; sparsely populated number-density bins have intrinsically asymmetric
+counting uncertainties, which are only approximately represented by a symmetric
+Gaussian error bar in $\log_{10}\Phi$.
 
 \subsection{MCMC Sampling And Convergence}
 \label{sec:mcmc-sampling}
@@ -677,15 +789,55 @@ This work made use of \todo{Astropy, emcee, GetDist, h5py, Matplotlib, NumPy, pa
 \section{Observable And Emulator Details}
 \label{app:observable-details}
 
-\subsection{Calibration Observable Summary}
-\label{app:observable-summary}
 
-\todo{Add a compact table listing every calibration observable, reference dataset, redshift range, number of bins, fitted transformed quantity, and whether it enters diagnostic subset fits or only the final joint calibration.}
-
-\subsection{Per-Observable Transformations And PCA Components}
+\subsection{Observable Transformations And Compression}
 \label{app:observable-transformations}
 
 \todo{Add per-observable transformation rules and PCA component counts selected by the 99 per cent variance threshold.}
+
+\subsection{Held-Out Emulator Validation Summary}
+\label{app:emulator-validation-summary}
+
+Table~\ref{tab:emulator-validation-summary} summarizes the held-out tests for the non-\ha{} observable emulators used in the calibration.
+If the quoted emulator uncertainties were exactly right, the RMSE divided by the emulator error would be close to one, and about 68 and 95 per cent of held-out predictions would fall within the quoted one- and two-sigma error bars.
+The table is close to this expectation, but the RMSE/error values are usually a little larger than one and the two-sigma coverage is slightly below 95 per cent.
+This means that the emulator error bars are somewhat too small in these tests.
+That level of mismatch is not surprising: the GP error bars do not include every approximation in the emulator construction, such as the finite choice of kernel, the finite PCA basis, and the approximate treatment of noisy training outputs.
+We therefore treat the held-out tests as a check on the scale of the emulator error, and use the direct \galacticus{} MAP validation in Section~\ref{sec:direct-map-validation} as a complementary check at the parameter point used for the final calibration.
+
+% Table provenance:
+% Metrics are medians over non-"all" bin rows from
+% runs/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced/cross_validation/training_size_convergence/kfold_5/*_metrics.csv,
+% selecting emulator_type=pca, subset_size=1024, and validation_mode=kfold.
+% N_PC values are the full production emulator component counts from
+% runs/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced/automatedPipeline_transformedParams_finalPaper_definitive/emulators/standard_observables/pca_99/standard_observables_bundle.meta.json.
+\begin{table*}
+\centering
+\caption{
+Five-fold held-out validation summary for the non-\ha{} calibration-observable emulators trained from the full 1024-run campaign.
+Each row summarizes the PCA-GP emulator for one observable block.
+$N_{\rm bin}$ and $N_{\rm PC}$ correspond to the full emulator trained on all 1024 \galacticus{} runs.
+For the cross-validation calculation, the full emulator construction is repeated independently in each fold.
+The remaining entries are medians over the bins retained by the full emulator.
+RMSE is measured in the transformed observable space used by the emulator and likelihood.
+$f_{1\sigma}$ and $f_{2\sigma}$ give the fractions of held-out predictions whose direct \galacticus{} values lie within the corresponding emulator uncertainty interval.
+The \ha{} LF emulator is not included because an analogous grouped-CV summary has not yet been generated for the production sidecar LF emulator.
+}
+\label{tab:emulator-validation-summary}
+\begin{tabular}{p{0.34\textwidth}rrrrrrr}
+\toprule
+Observable block & $N_{\rm bin}$ & $N_{\rm PC}$ & RMSE & $R^2$ & RMSE/$\sigma_{\rm emu}$ & $f_{1\sigma}$ & $f_{2\sigma}$ \\
+\midrule
+Black-hole--velocity-dispersion relation & 5 & 4 & 0.32 & 0.79 & 1.47 & 0.62 & 0.88 \\
+ZFOURGE stellar mass function, $0.20<z<0.50$ & 14 & 6 & 0.11 & 0.92 & 1.24 & 0.69 & 0.92 \\
+ZFOURGE stellar mass function, $1.00<z<1.25$ & 11 & 4 & 0.24 & 0.92 & 1.36 & 0.63 & 0.89 \\
+Blanc et al. gas-phase mass--metallicity relation & 49 & 6 & 0.08 & 0.89 & 1.46 & 0.61 & 0.89 \\
+Robotham et al. star-formation-rate function & 25 & 7 & 0.11 & 0.88 & 1.11 & 0.69 & 0.93 \\
+van der Wel et al. size--mass relation, star-forming & 4 & 3 & 0.05 & 0.90 & 1.15 & 0.69 & 0.92 \\
+van der Wel et al. size--mass relation, quiescent & 5 & 4 & 0.06 & 0.84 & 1.19 & 0.70 & 0.92 \\
+\bottomrule
+\end{tabular}
+\end{table*}
 
 \subsection{Treatment Of Missing, Zero, Or Non-Positive Training Values}
 \label{app:missing-values}
