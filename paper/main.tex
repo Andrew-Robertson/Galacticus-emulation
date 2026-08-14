@@ -215,10 +215,23 @@ Section~\ref{sec:smf-example} uses the low-redshift stellar mass function as a c
 \subsection{Emission-Line And Dust Post-Processing}
 \label{sec:dust-postprocessing}
 
+
+
 To connect the calibrated galaxy population to Roman grism observables, we augment the standard \galacticus{} outputs with emission-line luminosities and dust attenuation.
-The training campaign runs sidecar post-processing for emission-line luminosity functions using the \texttt{emission\_line\_dust} products.
-The current \ha{} calibration uses the Sobral \ha{} luminosity functions in four redshift samples, labelled Z1--Z4 in the pipeline.
+For each \galacticus{} training run, we compute emission-line luminosity functions in post-processing using the \texttt{emission\_line\_dust} products.
+The current \ha{} calibration uses the Sobral \ha{} luminosity functions in four redshift samples.
 \todo{Describe exactly how intrinsic line luminosities are computed, how dust is applied, and which dust parameters are varied. Add relation to Galacticus-dust-modelling package if appropriate.}
+
+For each \galacticus{} training run, the emission-line luminosity functions are
+computed in post-processing for a set of dust-model parameter draws.  The four
+attenuation-shift parameters are drawn independently from normal priors with
+mean zero and standard deviation 0.5, while the attenuation-scatter parameter is
+drawn from a truncated normal prior with mean 0.25 and standard deviation 0.1,
+truncated at zero.  Although 16 dust draws are stored for each \galacticus{} run,
+the fiducial emulator uses one dust draw per run.  Tests with an earlier 512-run
+campaign showed that using two or four dust draws per run produced only modest
+improvements in held-out H\alpha luminosity-function predictions, so we adopt
+one draw per run for simplicity and faster emulator training.
 
 \section{Emulating Calibration Observables}
 \label{sec:emulator}
@@ -237,13 +250,10 @@ Table~\ref{tab:calibration-observable-summary}. For number-density observables
 we denote the binned differential number density by $\Phi$, with the argument
 indicating the quantity being binned, for example $\Phi(M_\star)$ for a stellar
 mass function and $\Phi(L_{\mathrm{H}\alpha})$ for an \ha{} luminosity function.
-The final column of the table gives the transformed quantity passed to the
-emulator and used in the likelihood. This is also the space in which the
-emulator-validation RMSE values in Table~\ref{tab:emulator-validation-summary}
-are measured. For example, an RMSE of 0.1 for a luminosity or mass function
-means 0.1 dex in $\log_{10}\Phi$, not a linear number-density error.
+The emulated-quantity column of the table gives the transformed quantity
+passed to the emulator and used in the likelihood. %This is also the space in which the emulator-validation RMSE values in Table~\ref{tab:emulator-validation-summary} are measured. For example, an RMSE of 0.1 for a luminosity or mass function means 0.1 dex in $\log_{10}\Phi$, not a linear number-density error.
 
-For each model evaluation, we also estimate the uncertainty on the predicted observable vector. This uncertainty arises because each observable is constructed from a finite simulated galaxy population, with the relevant uncertainty model depending on the observable being analysed. We use this information when training the emulator, so that noisier training outputs are treated as less precise estimates of the underlying model prediction. \todo{Could potentially describe the noise models used in a table or appendix or similar.}
+For each model evaluation, we also estimate the uncertainty on the predicted observable vector. This uncertainty arises because each observable is constructed from a finite simulated galaxy population, with the relevant uncertainty model depending on the observable being analysed. We use this information when training the emulator, so that noisier training outputs are treated as less precise estimates of the underlying model prediction. \todo{Should describe the noise models used in a table or appendix or similar (or point to Galacticus documentation or similar).}
 
 
 
@@ -317,7 +327,7 @@ means emulating $\log_{10}\Phi$ rather than $\Phi$ itself.  At fixed stellar
 mass, star formation rate, or emission-line luminosity, changes in the
 \galacticus{} parameters can produce order-of-magnitude changes in the
 predicted number density.  The logarithmic transformation therefore gives a
-smoother emulator target across parameter space and makes emulator errors more closely related to fractional differences in $\Phi$, matching the scale on which luminosity
+smoother emulator target across parameter space and makes emulator errors more closely related to fractional differences in $\Phi$, matching the space in which luminosity
 and mass functions are usually compared.
 
 We use the same approach for other positive quantities with broad dynamic
@@ -328,47 +338,60 @@ $12+\log_{10}({\rm O/H})$, and is emulated in that form.
 
 Some training-set predictions are undefined after these transformations. For
 example, a model may produce no galaxies in a stellar-mass-function bin, so that
-$\log_{10}\Phi$ is undefined, or no quiescent galaxies at
-$M_\star \simeq 10^{11.2} \msun$, so that the median half-light radius in that bin
-is undefined. These cases arise when an observational bin is included in the
-calibration data but a particular \galacticus{} model produces no corresponding
-galaxies, most often at the high-mass or high-luminosity end and in sparsely
-populated subsamples. We therefore replace non-positive number densities by a small positive floor before taking the logarithm. For undefined binned quantities such as median sizes, we replace the missing value with a representative value derived from the valid training-set predictions and assign it a large training uncertainty, so that the assigned value carries very little weight when fitting the emulator. The detailed floor and missing-value procedure is described in Appendix~\ref{app:missing-values}.
+$\log_{10}\Phi$ is undefined, or no quiescent galaxies in a particular stellar-mass bin, so that their median half-light radius is undefined. We treat these cases differently depending on the observable. For number densities, we impose a small positive floor before taking the logarithm. For undefined binned quantities such as median sizes, we replace the missing value with a representative value derived from the valid training-set predictions and assign it a large training uncertainty, so that the assigned value carries very little weight when fitting the emulator. The detailed floor and missing-value procedure is described in Appendix~\ref{app:missing-values}.
 
 
 \subsubsection{Principal-Component Compression}
 
-One possible approach would be to build a separate Gaussian process for every bin of every observable: for example, one emulator for the number density of galaxies at $M_\star\simeq10^{10}\msun$, another at $M_\star\simeq2\times10^{10}\msun$, and so on.
+A simple approach to emulating each observable would be to build a separate emulator for every bin: for example, one emulator for the number density of galaxies at $M_\star\simeq10^{10}\msun$, another at $M_\star\simeq2\times10^{10}\msun$, and so on.
 This is straightforward, but it treats neighbouring bins as independent targets even though changes in \galacticus{} parameters usually move the predictions coherently across an observable.
-For example, a change in feedback strength may shift the amplitude, slope, or knee of a stellar mass function, rather than perturbing each stellar-mass bin independently.
+For example, some change in feedback strength will typically shift the amplitude, slope, or knee of a stellar mass function, rather than perturbing each stellar-mass bin independently.
 
 We therefore use principal-component analysis (PCA) to compress each observable vector before emulation.
-This reduces the number of Gaussian processes that must be trained and evaluated, and can also improve performance when the training set is sparse because the emulator is asked to learn the dominant coherent modes of variation rather than noise or poorly constrained bin-to-bin fluctuations.
-PCA--GP emulators are commonly used for expensive simulation outputs with many correlated bins, including recent applications to cosmological and galaxy-formation inference \citep[e.g.][]{2026arXiv260107306R}.
-For a given observable, let
+This reduces the number of emulators that must be trained and evaluated, and can improve predictive accuracy by exploiting correlations in how the different bins of an observable vary across parameter space.
+Principal-component compression is commonly used when emulating expensive simulation outputs with many correlated bins, including recent applications to cosmological and galaxy-formation inference \citep[e.g.][]{2026arXiv260107306R}.
+For a given observable, let $\boldsymbol{\theta}$ denote the model parameters on which its prediction depends (namely, the \galacticus{} parameters, as well as potentially the dust model parameters), and let
 \begin{equation}
   \mathbf{y}(\boldsymbol{\theta})
   =
   \left(y_1(\boldsymbol{\theta}), \ldots, y_{N_{\rm bin}}(\boldsymbol{\theta})\right)
 \end{equation}
-be the vector of model predictions in the bins used for that observable, after applying any pre-processing used for the emulator.
-For the low-redshift stellar mass function, for example, $y_b(\boldsymbol{\theta})=\log_{10}\Phi_b(\boldsymbol{\theta})$, where $\Phi_b$ is the predicted number density in the $b$th stellar-mass bin.
-For each \galacticus{} run in the training set we have one such vector, so the training data for this observable form an $N_{\rm train}\times N_{\rm bin}$ matrix.
-We standardise each bin using the training-set mean and scale, fit a PCA basis, and retain the number of components required to explain 99 per cent of the training-set variance.
-The emulator therefore predicts the PCA coefficients,
-\begin{equation}
-  \mathbf{y}(\boldsymbol{\theta}) \simeq
-  \boldsymbol{\mu}
-  + \mathbf{S}
-  \left[
-    \mathbf{m}_{\rm PCA}
-    + \sum_{k=1}^{K} a_k(\boldsymbol{\theta}) \mathbf{e}_k
-  \right],
-\end{equation}
-where $\boldsymbol{\mu}$ and $\mathbf{S}$ are the bin-wise standardisation vectors, $\mathbf{m}_{\rm PCA}$ is the PCA mean in standardised space, $\mathbf{e}_k$ are the retained PCA components, and $a_k$ are the PCA coefficients.
-\todo{Check notation against actual implementation: scikit-learn StandardScaler followed by PCA; inverse transform uses coefficient predictions times component matrix plus PCA mean, then undo standardisation.}
+be the vector of model predictions in the bins used for that observable.
+For the stellar mass function, for example, $y_b(\boldsymbol{\theta})=\log_{10}\Phi_b(\boldsymbol{\theta})$, where $\Phi_b$ is the predicted number density in the $b$th stellar-mass bin.
+For each \galacticus{} run in the training set we have one such vector, so the training data for this observable form an $N_{\rm train}\times N_{\rm bin}$ matrix; we use $n$ to index the individual \galacticus{} runs in the training set.
 
-For comparison and diagnostic plots, we also trained bin-by-bin Gaussian-process emulators.
+We first standardise each bin using its mean, $\mu_b$, and
+standard deviation, $s_b$, across the training-set runs. For training-set run $n$, the standardised value in
+bin $b$ is
+\begin{equation}
+  z_{nb} =
+  \frac{y_b(\boldsymbol{\theta}_n)-\mu_b}{s_b}.
+\end{equation}
+We then apply PCA to the resulting $N_{\rm train}\times N_{\rm bin}$ matrix
+with elements $z_{nb}$.
+PCA defines an orthonormal set
+of directions, $\mathbf{e}_k$, in observable-bin space, ordered by the variance
+of the training set projected along each direction \citep[e.g.][]{2016RSPTA.37450202J}.
+For training model $n$, its coefficient along component $k$ is
+\begin{equation}
+  a_{nk} = \mathbf{e}_k\cdot\mathbf{z}_n
+         = \sum_b e_{kb} z_{nb}.
+\end{equation}
+We retain the smallest number of components, $K$, required to explain 99 per
+cent of the variance in the standardised training set.
+The quantities $a_{nk}$ are then the training targets for the emulator associated with component $k$; after training, the emulator predicts the corresponding coefficient, $a_k(\boldsymbol{\theta})$, at new parameter values.
+The predicted observable vector in standardised observable space is reconstructed as
+\begin{equation}
+  \mathbf{z}(\boldsymbol{\theta}) \simeq
+  \sum_{k=1}^{K} a_k(\boldsymbol{\theta}) \mathbf{e}_k.
+\end{equation}
+Finally, we undo the bin-wise standardisation to recover the emulator target in each bin,
+\begin{equation}
+  y_b(\boldsymbol{\theta}) \simeq
+  \mu_b + s_b z_b(\boldsymbol{\theta}).
+\end{equation}
+
+For comparison and diagnostic plots, we also train bin-by-bin emulators.
 The main calibration results use PCA emulators with a 99 per cent variance threshold; the cross-validation tests below show why this is a reasonable choice.
 
 \subsection{Gaussian-Process Emulators}
@@ -376,19 +399,23 @@ The main calibration results use PCA emulators with a 99 per cent variance thres
 
 Each retained PCA coefficient is modelled with a Gaussian process as a function of the input parameters.
 The same basic GP choices are used for the emulators compared below, so that the validation tests mainly probe the effects of training-set size and PCA compression.
-The GP inputs are not the physical parameter values themselves, but the corresponding prior quantiles.
-That is, for parameter $\theta_i$ with prior cumulative distribution function $P_i(<\theta_i)$, we train the emulator using
+For the 20 \galacticus{} parameters, the GP inputs are not the physical parameter values themselves, but the corresponding prior quantiles.
+That is, for \galacticus{} parameter $\theta_i$ with prior cumulative distribution function $P_i(<\theta_i)$, we train the emulator using
 \begin{equation}
   u_i = P_i(<\theta_i),
 \end{equation}
-so that every training point lies in the unit hypercube defined by $0<u_i<1$.
-This is the space in which the Sobol design was constructed, and is therefore the space in which the training data are most nearly space filling.
+so that each input parameter is mapped onto the unit interval.
+This is the space in which the Sobol design was constructed, and is therefore the space in which the training data are approximately space filling.
 It also avoids asking the GP to learn across raw parameters with very different units, ranges, and prior shapes; a fixed distance in $u_i$ corresponds to the same amount of prior probability for each parameter.
+The \ha{} luminosity-function emulator has five additional inputs: the dust post-processing parameters described in Section~\ref{sec:dust-postprocessing}.
+Unlike the \galacticus{} parameters, these dust parameters are supplied to the GP as their model-parameter values, not as prior quantiles.
 
-Before fitting each GP, the target coefficient is standardised by subtracting its training-set mean and dividing by its training-set standard deviation.
-The kernel specifies the covariance between the values of the function at two points in parameter space.
-We use a Mat\'ern kernel with $\nu=2.5$, multiplied by a constant amplitude, and allow a separate length scale for each input parameter.
-For two points in prior-quantile space, $\mathbf{u}$ and $\mathbf{u}'$, the kernel is
+After the PCA transformation, each retained coefficient is standardised once more before fitting its GP, by subtracting its training-set mean and dividing by its training-set standard deviation.
+This is separate from the bin-wise standardisation applied before PCA, and is undone before reconstructing the observable vector.
+Let $\mathbf{u}$ denote the complete input vector supplied to a given GP after the input transformations just described.
+The kernel specifies the covariance between the values of the function at two points in this input space.
+We use a Mat\'ern kernel with $\nu=2.5$, multiplied by a constant amplitude, and allow a separate length scale for each input coordinate.
+For two input vectors, $\mathbf{u}$ and $\mathbf{u}'$, the kernel is
 \begin{equation}
   k(\mathbf{u},\mathbf{u}')
   =
@@ -400,42 +427,51 @@ where
 \begin{equation}
   r^2 = \sum_i \left(\frac{u_i-u_i'}{\ell_i}\right)^2.
 \end{equation}
-Here $A$ is the covariance amplitude and $\ell_i$ is the length scale associated with the $i$th \galacticus{} parameter.
-Small values of $\ell_i$ allow the emulator prediction to vary rapidly as that parameter is changed, while large values correspond to a smoother, less sensitive dependence.
-For each PCA coefficient, the kernel hyperparameters are therefore the overall covariance amplitude and the 20 length scales describing how rapidly that coefficient changes as each \galacticus{} parameter is varied in prior-quantile space.
+Here $A$ is the covariance amplitude and $\ell_i$ is the length scale associated with the $i$th emulator input.
+Small values of $\ell_i$ allow the emulator prediction to vary rapidly as that input coordinate is changed, while large values correspond to smoother variation.
+For each PCA coefficient, the kernel hyperparameters are therefore the overall covariance amplitude and one length scale for each emulator input.
+There are 20 length scales for the emulators of the non-\ha{} calibration observables and 25 for the \ha{} luminosity-function emulators, which also include the five dust parameters.
 We choose these hyperparameters by maximising the GP log marginal likelihood \citep{2006gpml.book.....R}.
 In practice this maximisation is carried out with the L-BFGS-B algorithm, subject to the bounds on the kernel amplitude and length scales.
-Because the log marginal likelihood can have multiple local optima, we repeat the optimisation from four additional starting points, randomly drawn within the allowed hyperparameter bounds, and keep the solution with the largest log marginal likelihood.
-\todo{Check whether any final runs use an added white-noise kernel; the current default does not.}
+Because the log marginal likelihood can have multiple local optima, the final emulators use five optimisations in total: one from the default initial kernel hyperparameters and four additional starting points randomly drawn within the allowed hyperparameter bounds.
+We keep the solution with the largest log marginal likelihood.
+The final emulators do not include an additional fitted white-noise kernel; the estimated heteroscedastic training-output noise enters through the diagonal noise term described below.
 
 \subsubsection{Emulator Training Uncertainties}
 
 Where available, we include the estimated uncertainty in the training outputs by adding a diagonal noise term to the GP covariance matrix \citep[e.g.][]{2006gpml.book.....R}.
 In the notation used by \texttt{scikit-learn}, this diagonal variance contribution is the \texttt{alpha} parameter; here we refer to its square root as the training-output uncertainty.
-These uncertainties are provided by the \galacticus{} output analyses for each binned observable, using the covariance model associated with that analysis.
-For example, the stellar mass function analysis uses a binomial covariance model rather than a simple Poisson error estimate.
-For a bin-by-bin emulator, if the transformed observable value in bin $b$ has training-output uncertainty $\sigma_b$, the corresponding variance $\sigma_b^2$ is passed directly to the GP for that bin.
-For the PCA emulator, we instead need an approximate variance for each PCA coefficient.
+For emulator training, we represent the finite-sampling uncertainty of each binned observable by a per-bin variance in the transformed observable space.
+This corresponds to a diagonal training-noise approximation for the emulator: each training model and observable bin can have its own uncertainty, but inter-bin correlations are not propagated through the GP training.
+For example, the stellar mass function per-bin variances are estimated from a binomial finite-sampling model rather than from simple Poisson errors.
+This approximation is tested empirically by the held-out validation below.
 
-Let $y_b$ be the transformed observable in bin $b$, and let the standardised observable be
+For a PCA emulator, the per-bin training uncertainties must be propagated to the retained PCA coefficients.
+Let $y_{nb}$ be the transformed observable for training model $n$ in bin $b$, with variance $\sigma_{nb}^2$.
+Using the bin-wise standardisation defined above,
 \begin{equation}
-  z_b = \frac{y_b-\mu_b}{s_b},
+  z_{nb} = \frac{y_{nb}-\mu_b}{s_b},
 \end{equation}
-where $\mu_b$ and $s_b$ are the mean and standard deviation used in the pre-processing step.
-If the variance of $y_b$ is $\sigma_b^2$, then the variance of $z_b$ is
+the corresponding variance is
 \begin{equation}
-  {\rm Var}(z_b) = \frac{\sigma_b^2}{s_b^2}.
+  {\rm Var}(z_{nb}) = \frac{\sigma_{nb}^2}{s_b^2}.
 \end{equation}
 The PCA coefficient for component $k$ is
 \begin{equation}
-  a_k = \sum_b e_{kb}\,(z_b-\bar{z}_b),
+  a_{nk} = \sum_b e_{kb} z_{nb},
 \end{equation}
 where $e_{kb}$ is the $b$th element of the $k$th PCA component.
-Neglecting covariance between bins in the training uncertainty, we assign this coefficient the variance
+Under the diagonal training-noise approximation, we assign this coefficient the variance
 \begin{equation}
-  {\rm Var}(a_k) \simeq \sum_b e_{kb}^2\,\frac{\sigma_b^2}{s_b^2}.
+  {\rm Var}(a_{nk}) \simeq
+  \sum_b e_{kb}^2\,\frac{\sigma_{nb}^2}{s_b^2}.
 \end{equation}
-This is the variance used as the diagonal noise term when fitting the GP for PCA coefficient $a_k$.
+Finally, because the scalar GP for coefficient $k$ is fitted to the standardised coefficient
+\begin{equation}
+  \tilde{a}_{nk} = \frac{a_{nk}-\bar{a}_k}{q_k},
+\end{equation}
+where $\bar{a}_k$ and $q_k$ are the training-set mean and standard deviation of that coefficient, the variance supplied as \texttt{alpha} for that GP is ${\rm Var}(a_{nk})/q_k^2$.
+For a bin-by-bin emulator, the analogous operation is simply to divide the per-bin transformed-space variance by the variance used to standardise the scalar GP target for that bin.
 
 The distinction between emulator uncertainty and model uncertainty is important for the calibration.
 A GP prediction has both a mean and a predictive variance.
@@ -545,7 +581,7 @@ The improvement from smaller training subsets to the full 1024-run training set 
 We use two kinds of MCMC fit.
 First, we run a small set of diagnostic fits to subsets of the calibration data to illustrate how different observables constrain different combinations of \galacticus{} parameters.
 The example shown in Section~\ref{sec:degeneracy-breaking} uses stellar mass functions, size--mass relations, and the star-formation-rate function, both separately and jointly.
-Second, we run the final joint calibration using the full set of calibration observables summarized in Appendix~\ref{app:observable-summary}, including the Sobral \ha{} luminosity functions.
+Second, we run the final joint calibration using the full set of calibration observables summarized in Table~\ref{tab:calibration-observable-summary}, including the Sobral \ha{} luminosity functions.
 The final emulators are trained on the 1024-run Sobol campaign described in Section~\ref{sec:emulator-training-set}; no posterior-focused \galacticus{} evaluations are added to the emulator training set.
 The final joint fit samples the 20 \galacticus{} parameters in Table~\ref{tab:parameters} together with the five dust parameters described in Appendix~\ref{app:dust-model-details}.
 
@@ -675,9 +711,9 @@ Posterior constraints from individual diagnostic calibrations and their joint fi
 \label{sec:final-joint-calibration}
 
 We then sample the posterior using all calibration observables, combining the emulator for the non-\ha{} observables with the \ha{} luminosity-function emulator.
-The \ha{} luminosity-function emulator is trained from the sidecar emission-line-dust table.
+The \ha{} luminosity-function emulator is trained from emission-line luminosity functions computed by dust post-processing the \galacticus{} training runs.
 For the fiducial configuration, we train on the four Sobral redshift samples, retain PCA components explaining 99 per cent of the variance, use GP training uncertainties, and optimise GP hyperparameters as described in Section~\ref{sec:emulator}.
-\todo{Confirm final dust-draw choice and the exact sidecar training-row accounting.}
+\todo{Confirm final dust-draw choice and the exact emission-line luminosity-function training-row accounting.}
 
 \begin{figure*}
 \centering
@@ -821,7 +857,7 @@ For the cross-validation calculation, the full emulator construction is repeated
 The remaining entries are medians over the bins retained by the full emulator.
 RMSE is measured in the transformed observable space used by the emulator and likelihood.
 $f_{1\sigma}$ and $f_{2\sigma}$ give the fractions of held-out predictions whose direct \galacticus{} values lie within the corresponding emulator uncertainty interval.
-The \ha{} LF emulator is not included because an analogous grouped-CV summary has not yet been generated for the production sidecar LF emulator.
+The \ha{} LF emulator is not included because an analogous grouped-CV summary has not yet been generated for the production emission-line luminosity-function emulator.
 }
 \label{tab:emulator-validation-summary}
 \begin{tabular}{p{0.34\textwidth}rrrrrrr}
@@ -852,6 +888,6 @@ van der Wel et al. size--mass relation, quiescent & 5 & 4 & 0.06 & 0.84 & 1.19 &
 \section{Emission-Line Dust Model Details}
 \label{app:dust-model-details}
 
-\todo{Describe the intrinsic emission-line luminosity calculation, the dust attenuation law, the five dust parameters, their priors, and the sidecar post-processing used for the Sobral \ha{} luminosity functions.}
+\todo{Describe the intrinsic emission-line luminosity calculation, the dust attenuation law, the five dust parameters, their priors, and the post-processing used for the Sobral \ha{} luminosity functions.}
 
 \end{document}
