@@ -1,15 +1,20 @@
 # Interactive Emulator App
 
-The repository includes small pre-trained emulator bundles that can be
-explored with browser sliders. They provide a quick way to see how changes to
-Galacticus parameters affect predicted observables without running Galacticus
-or training an emulator.
+The interactive app uses browser sliders to show how changes to Galacticus
+parameters affect predicted observables without running Galacticus or training
+an emulator. The hosted version uses a compact pre-trained bundle, while the
+local launcher automatically uses the larger paper emulators when they are
+available.
 
 ## Hosted Demo
 
-The checked-in demonstration emulators are available at:
+The hosted multi-observable emulator is available at:
 
 <https://galacticus-emulation.onrender.com>
+
+The current hosted bundle was trained on 512 runs spanning 19 Galacticus
+parameters. It is a compact predecessor of the paper emulator, not the final
+1024-run, 20-parameter model used in the analysis.
 
 ## Run The Demonstrations Locally
 
@@ -19,9 +24,10 @@ After installing GalacticEmu, run this command from the repository root:
 python scripts/serve_interactive_fastapi_demo.py
 ```
 
-Then open <http://127.0.0.1:8010/>. The landing page links to the available
-stellar mass function, H-alpha luminosity function, and multi-observable
-demonstrations.
+Then open <http://127.0.0.1:8010/>. When the paper campaign is present in its
+default location, the landing page provides the standard-observable suite and
+the emission-line luminosity functions. Without those files, it falls back to
+the compact checked-in standard-observable emulator.
 
 ## Use The Full Paper Emulators
 
@@ -66,14 +72,6 @@ With both paper bundles present, the landing page should show:
   bundle.
 - `Interactive Emission-Line LFs`, backed by the H-alpha Sobral sidecar LF
   PCA-GP bundle, when that bundle is present.
-
-By default this launcher hides the small checked-in SMF and H-alpha
-demonstrations so the app is focused on the paper campaign. To show those
-demonstrations as well, pass:
-
-```bash
-python scripts/serve_pipeline_emulator_app.py --include-demo-defaults
-```
 
 ## Run Your Own Campaign
 

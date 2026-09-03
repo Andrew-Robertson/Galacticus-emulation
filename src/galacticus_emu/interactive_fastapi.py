@@ -110,7 +110,11 @@ def _inject_api_base(html_text: str, api_base: str) -> str:
 
 
 def _bundle_enabled(flag_name: str, path: Path) -> bool:
-    return _env_flag(flag_name, default=True) and path.exists()
+    default_enabled = flag_name not in {
+        "INTERACTIVE_SMF_ENABLED",
+        "INTERACTIVE_HALPHA_ENABLED",
+    }
+    return _env_flag(flag_name, default=default_enabled) and path.exists()
 
 
 @lru_cache(maxsize=1)
@@ -413,8 +417,8 @@ def _landing_page() -> str:
   <main class="page">
     <h1>Galacticus Emulator Demo Hub</h1>
     <p class="subhead">
-      Small interactive viewers for pre-trained Galacticus emulators. These are designed to be cheap
-      to host: training happens offline, and the web app only loads a saved bundle and evaluates it live.
+      Explore how Galacticus observables respond as the model parameters change. The emulators are
+      trained offline, and the web app evaluates their saved predictions live.
     </p>
     <section class="grid">
       {"".join(cards)}

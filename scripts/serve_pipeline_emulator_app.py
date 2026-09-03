@@ -138,9 +138,9 @@ def _set_app_environment(args: argparse.Namespace) -> None:
     pipeline_root = emulator_root.parent
     os.environ["GALACTICUS_EMU_PROJECT_ROOT"] = str(REPO_ROOT)
 
-    if not args.include_demo_defaults:
-        os.environ["INTERACTIVE_SMF_ENABLED"] = "0"
-        os.environ["INTERACTIVE_HALPHA_ENABLED"] = "0"
+    include_legacy = "1" if args.include_demo_defaults else "0"
+    os.environ["INTERACTIVE_SMF_ENABLED"] = include_legacy
+    os.environ["INTERACTIVE_HALPHA_ENABLED"] = include_legacy
 
     standard_bundle = args.standard_bundle.expanduser().resolve() if args.standard_bundle else _discover_standard_bundle(emulator_root)
     if standard_bundle is None:
