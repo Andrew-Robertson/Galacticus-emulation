@@ -13,10 +13,13 @@ import numpy as np
 import pandas as pd
 
 
-DEFAULT_OBSERVATION_FILE = (
-    "/Users/arobertson/Documents/Projects/GalacticusEmu/Galacticus/"
-    "datasets/static/observations/blackHoles/blackHoleMassVsVelocityDispersion_McConnellMa2013.hdf5"
-)
+def _default_observation_file() -> str:
+    relative_path = Path(
+        "static/observations/blackHoles/blackHoleMassVsVelocityDispersion_McConnellMa2013.hdf5"
+    )
+    if os.environ.get("GALACTICUS_DATA_PATH"):
+        return str(Path(os.environ["GALACTICUS_DATA_PATH"]) / relative_path)
+    return str(Path("datasets") / relative_path)
 
 
 def parse_args() -> argparse.Namespace:
@@ -25,7 +28,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("output_dir", help="Directory where plot and table will be written.")
     parser.add_argument(
         "--observation-file",
-        default=DEFAULT_OBSERVATION_FILE,
+        default=_default_observation_file(),
         help="Path to the McConnell & Ma 2013 HDF5 observation file.",
     )
     parser.add_argument(

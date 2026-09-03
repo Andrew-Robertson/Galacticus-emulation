@@ -32,7 +32,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--conda-env", default="galacticus-workspace")
     parser.add_argument(
         "--conda-profile",
-        default="/resnick/groups/carnegie_poc/arobert2/miniconda3/etc/profile.d/conda.sh",
+        default="$CONDA_SH",
     )
     parser.add_argument(
         "--only-missing-output",

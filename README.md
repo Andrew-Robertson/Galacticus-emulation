@@ -148,7 +148,7 @@ Each manifest includes:
 
 The starter example is:
 
-- [z0_validation_mcmc_bridge.json](/Users/arobertson/Documents/Projects/GalacticusEmu/Galacticus-emulation/data/manifests/z0_validation_mcmc_bridge.json)
+- [z0_validation_mcmc_bridge.json](data/manifests/z0_validation_mcmc_bridge.json)
 
 It is intended to be a low-cost validation case using the existing UniverseMachine `z=0` likelihood setup.
 

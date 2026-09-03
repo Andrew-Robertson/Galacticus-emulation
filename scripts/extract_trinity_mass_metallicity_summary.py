@@ -25,12 +25,19 @@ HALO_BIN_EDGES = np.array(
 )
 
 
+def _default_observation_file() -> str:
+    relative_path = Path("static/observations/abundances/massMetallicityRelationBlanc2019.hdf5")
+    if os.environ.get("GALACTICUS_DATA_PATH"):
+        return str(Path(os.environ["GALACTICUS_DATA_PATH"]) / relative_path)
+    return str(Path("datasets") / relative_path)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Extract approximate z=0 mass-metallicity summaries for a Trinity campaign.")
     parser.add_argument("campaign_root", help="Path to a completed Trinity campaign directory.")
     parser.add_argument(
         "--observation-file",
-        default="/Users/arobertson/Documents/Projects/GalacticusEmu/Galacticus/datasets/static/observations/abundances/massMetallicityRelationBlanc2019.hdf5",
+        default=_default_observation_file(),
         help="Path to the Blanc 2019 mass-metallicity HDF5 file.",
     )
     parser.add_argument(

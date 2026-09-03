@@ -31,6 +31,14 @@ DEFAULT_CASE_SPECS = [
     ("total", "Total Mstar + Mbh + MZR", "#000000", "emulator_mcmc_four_mean_families_no1e11_mbh_plus_mzr_z0_upper_w5/run_summary.json"),
 ]
 
+
+def _default_observation_file() -> str:
+    relative_path = Path("static/observations/abundances/massMetallicityRelationBlanc2019.hdf5")
+    if os.environ.get("GALACTICUS_DATA_PATH"):
+        return str(Path(os.environ["GALACTICUS_DATA_PATH"]) / relative_path)
+    return str(Path("datasets") / relative_path)
+
+
 TRINITY_STELLAR_OUTPUTS = [
     *[f"z0_mass_stellar_log10_{index}" for index in range(3)],
     *[f"z2_mass_stellar_log10_{index}" for index in range(3)],
@@ -57,7 +65,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--observation-file",
-        default="/Users/arobertson/Documents/Projects/GalacticusEmu/Galacticus/datasets/static/observations/abundances/massMetallicityRelationBlanc2019.hdf5",
+        default=_default_observation_file(),
         help="Path to the Blanc 2019 mass-metallicity HDF5 file.",
     )
     parser.add_argument(

@@ -30,9 +30,9 @@ corner-plot job after both branches finish.
 python scripts/submit_campaign_pipeline_slurm.py \
   --config configs/pipelines/standard_observables_plus_halpha.yaml \
   --workflow standard_halpha_mcmc_compact \
-  --set ROOT=/home/arobert2/GalacticusEmu/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced \
-  --set PIPELINE_OUTPUT_ROOT=/home/arobert2/GalacticusEmu/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced/pipeline \
-  --setup-command 'source /resnick/groups/carnegie_poc/arobert2/miniconda3/etc/profile.d/conda.sh' \
+  --set ROOT=/path/to/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced \
+  --set PIPELINE_OUTPUT_ROOT=/path/to/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced/pipeline \
+  --setup-command 'source /path/to/miniconda3/etc/profile.d/conda.sh' \
   --setup-command 'conda activate galacticus-workspace' \
   --partition expansion \
   --qos normal \
