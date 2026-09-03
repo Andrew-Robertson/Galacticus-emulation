@@ -4,9 +4,7 @@ services:
     runtime: python
     plan: free
     buildCommand: pip install .
-    startCommand: uvicorn galacticus_emu.interactive_fastapi:app --host 0.0.0.0 --port $PORT
+    startCommand: python scripts/serve_interactive_fastapi_demo.py --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
-      - key: INTERACTIVE_SMF_BUNDLE_PATH
-        value: /opt/render/project/src/demo_emulators/interactive_smf_demo/smf_demo_bundle.joblib

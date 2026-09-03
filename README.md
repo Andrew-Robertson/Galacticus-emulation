@@ -11,18 +11,40 @@ construct training campaigns, reduce Galacticus outputs, train and
 cross-validate Gaussian-process emulators, and sample emulator-based
 likelihoods with MCMC.
 
+Semi-analytic models follow the formation and evolution of galaxy populations
+by combining dark-matter halo assembly histories with simplified,
+physically motivated descriptions of processes such as gas cooling, star
+formation, feedback, chemical enrichment, and galaxy mergers. They are much
+less computationally expensive than full hydrodynamical simulations and are
+used both to investigate the physics of galaxy formation and to predict galaxy
+observables for cosmological surveys.
+
+The parameters controlling these physical prescriptions cannot all be fixed
+from first principles and must be calibrated against observations. A careful
+calibration involves comparing several observables while exploring a
+high-dimensional parameter space, which can require far more model evaluations
+than it is practical to run directly with Galacticus. An emulator learns the
+mapping between model parameters and predicted observables from a finite set of
+training runs, allowing that mapping to be evaluated rapidly during validation,
+sensitivity studies, and MCMC calibration.
+
+**[Explore the interactive emulator](https://galacticus-emulation.onrender.com)**
+to see how changing Galacticus parameters affects several predicted
+observables. The hosted demonstration uses pre-trained emulators and does not
+require a local installation.
+
 The repository is under active development. It began as the workflow used for
 *Emulator-Assisted Calibration of a Semi-Analytic Galaxy Formation Model for
-the Roman Galaxy Redshift Survey*, and is now being developed into a more
-reusable package for Galacticus emulation and calibration. The manuscript,
-figure data, and instructions for inspecting or reproducing that particular
-analysis are in the [paper directory](paper/README.md). A tagged release will
-preserve the version associated with the paper while development continues on
-the main branch.
+the Roman Galaxy Redshift Survey*, and also provides a basis for future
+Galacticus calibration work. The manuscript, figure data, and instructions for
+inspecting or reproducing that particular analysis are in the
+[paper directory](paper/README.md). A tagged release will preserve the version
+associated with the paper while development continues on the main branch.
 
-Worked example notebooks are planned during peer review. They will follow a
-low-redshift stellar mass function from archived Galacticus training outputs
-through emulator validation, construction, and MCMC calibration.
+Worked example notebooks are planned during peer review. They will give a
+guided account of the method by following a low-redshift stellar mass function
+from archived Galacticus training outputs through emulator validation,
+construction, and MCMC calibration.
 
 ## Workflow
 

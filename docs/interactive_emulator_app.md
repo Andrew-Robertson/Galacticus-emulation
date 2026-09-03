@@ -1,9 +1,33 @@
 # Interactive Emulator App
 
-This is the recommended local path for exploring a trained Galacticus emulator
-with browser sliders.
+The repository includes small pre-trained emulator bundles that can be
+explored with browser sliders. They provide a quick way to see how changes to
+Galacticus parameters affect predicted observables without running Galacticus
+or training an emulator.
 
-The definitive example campaign is:
+## Hosted Demo
+
+The checked-in demonstration emulators are available at:
+
+<https://galacticus-emulation.onrender.com>
+
+## Run The Demonstrations Locally
+
+After installing GalacticEmu, run this command from the repository root:
+
+```bash
+python scripts/serve_interactive_fastapi_demo.py
+```
+
+Then open <http://127.0.0.1:8010/>. The landing page links to the available
+stellar mass function, H-alpha luminosity function, and multi-observable
+demonstrations.
+
+## Use The Full Paper Emulators
+
+The larger emulator bundles trained for the paper are not stored in git. Once
+they are available from the planned data archive, the app can instead be
+pointed at the extracted campaign data. The paper campaign is:
 
 ```text
 runs/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced
@@ -15,8 +39,6 @@ The app uses the trained products in that campaign's pipeline output:
 runs/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced/pipeline/emulators/standard_observables/pca_99/standard_observables_bundle.joblib
 runs/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced/pipeline/emulators/emission_line_lfs/pca_99/halpha_sobral_1dustdraw_pca99.joblib
 ```
-
-## Use My Trained Emulators
 
 From the repository root, run:
 
@@ -38,16 +60,16 @@ python scripts/serve_pipeline_emulator_app.py \
   runs/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced
 ```
 
-The landing page should show:
+With both paper bundles present, the landing page should show:
 
 - `Interactive Observable Suite`, backed by the standard-observable PCA-GP
   bundle.
 - `Interactive Emission-Line LFs`, backed by the H-alpha Sobral sidecar LF
   PCA-GP bundle, when that bundle is present.
 
-By default this launcher hides the older one-off SMF and H-alpha demo bundles,
-so the local app is focused on the campaign that is intended to be the reusable
-example. To show those legacy demos as well, pass:
+By default this launcher hides the small checked-in SMF and H-alpha
+demonstrations so the app is focused on the paper campaign. To show those
+demonstrations as well, pass:
 
 ```bash
 python scripts/serve_pipeline_emulator_app.py --include-demo-defaults

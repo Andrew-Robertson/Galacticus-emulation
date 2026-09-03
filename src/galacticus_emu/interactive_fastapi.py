@@ -89,7 +89,9 @@ DEFAULT_OBSERVABLES_ORDER = [
 def _env_path(name: str, default: Path) -> Path:
     value = os.environ.get(name)
     if value:
-        return Path(value).expanduser().resolve()
+        configured = Path(value).expanduser().resolve()
+        if configured.exists() or not (os.environ.get("RENDER") and default.exists()):
+            return configured
     return default.resolve()
 
 
