@@ -85,6 +85,9 @@ Merge sequence once cleanup is complete:
 
 ## Zenodo Data Package
 
+See `docs/data_release_plan.md` for the current concrete package boundaries,
+source paths, and open data-licensing decisions.
+
 - Package the reduced training campaign as one archive containing
   `campaign_design.json`, `samples.csv`, command/provenance files, and
   `evaluations/`.
