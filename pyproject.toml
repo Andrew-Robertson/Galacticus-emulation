@@ -8,10 +8,30 @@ version = "0.1.0"
 description = "Thin orchestration and emulation tooling for Galacticus."
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["emcee", "fastapi", "h5py", "matplotlib", "numpy", "pandas", "scikit-learn", "scipy", "uvicorn"]
+dependencies = [
+    "emcee",
+    "fastapi",
+    "h5py",
+    "joblib",
+    "matplotlib",
+    "numpy",
+    "pandas",
+    "pyyaml",
+    "scikit-learn",
+    "scipy",
+    "uvicorn",
+]
+
+[project.optional-dependencies]
+test = ["pytest"]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+pythonpath = ["src"]
+testpaths = ["tests"]

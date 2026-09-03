@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version:
+          - "3.11"
+          - "3.12"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[test]"
+
+      - name: Run tests
+        run: python -m pytest
+
+      - name: Compile public Python entry points
+        run: |
+          python -m py_compile src/galacticus_emu/*.py
+          python -m py_compile scripts/run_campaign_pipeline.py
+          python -m py_compile scripts/submit_campaign_pipeline_slurm.py
+          python -m py_compile scripts/smoke_test.py
+
+      - name: Validate pipeline configuration
+        run: |
+          python scripts/run_campaign_pipeline.py \
+            --config configs/pipelines/standard_observables_plus_halpha.yaml \
+            --list
+          python scripts/run_campaign_pipeline.py \
+            --config configs/pipelines/standard_observables_plus_halpha.yaml \
+            --stage train_standard_emulators
