@@ -11,8 +11,8 @@ Thin orchestration and emulation tooling for running Galacticus model evaluation
 This repository is intended to stay lightweight:
 
 - `GalacticEmu` owns experiment state, manifests, summaries, emulator training, and adaptive model selection.
-- `Galacticus-dust-modelling` remains the home for Galacticus-facing helper code, existing calibration workflows, and post-processing utilities.
-- `Galacticus-ParameterFiles` remains a separate repository of reusable Galacticus parameter files.
+- `Galacticus-dust-modelling` is the home for Galacticus-facing helper code, existing calibration workflows, and post-processing utilities.
+- `Galacticus-ParameterFiles` is a separate repository of reusable Galacticus parameter files.
 
 The first goal is a minimal, portable execution contract:
 
@@ -89,7 +89,7 @@ The top-level `scripts/` directory is intended to contain the main workflow entr
   - `run_trinity_emulator_mcmc.py`
   - `run_trinity_mcmc_ablation_suite.py`
 
-Plotting helpers now live under `scripts/plotting/`, and exploratory diagnostics such as mass-metallicity, `M-\sigma`, and Faber-Jackson checks live under `scripts/playground/`.
+Plotting helpers live under `scripts/plotting/`, and exploratory diagnostics such as mass-metallicity, `M-\sigma`, and Faber-Jackson checks live under `scripts/playground/`.
 Older or superseded workflow helpers that are not the recommended starting point live under `scripts/legacy/`.
 Paper-specific figure and table builders live under `paper/figure_scripts/`.
 As a rule of thumb, keep a script at top level only when it is a reusable workflow CLI that another user should run directly. Put one-off diagnostics, comparison plots, and exploratory checks in `scripts/playground/` or `paper/figure_scripts/` if they exist solely to build manuscript figures. Generated outputs belong in `playing/` or `runs/`, not in `scripts/`.
@@ -262,7 +262,7 @@ To also make the analogous plots for the SHMR scatter outputs:
 python scripts/plotting/plot_shmr_dependence.py runs/campaigns/lhs_z2_mcmc_analog --include-scatter
 ```
 
-For historical reference, the original rough fixed-kernel GP script now lives under `scripts/legacy/`:
+For historical reference, the original rough fixed-kernel GP script is under `scripts/legacy/`:
 
 ```bash
 python scripts/legacy/fit_rough_gp.py runs/campaigns/lhs_z2_mcmc_analog

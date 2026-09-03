@@ -1,10 +1,14 @@
 # Paper Figure Data
 
-This directory contains compact, derived inputs for reproducing or auditing
-the paper figures without adding multi-GB campaign products to git. The full
-training campaign, emulator bundles, MCMC chains, and direct Galacticus HDF5
-outputs should be archived in the Zenodo data release described in
-`docs/data_release_plan.md`.
+This directory contains compact, derived inputs for reproducing, auditing, or
+modifying paper figures without adding multi-GB campaign products to git. These
+files are useful when a reader wants to check plotted values, make a quick
+variant of a figure, or compare the manuscript curves with a new plotting
+choice.
+
+The full training campaign, emulator bundles, MCMC chains, and direct
+Galacticus HDF5 outputs should be archived in the Zenodo data release described
+in `docs/data_release_plan.md`.
 
 ## Contents
 
@@ -18,9 +22,9 @@ Cached cross-validation products for the SMF z~0 emulator validation figures:
 - `smf_z0_pca_threshold_cv_summary.json`
 
 These files come from the PCA-threshold/bin-by-bin comparison run for the
-1024-point Sobol campaign. The generating validation script remains at
-`scripts/run_smf_z0_pca_threshold_cv.py` because it is a reusable analysis
-workflow rather than a manuscript-only renderer.
+1024-point Sobol campaign. The generating validation script is
+`scripts/run_smf_z0_pca_threshold_cv.py`; it is a reusable analysis workflow
+rather than a manuscript-only renderer.
 
 ### `combining_constraints/`
 
@@ -48,7 +52,8 @@ Compact products from the final standard-observable plus H-alpha calibration:
 - the final MCMC run summary JSON.
 
 The final MCMC chains and direct-run HDF5 catalogues are intentionally omitted
-from git.
+from git. Recomputing posterior intervals or rebuilding the direct-Galacticus
+validation panels from first principles requires those Zenodo products.
 
 ## Local Source Campaign
 

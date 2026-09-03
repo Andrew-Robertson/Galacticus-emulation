@@ -1,8 +1,23 @@
 # Paper Reproduction Notes
 
-This directory contains the manuscript source for the GalacticEmu paper, the
-static PDF figures needed to compile it, compact derived figure inputs, and the
-paper-specific scripts used to build manuscript products.
+This directory is the paper-reproduction entry point for readers, referees, and
+future developers. It is meant to support three use cases:
+
+- compile the manuscript exactly as submitted;
+- inspect the data products behind the plotted curves, tables, and summaries;
+- rerun or adapt the figure scripts, usually after downloading the larger data
+  products from the associated Zenodo archive.
+
+The paper material is split into a few layers:
+
+- `figures/` contains the static PDFs included by `main.tex`.
+- `figure_data/` contains compact, derived CSV/JSON/XML/TEX inputs that are
+  small enough to track in git.
+- `figure_scripts/` contains scripts whose primary purpose is to recreate or
+  adapt manuscript figures and tables.
+- The Zenodo data archive should contain the larger source products: reduced
+  campaign outputs, emulator bundles, MCMC HDF5 files, and direct Galacticus
+  HDF5 runs.
 
 ## Compile The Manuscript
 
@@ -73,7 +88,8 @@ The public data release should include, at minimum:
 
 ## Figure Scripts
 
-Reusable workflow scripts remain in the repository-level `scripts/` directory.
-Scripts that only reproduce manuscript figures or tables live in
-`paper/figure_scripts/`; see `paper/figure_scripts/README.md` for the current
-script inventory and data requirements.
+Start with `paper/figure_scripts/README.md` when you want to regenerate or
+modify a manuscript figure. Some figures are produced by scripts in that
+directory; others are outputs of broader validation or inference workflows in
+the repository-level `scripts/` directory. The figure-scripts README records
+which is which, and what data are needed.

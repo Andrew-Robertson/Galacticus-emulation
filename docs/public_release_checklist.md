@@ -106,6 +106,13 @@ source paths, and open data-licensing decisions.
   `paper/main.tex`.
 - Keep compact derived paper inputs in `paper/figure_data/`, with the larger
   source HDF5 products in Zenodo.
+- Maintain a figure-by-figure map from manuscript output to script, compact
+  data product, and required Zenodo payload.
+- Add lightweight replotters for checked-in `paper/figure_data/` products where
+  practical, so readers can adapt figure styling without downloading every
+  large source file.
+- Promote the final posterior-corner inset overlay from provenance notes into a
+  standalone public script before tagging the release.
 - Record exact source data paths and commands in provenance files, while keeping
   machine-specific absolute paths out of the final manuscript.
 - Update the code/data availability text with the GitHub release tag, software
