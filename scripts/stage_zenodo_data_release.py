@@ -295,6 +295,8 @@ def _package_readme(package: Package, rows: list[ManifestRow]) -> str:
             "The paths in this package are repository-relative. To reproduce the paper figures,",
             "extract the archive from the root of a GalacticEmu checkout so that the `runs/`",
             "tree lands next to `paper/` and `scripts/`.",
+            "Package-level README, MANIFEST, and SHA256 files are stored under",
+            f"`.zenodo/{package.name}/` inside the archive.",
             "",
             f"Files: {len(rows)}",
             f"Uncompressed size: {_format_size(total_bytes)}",
@@ -382,13 +384,27 @@ def _tar_filter(info: tarfile.TarInfo) -> tarfile.TarInfo:
     return info
 
 
+def _archive_arcname(package_name: str, relative_path: Path) -> Path:
+    if len(relative_path.parts) == 1 and relative_path.name in {"README.md", "MANIFEST.tsv", "SHA256SUMS.txt"}:
+        return Path(".zenodo") / package_name / relative_path.name
+    return relative_path
+
+
 def make_archive(package_dir: Path, archive_dir: Path) -> Path:
     archive_dir.mkdir(parents=True, exist_ok=True)
     archive_path = archive_dir / f"{package_dir.name}.tar.gz"
     if archive_path.exists():
         archive_path.unlink()
     with tarfile.open(archive_path, "w:gz", dereference=True) as archive:
-        archive.add(package_dir, arcname=package_dir.name, filter=_tar_filter)
+        for path in sorted(package_dir.rglob("*")):
+            if path.is_dir():
+                continue
+            relative_path = path.relative_to(package_dir)
+            archive.add(
+                path,
+                arcname=_archive_arcname(package_dir.name, relative_path).as_posix(),
+                filter=_tar_filter,
+            )
     return archive_path
 
 
@@ -433,6 +449,11 @@ def parse_args() -> argparse.Namespace:
         help="Create one .tar.gz archive per staged package.",
     )
     parser.add_argument(
+        "--archives-only",
+        action="store_true",
+        help="Create archives from an existing staging tree without rebuilding it.",
+    )
+    parser.add_argument(
         "--archive-output-dir",
         type=Path,
         default=None,
@@ -452,6 +473,22 @@ def main() -> None:
     selected_names = args.selected_packages or list(packages_by_name)
     selected_packages = [packages_by_name[name] for name in selected_names]
 
+    release_dir = args.output_root.expanduser().resolve() / args.release_name
+    archive_dir = (
+        args.archive_output_dir.expanduser().resolve()
+        if args.archive_output_dir is not None
+        else release_dir / "archives"
+    )
+
+    if args.archives_only:
+        for package in selected_packages:
+            package_dir = release_dir / package.name
+            if not package_dir.exists():
+                raise FileNotFoundError(package_dir)
+            archive = make_archive(package_dir, archive_dir)
+            print(f"archive {archive}")
+        return
+
     checksums = bool(args.execute and not args.skip_checksums)
     manifests = {package.name: build_manifest(package, checksums=checksums) for package in selected_packages}
 
@@ -460,7 +497,6 @@ def main() -> None:
         total_bytes = sum(row.size for row in rows)
         print(f"{package.name}: {len(rows)} files, {_format_size(total_bytes)}")
 
-    release_dir = args.output_root.expanduser().resolve() / args.release_name
     if not args.execute:
         print(f"Dry run only. Add --execute to create {release_dir}")
         return
@@ -484,11 +520,6 @@ def main() -> None:
     )
 
     if args.make_archives:
-        archive_dir = (
-            args.archive_output_dir.expanduser().resolve()
-            if args.archive_output_dir is not None
-            else release_dir / "archives"
-        )
         for package in selected_packages:
             archive = make_archive(release_dir / package.name, archive_dir)
             print(f"archive {archive}")

@@ -23,6 +23,18 @@ python scripts/stage_zenodo_data_release.py --execute
 Add `--make-archives` when the staged tree is ready to be compressed into one
 `.tar.gz` file per package.
 
+The archives unpack repository-relative data paths directly. For example, from
+the repository root:
+
+```bash
+tar -xzf galacticemu_sobol1024_reduced_campaign_v1.tar.gz
+tar -xzf galacticemu_paper_reproduction_products_v1.tar.gz
+```
+
+Package README, manifest, and checksum files unpack under `.zenodo/<package>/`
+so multiple archives can be extracted into the same checkout without metadata
+name clashes.
+
 ### Reduced 1024-Run Training Campaign
 
 Local source:
