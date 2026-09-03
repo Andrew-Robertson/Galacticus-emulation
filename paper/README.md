@@ -1,95 +1,151 @@
-# Paper Reproduction Notes
+# Paper Reproduction Guide
 
-This directory is the paper-reproduction entry point for readers, referees, and
-future developers. It is meant to support three use cases:
+This directory contains the material associated with
+*Emulator-Assisted Calibration of a Semi-Analytic Galaxy Formation Model for
+the Roman Galaxy Redshift Survey*. It is the starting point for readers who
+want to compile the manuscript, inspect how a figure was made, reproduce the
+reported plots and tables, or adapt the plotting scripts for a different
+presentation of the results.
 
-- compile the manuscript exactly as submitted;
-- inspect the data products behind the plotted curves, tables, and summaries;
-- rerun or adapt the figure scripts, usually after downloading the larger data
-  products from the associated Zenodo archive.
+The paper will refer to a tagged release of GalacticEmu so that the associated
+code remains fixed even as the main branch continues to develop.
 
-The paper material is split into a few layers:
+## Current Data Availability
 
-- `figures/` contains the static PDFs included by `main.tex`.
-- `figure_data/` contains compact, derived CSV/JSON/XML/TEX inputs that are
-  small enough to track in git.
-- `figure_scripts/` contains scripts whose primary purpose is to recreate or
-  adapt manuscript figures and tables.
-- The Zenodo data archive should contain the larger source products: reduced
-  campaign outputs, emulator bundles, MCMC HDF5 files, and direct Galacticus
-  HDF5 runs.
+The repository includes the manuscript source, the figure PDFs used by the
+manuscript, scripts for producing or reproducing them, and compact derived data
+for inspection and lightweight replotting. The larger source products are not
+stored in git. These include the reduced 1024-run training campaign, trained
+emulators, MCMC result files, and full Galacticus validation outputs.
+
+Those larger products are intended for a Zenodo release after peer review,
+when the final contents are less likely to change. The planned archive is
+described in [`../docs/data_release_plan.md`](../docs/data_release_plan.md).
+Until that archive is public, some figures can be inspected and replotted from
+the included compact data, but the complete calculation cannot yet be rerun
+from public files alone.
+
+End-to-end reproduction also requires the exact versions of the separate
+`Galacticus-ParameterFiles` and `Galacticus-dust-modelling` repositories used
+for the analysis. These repositories are not yet public. Before the archival
+release, they should either be made public and tagged or the required files
+should be included in an archive with their provenance and licences recorded.
+The Galacticus and Galacticus-datasets commits are already recorded in the
+data-release plan.
+
+## Directory Layout
+
+- `figures/` contains the PDF figures included by `main.tex`.
+- `figure_data/` contains compact derived CSV, JSON, XML, and TeX inputs that
+  are small enough to keep in git.
+- `figure_scripts/` contains the scripts and wrappers used to make the paper
+  figures and calibrated-parameter table.
+
+The larger archive will supply the reduced campaign outputs, emulator bundles,
+MCMC files, and direct Galacticus runs required by scripts that cannot operate
+from the compact data alone.
 
 ## Compile The Manuscript
 
-From this directory:
+From this directory, run:
 
 ```bash
 latexmk -pdf main.tex
 ```
 
-If `latexmk` is unavailable, use the equivalent PDFLaTeX/BibTeX sequence
-required by the local TeX installation.
+If `latexmk` is unavailable, use the equivalent PDFLaTeX and BibTeX sequence
+provided by the local TeX installation.
 
-## Included Figures
+## Inspect Or Reproduce A Figure
 
-The figures used by `main.tex` are checked in under `paper/figures/`:
+Start with [`figure_scripts/README.md`](figure_scripts/README.md). Its figure
+map gives, for each manuscript figure or table:
 
-- `smf_z0_pca99_holdout_curves_highlight_bins.pdf`
-- `smf_z0_pca99_parity_highlight_bins_random_quarter.pdf`
-- `smf_z0_pca_threshold_rmse_r2_vs_training_size.pdf`
-- `smf_sfrf_sizes_corner_observable_composite.pdf`
-- `final_map_validation_all_observables_4x3.pdf`
-- `final_posterior_corner_galacticus20_with_dust5_inset_inwards.pdf`
+- the output file included in the manuscript;
+- the script or workflow that generated it;
+- the compact data available in this repository;
+- any larger products that will be required from the Zenodo archive.
 
-These are static manuscript products. The larger training campaign,
-cross-validation products, emulator bundles, MCMC chains, and direct
-Galacticus validation runs should be archived separately in the Zenodo data
-release.
+The scripts have command-line options so that their plotting choices can be
+inspected and adapted.
 
-## Figure Data
+The manuscript currently uses these figure files:
 
-Small derived inputs are checked in under `paper/figure_data/`:
+- `figures/smf_z0_pca99_holdout_curves_highlight_bins.pdf`
+- `figures/smf_z0_pca99_parity_highlight_bins_random_quarter.pdf`
+- `figures/smf_z0_pca_threshold_rmse_r2_vs_training_size.pdf`
+- `figures/smf_sfrf_sizes_corner_observable_composite.pdf`
+- `figures/final_map_validation_all_observables_4x3.pdf`
+- `figures/final_posterior_corner_galacticus20_with_dust5_inset_inwards.pdf`
 
-- `smf_z0_cv/`: cached SMF z~0 cross-validation predictions, metrics, splits,
-  and summary metadata.
-- `combining_constraints/`: cached posterior-observable summaries for the
-  standard-observable constraint-combination figure.
-- `final_calibration/`: best-fit prediction tables, MAP XML files, emission-line
-  LF tables from direct runs, run metadata, and the generated calibrated
-  parameter table.
+## Included Figure Data
 
-These files are intended for quick inspection and lightweight figure audits.
-They do not replace the Zenodo data release, which should hold the reduced
-campaign outputs, emulator bundles, MCMC HDF5 files, and direct Galacticus
-HDF5 products.
+The compact inputs under `figure_data/` are grouped by their role in the
+paper:
 
-## Data Products Needed To Rebuild Figures
+- `smf_z0_cv/` contains cached stellar-mass-function cross-validation
+  predictions, metrics, splits, and summary metadata.
+- `combining_constraints/` contains cached posterior-observable summaries for
+  the standard-observable constraint-combination figure.
+- `final_calibration/` contains best-fit prediction tables, MAP XML files,
+  emission-line luminosity-function tables from direct runs, run metadata, and
+  the generated calibrated-parameter table.
 
-The current manuscript was built from the reduced campaign:
+These files make it possible to audit plotted values and make some alternative
+plots without downloading the full campaign. They are derived products rather
+than replacements for the larger emulator, chain, and Galacticus output files.
 
-```text
-runs/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced
+## Rebuild From The Future Data Archive
+
+The planned Zenodo release will be arranged so that its archives can be
+extracted into a GalacticEmu checkout. After extracting the reduced-campaign
+and paper-reproduction archives from the repository root, install the extra
+plotting dependencies and run:
+
+```bash
+python -m pip install -e ".[paper]"
+python paper/figure_scripts/rebuild_paper_figures.py \
+  --data-root . \
+  --output-dir paper/tmp/rebuilt_figures
 ```
 
-The final calibration products used by the paper live under:
+The output goes to `paper/tmp/rebuilt_figures` so that a trial rebuild does not
+replace the figure PDFs used by the manuscript. This command is the intended
+public interface, but the archive it refers to has not yet been published.
 
-```text
-runs/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced/automatedPipeline_transformedParams_finalPaper_definitive/MCMCs_production_from_exploratory_MAP
+## Training Campaign
+
+The final emulators were trained on 1024 Galacticus evaluations spanning the
+20 model parameters described in the paper. The parameter points were drawn
+from a scrambled Sobol sequence generated with SciPy using seed 42. The
+campaign design, sampled parameter values, Galacticus run configuration, and
+reduced output files will be included in the planned training-data archive.
+
+That archive will extract into the directory layout expected by the figure
+scripts, so readers will not need to recreate the original local paths by
+hand.
+
+## Preparing The Archival Data Release
+
+This section is for maintainers preparing the future Zenodo deposit, rather
+than for readers reproducing the figures. The staging program selects three
+packages: the reduced training campaign, the paper-reproduction products, and
+one full Galacticus catalogue at the final MAP parameters.
+
+To inspect what would be included without copying data, run:
+
+```bash
+python scripts/stage_zenodo_data_release.py --skip-checksums
 ```
 
-The public data release should include, at minimum:
+To create the staging tree and compressed archives under the ignored `dist/`
+directory, run:
 
-- the reduced `evaluations/` tree;
-- the final emulator bundles;
-- cross-validation metrics and prediction tables;
-- MCMC result HDF5 files and MAP parameter XML files;
-- direct Galacticus MAP validation outputs;
-- the figure/table provenance commands.
+```bash
+python scripts/stage_zenodo_data_release.py --execute
+python scripts/stage_zenodo_data_release.py --archives-only
+```
 
-## Figure Scripts
-
-Start with `paper/figure_scripts/README.md` when you want to regenerate or
-modify a manuscript figure. Some figures are produced by scripts in that
-directory; others are outputs of broader validation or inference workflows in
-the repository-level `scripts/` directory. The figure-scripts README records
-which is which, and what data are needed.
+The package contents, recorded software versions, and remaining release
+decisions are documented in
+[`../docs/data_release_plan.md`](../docs/data_release_plan.md).
