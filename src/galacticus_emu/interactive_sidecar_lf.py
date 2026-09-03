@@ -289,6 +289,7 @@ def bundle_meta(
             "galacticus_default_params": _default_params(bundle),
             "galacticus_default_source": "parameter prior defaults",
             "galacticus_default_params_path": None,
+            "n_training_rows": bundle.get("n_training_rows"),
             "training_preview_rows": "all" if max_preview_rows is None else int(max_preview_rows),
             "training_preview_source": "sidecar luminosity-function tables",
             "observables": observables,

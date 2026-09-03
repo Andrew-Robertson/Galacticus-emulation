@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
 import json
 import math
 import os
 from pathlib import Path
 import re
+import shlex
+import subprocess
 import sys
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -78,6 +81,11 @@ PAPER_PARAMETER_LABELS = {
     "BHefficiencyWind": r"\epsilon_{\rm BH,wind}",
     "thinDiskMaximum": r"x_{\rm thin,max}",
     "stellarPopulationMetalYield": r"y_Z",
+    "delta_0": r"\delta_0",
+    "delta_z": r"\delta_z",
+    "delta_M": r"\delta_M",
+    "delta_Mz": r"\delta_{Mz}",
+    "attenuation_scatter": r"\sigma_A",
 }
 
 PAPER_PARAMETER_SCALES = {
@@ -137,10 +145,38 @@ def parse_args() -> argparse.Namespace:
         help="Multiplicative scale for contour, marker, and prior line widths.",
     )
     parser.add_argument(
+        "--axis-ticks",
+        action="append",
+        default=[],
+        help=(
+            "Override tick locations for one plotted parameter, in the form "
+            "parameter=value,value,value. Values are in plotted coordinates, e.g. log10 values "
+            "for log-scaled parameters. The parameter may be the raw short name or plotted name."
+        ),
+    )
+    parser.add_argument(
+        "--axis-tick-format",
+        action="append",
+        default=[],
+        help=(
+            "Format tick labels for one plotted parameter, in the form parameter=.2f or parameter=%.2f. "
+            "The parameter may be the raw short name or plotted name."
+        ),
+    )
+    parser.add_argument(
         "--label-style",
         choices=["short-name", "paper"],
         default="short-name",
         help="Axis label style. Use 'paper' for the symbols from the paper parameter table.",
+    )
+    parser.add_argument(
+        "--label-rotation-style",
+        choices=["auto", "straight", "angled"],
+        default="auto",
+        help=(
+            "How to rotate axis labels. 'auto' keeps paper labels straight and short-name labels angled; "
+            "'angled' matches the older overlay-style rotated labels."
+        ),
     )
     parser.add_argument(
         "--parameter-set",
@@ -184,6 +220,17 @@ def parse_args() -> argparse.Namespace:
             "label:parameter<value or label:log10(parameter)<value. "
             "Repeat for multiple filters. Use '*' as the label to apply to every posterior."
         ),
+    )
+    parser.add_argument(
+        "--save-provenance",
+        action="store_true",
+        help="Write a shell-command provenance sidecar next to --output-path as <output-path>.command.sh.",
+    )
+    parser.add_argument(
+        "--provenance-command-path",
+        type=Path,
+        default=None,
+        help="Override the default path used by --save-provenance.",
     )
     return parser.parse_args()
 
@@ -540,6 +587,7 @@ def _overlay_priors_and_rotate_labels(
     parameter_scales: dict[str, float],
     *,
     label_style: str,
+    label_rotation_style: str,
     prior_line_width: float,
 ) -> None:
     subplots = getattr(plotter, "subplots", None)
@@ -568,15 +616,17 @@ def _overlay_priors_and_rotate_labels(
                 continue
             xlabel = axis.xaxis.label
             ylabel = axis.yaxis.label
-            if label_style == "paper":
+            if label_rotation_style == "straight" or (
+                label_rotation_style == "auto" and label_style == "paper"
+            ):
                 x_rotation = 0
                 x_ha = "center"
                 y_rotation = 90
                 y_ha = "center"
             else:
-                x_rotation = 18
+                x_rotation = 30
                 x_ha = "right"
-                y_rotation = 72
+                y_rotation = 60
                 y_ha = "right"
             if xlabel.get_text():
                 xlabel.set_rotation(x_rotation)
@@ -649,6 +699,134 @@ def _apply_tick_scale(plotter, *, tick_length_scale: float) -> None:
             length=2.0 * tick_length_scale,
             width=0.6 * tick_length_scale,
         )
+
+
+def _parse_axis_tick_overrides(values: list[str]) -> dict[str, list[float]]:
+    overrides = {}
+    for text in values:
+        if "=" not in text:
+            raise ValueError(f"Expected --axis-ticks in parameter=value,value form, got: {text}")
+        name, ticks_text = text.split("=", 1)
+        ticks = [float(value) for value in ticks_text.split(",") if value.strip()]
+        if not ticks:
+            raise ValueError(f"No tick values supplied in --axis-ticks {text!r}")
+        overrides[name.strip()] = ticks
+    return overrides
+
+
+def _parse_axis_tick_formats(values: list[str]) -> dict[str, str]:
+    formats = {}
+    for text in values:
+        if "=" not in text:
+            raise ValueError(f"Expected --axis-tick-format in parameter=format form, got: {text}")
+        name, format_text = text.split("=", 1)
+        formats[name.strip()] = format_text.strip()
+    return formats
+
+
+def _format_tick_label(value: float, format_text: str) -> str:
+    if format_text.startswith("%"):
+        return format_text % value
+    return format(value, format_text)
+
+
+def _apply_axis_tick_overrides(
+    plotter,
+    *,
+    input_columns: list[str],
+    plot_parameter_names: list[str],
+    tick_overrides: dict[str, list[float]],
+    tick_formats: dict[str, str],
+) -> None:
+    if not tick_overrides and not tick_formats:
+        return
+    subplots = getattr(plotter, "subplots", None)
+    if subplots is None:
+        return
+
+    plot_name_by_key = {}
+    for raw_name, plot_name in zip(input_columns, plot_parameter_names, strict=True):
+        plot_name_by_key[raw_name] = plot_name
+        plot_name_by_key[plot_name] = plot_name
+
+    def resolve(mapping: dict[str, object], option_name: str) -> dict[str, object]:
+        resolved = {}
+        missing = sorted(set(mapping).difference(plot_name_by_key))
+        if missing:
+            raise ValueError(f"Unknown parameter(s) in {option_name}: {', '.join(missing)}")
+        for key, value in mapping.items():
+            resolved[plot_name_by_key[key]] = value
+        return resolved
+
+    ticks_by_plot_name = resolve(tick_overrides, "--axis-ticks")
+    formats_by_plot_name = resolve(tick_formats, "--axis-tick-format")
+    index_by_plot_name = {name: index for index, name in enumerate(plot_parameter_names)}
+    n_param = len(plot_parameter_names)
+
+    for plot_name in sorted(set(ticks_by_plot_name) | set(formats_by_plot_name)):
+        parameter_index = index_by_plot_name[plot_name]
+        ticks = ticks_by_plot_name.get(plot_name)
+        format_text = formats_by_plot_name.get(plot_name)
+        tick_labels = None
+        if ticks is not None and format_text is not None:
+            tick_labels = [_format_tick_label(value, format_text) for value in ticks]
+
+        for row in range(parameter_index, n_param):
+            axis = subplots[row, parameter_index]
+            if axis is None:
+                continue
+            if ticks is not None:
+                axis.set_xticks(ticks)
+                if tick_labels is not None:
+                    axis.set_xticklabels(tick_labels)
+        for col in range(parameter_index):
+            axis = subplots[parameter_index, col]
+            if axis is None:
+                continue
+            if ticks is not None:
+                axis.set_yticks(ticks)
+                if tick_labels is not None:
+                    axis.set_yticklabels(tick_labels)
+
+
+def _git_output(args: list[str]) -> str:
+    try:
+        completed = subprocess.run(
+            ["git", *args],
+            cwd=REPO_ROOT,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+    except OSError as error:
+        return f"<git unavailable: {error}>"
+    output = completed.stdout.strip()
+    error_output = completed.stderr.strip()
+    if completed.returncode != 0:
+        return error_output or f"<git {' '.join(args)} failed with code {completed.returncode}>"
+    return output
+
+
+def _write_provenance(path: Path, *, output_path: Path) -> None:
+    command = shlex.join([sys.executable, *sys.argv])
+    git_head = _git_output(["rev-parse", "HEAD"])
+    git_status = _git_output(["status", "--short"])
+    path = path.expanduser()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [
+        "#!/usr/bin/env bash",
+        "# Provenance for plot_observable_mcmc_overlay_getdist.py",
+        f"# created_utc: {datetime.now(timezone.utc).isoformat()}",
+        f"# cwd: {Path.cwd()}",
+        f"# git_head: {git_head}",
+        "# git_status_short:",
+        *[f"#   {line}" for line in (git_status.splitlines() or ["<clean>"])],
+        f"# output_path: {output_path}",
+        "",
+        command,
+        "",
+    ]
+    path.write_text("\n".join(lines))
 
 
 def _style_for_case(case_name: str, fallback_index: int) -> dict[str, object]:
@@ -831,17 +1009,31 @@ def main() -> None:
         spec_by_name,
         parameter_scales,
         label_style=args.label_style,
+        label_rotation_style=args.label_rotation_style,
         prior_line_width=plot_style["prior_line_width"] * linewidth_scale,
     )
     _overlay_labeled_markers(plotter, markers_by_case, case_order)
     _apply_axis_label_padding(plotter, x_labelpad=args.x_labelpad, y_labelpad=args.y_labelpad)
     _apply_tick_scale(plotter, tick_length_scale=float(args.tick_length_scale))
+    _apply_axis_tick_overrides(
+        plotter,
+        input_columns=input_columns,
+        plot_parameter_names=plot_parameter_names,
+        tick_overrides=_parse_axis_tick_overrides(args.axis_ticks),
+        tick_formats=_parse_axis_tick_formats(args.axis_tick_format),
+    )
     args.output_path.parent.mkdir(parents=True, exist_ok=True)
     export_kwargs = {}
     if args.dpi is not None:
         export_kwargs["dpi"] = args.dpi
     plotter.export(str(args.output_path), **export_kwargs)
     print(args.output_path)
+    provenance_path = args.provenance_command_path
+    if provenance_path is None and args.save_provenance:
+        provenance_path = Path(f"{args.output_path}.command.sh")
+    if provenance_path is not None:
+        _write_provenance(provenance_path, output_path=args.output_path)
+        print(provenance_path)
 
 
 if __name__ == "__main__":

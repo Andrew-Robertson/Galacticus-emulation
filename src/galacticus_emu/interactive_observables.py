@@ -133,6 +133,17 @@ OBSERVABLE_CONFIGS = {
         "y_plot_min": 7.5,
         "y_plot_max": 10.0,
     },
+    "morphological_fraction_gama_moffett2016": {
+        "analysis": "morphologicalFractionGAMAMoffett2016",
+        "label": STANDARD_OBSERVABLE_PLOT_METADATA["morphological_fraction_gama_moffett2016"]["label"],
+        "use_training_alpha": True,
+        "bad_training_condition": "zero_and_zero_noise",
+        "bad_training_value_fill": "bin_median",
+        "bad_training_sigma": 5.0,
+        "min_training_sigma": 1.0e-3,
+        "y_plot_min": 0.0,
+        "y_plot_max": 1.0,
+    },
     "sfr_function_robotham2011": {
         "analysis": "starFormationRateFunctionRobotham2011",
         "label": "Robotham+11 SFRF",
@@ -175,6 +186,7 @@ DEFAULT_PCA_COMPONENTS = {
     "smf_z0": 5,
     "smf_z3": 4,
     "mzr_blanc2019": 5,
+    "morphological_fraction_gama_moffett2016": 11,
     "sfr_function_robotham2011": 5,
     "size_mass_vdw2014_star_forming_z0": 3,
     "size_mass_vdw2014_quiescent_z0": 4,
@@ -302,6 +314,33 @@ def _decode_attr(value):
     if isinstance(value, np.generic):
         return value.item()
     return value
+
+
+def _target_noise_from_analysis_group(group: h5py.Group, attrs: Mapping) -> np.ndarray | None:
+    target_covariance_dataset = attrs.get("yCovarianceTarget")
+    if target_covariance_dataset and target_covariance_dataset in group:
+        target_covariance = np.asarray(group[target_covariance_dataset][...], dtype=float)
+        return np.sqrt(np.maximum(np.diag(target_covariance), 0.0))
+
+    lower_dataset = attrs.get("yErrorLowerTarget")
+    upper_dataset = attrs.get("yErrorUpperTarget")
+    if lower_dataset and upper_dataset and lower_dataset in group and upper_dataset in group:
+        lower = np.abs(np.asarray(group[lower_dataset][...], dtype=float))
+        upper = np.abs(np.asarray(group[upper_dataset][...], dtype=float))
+        return np.maximum(lower, upper)
+    if lower_dataset and lower_dataset in group:
+        return np.abs(np.asarray(group[lower_dataset][...], dtype=float))
+    if upper_dataset and upper_dataset in group:
+        return np.abs(np.asarray(group[upper_dataset][...], dtype=float))
+    return None
+
+
+def _select_bins(values: np.ndarray, supported_bin_mask: np.ndarray) -> np.ndarray:
+    array = np.asarray(values)
+    mask = np.asarray(supported_bin_mask, dtype=bool)
+    if array.ndim == 2 and array.shape[0] == 2 and array.shape[1] == mask.size:
+        return array[:, mask]
+    return array[mask]
 
 
 def _default_input_ranges(
@@ -728,13 +767,11 @@ def _prepare_training_targets(
     if bad_mask_override is not None:
         bad_mask = np.asarray(bad_mask_override, dtype=bool).copy()
     else:
-        bad_mask = ~np.isfinite(y_fit)
-    if bad_mask_override is None and bad_training_condition == "nonpositive":
-        bad_mask |= (y_fit <= 0.0)
-    elif bad_mask_override is None and bad_training_condition == "zero_only":
-        bad_mask |= (y_fit == 0.0)
-    elif bad_mask_override is None and bad_training_condition == "at_floor":
-        bad_mask |= np.isclose(y_fit, np.nanmin(y_fit), atol=1.0e-12)
+        bad_mask = _bad_training_mask(
+            y_fit,
+            y_noise=sigma if y_noise is not None else None,
+            bad_training_condition=bad_training_condition,
+        )
 
     metadata["n_bad_training_points"] = int(np.sum(bad_mask))
 
@@ -755,19 +792,36 @@ def _prepare_training_targets(
     return y_fit, sigma, metadata
 
 
-def _bad_training_mask(y_values: np.ndarray, *, bad_training_condition: str) -> np.ndarray:
+def _bad_training_mask(
+    y_values: np.ndarray,
+    y_noise: np.ndarray | None = None,
+    *,
+    bad_training_condition: str,
+) -> np.ndarray:
     bad_mask = ~np.isfinite(y_values)
     if bad_training_condition == "nonpositive":
         bad_mask |= y_values <= 0.0
     elif bad_training_condition == "zero_only":
         bad_mask |= y_values == 0.0
+    elif bad_training_condition == "zero_and_zero_noise" and y_noise is not None:
+        noise = np.asarray(y_noise, dtype=float)
+        bad_mask |= (y_values == 0.0) & (~np.isfinite(noise) | (noise <= 0.0))
     elif bad_training_condition == "at_floor":
         bad_mask |= np.isclose(y_values, np.nanmin(y_values), atol=1.0e-12)
     return bad_mask
 
 
-def _supported_bin_mask(y_values: np.ndarray, *, bad_training_condition: str) -> np.ndarray:
-    bad_mask = _bad_training_mask(y_values, bad_training_condition=bad_training_condition)
+def _supported_bin_mask(
+    y_values: np.ndarray,
+    y_noise: np.ndarray | None = None,
+    *,
+    bad_training_condition: str,
+) -> np.ndarray:
+    bad_mask = _bad_training_mask(
+        y_values,
+        y_noise=y_noise,
+        bad_training_condition=bad_training_condition,
+    )
     return np.any(~bad_mask, axis=0)
 
 
@@ -814,7 +868,6 @@ def _load_observable_campaign(
     y_dataset = attrs["yDataset"]
     target_dataset = attrs["yDatasetTarget"]
     covariance_dataset = attrs.get("yCovariance")
-    target_covariance_dataset = attrs.get("yCovarianceTarget")
     x_is_log = bool(attrs.get("xAxisIsLog", False))
     y_is_log = bool(attrs.get("yAxisIsLog", False))
 
@@ -836,11 +889,7 @@ def _load_observable_campaign(
                 current_noise = np.sqrt(np.maximum(np.diag(current_covariance), 0.0))
             else:
                 current_noise = None
-            if target_covariance_dataset and target_covariance_dataset in group:
-                current_target_covariance = np.asarray(group[target_covariance_dataset][...], dtype=float)
-                current_target_noise = np.sqrt(np.maximum(np.diag(current_target_covariance), 0.0))
-            else:
-                current_target_noise = None
+            current_target_noise = _target_noise_from_analysis_group(group, attrs)
 
         if x_bins is None:
             x_bins = current_x
@@ -941,6 +990,7 @@ def train_observables_bundle(
         if bool(config.get("drop_unsupported_bins", False)):
             supported_bin_mask = _supported_bin_mask(
                 y_plot,
+                y_noise=y_noise_plot,
                 bad_training_condition=str(config.get("bad_training_condition", "nonfinite")),
             )
             if not np.any(supported_bin_mask):
@@ -948,7 +998,7 @@ def train_observables_bundle(
             x_plot = x_plot[supported_bin_mask]
             target_plot = target_plot[supported_bin_mask]
             if target_noise_plot is not None:
-                target_noise_plot = target_noise_plot[supported_bin_mask]
+                target_noise_plot = _select_bins(target_noise_plot, supported_bin_mask)
             y_plot = y_plot[:, supported_bin_mask]
             if y_noise_plot is not None:
                 y_noise_plot = y_noise_plot[:, supported_bin_mask]
@@ -1298,6 +1348,7 @@ def bundle_meta(
         "galacticus_default_params": galacticus_default_params,
         "galacticus_default_source": galacticus_default_source,
         "galacticus_default_params_path": galacticus_default_params_path,
+        "n_training_rows": int(len(bundle.get("evaluation_ids", []))) if bundle.get("evaluation_ids") else None,
         "training_preview_rows": bundle.get("training_preview_rows"),
         "training_preview_source": bundle.get("training_preview_source"),
         "pca_variance_threshold": bundle.get("pca_variance_threshold"),

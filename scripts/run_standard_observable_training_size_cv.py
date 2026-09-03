@@ -85,6 +85,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--n-restarts-optimizer", type=int, default=0)
     parser.add_argument("--optimize-hyperparameters", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--fit-white-noise", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument(
+        "--include-heldout-uncertainty",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "When computing normalized residuals and coverage, divide held-out residuals by "
+            "sqrt(sigma_emu^2 + sigma_holdout^2) instead of sigma_emu alone. Raw RMSE and R^2 "
+            "are unchanged."
+        ),
+    )
     parser.add_argument("--max-plotted-bins", type=int, default=5)
     parser.add_argument(
         "--show-training-noise-floor",
@@ -237,6 +247,7 @@ def _masked_metric_values(
     *,
     bad_training_condition: str,
     bad_mask_override: np.ndarray | None = None,
+    heldout_sigma: np.ndarray | None = None,
 ) -> dict:
     valid = _valid_observed_mask(
         y_true,
@@ -251,6 +262,7 @@ def _masked_metric_values(
             "rmse": np.nan,
             "bias": np.nan,
             "r2": np.nan,
+            "rms_z": np.nan,
             "normalized_rmse": np.nan,
             "normalized_mae": np.nan,
             "normalized_bias": np.nan,
@@ -262,10 +274,14 @@ def _masked_metric_values(
     pred_valid = y_pred[valid]
     residual = pred_valid - true_valid
 
-    valid_uncertainty = valid & np.isfinite(y_std) & (y_std > 0.0)
+    uncertainty_std = np.asarray(y_std, dtype=float)
+    if heldout_sigma is not None:
+        uncertainty_std = np.hypot(uncertainty_std, np.asarray(heldout_sigma, dtype=float))
+
+    valid_uncertainty = valid & np.isfinite(uncertainty_std) & (uncertainty_std > 0.0)
     if np.any(valid_uncertainty):
         residual_uncertainty = y_pred[valid_uncertainty] - y_true[valid_uncertainty]
-        std_valid = y_std[valid_uncertainty]
+        std_valid = uncertainty_std[valid_uncertainty]
         normalized_residual = residual_uncertainty / std_valid
         normalized_rmse = float(np.sqrt(np.mean(normalized_residual**2)))
         normalized_mae = float(np.mean(np.abs(normalized_residual)))
@@ -287,6 +303,7 @@ def _masked_metric_values(
         "rmse": float(np.sqrt(mean_squared_error(true_valid, pred_valid))),
         "bias": float(np.mean(residual)),
         "r2": _safe_r2(true_valid, pred_valid),
+        "rms_z": normalized_rmse,
         "normalized_rmse": normalized_rmse,
         "normalized_mae": normalized_mae,
         "normalized_bias": normalized_bias,
@@ -311,6 +328,8 @@ def _metric_rows(
     bad_mask: np.ndarray | None,
     training_sigma_rms_by_bin: np.ndarray | None = None,
     training_sigma_rms_all: float | None = None,
+    heldout_sigma: np.ndarray | None = None,
+    uncertainty_denominator: str = "emulator",
 ) -> list[dict]:
     rows = []
     for bin_index, x_value in enumerate(x_plot):
@@ -320,6 +339,7 @@ def _metric_rows(
             y_std[:, bin_index],
             bad_training_condition=bad_training_condition,
             bad_mask_override=bad_mask[:, bin_index] if bad_mask is not None else None,
+            heldout_sigma=heldout_sigma[:, bin_index] if heldout_sigma is not None else None,
         )
         rows.append(
             {
@@ -331,6 +351,7 @@ def _metric_rows(
                 "n_test_total": int(y_true.shape[0]),
                 "bin": int(bin_index),
                 "x_plot": float(x_value),
+                "uncertainty_denominator": uncertainty_denominator,
                 "training_sigma_rms": (
                     np.nan
                     if training_sigma_rms_by_bin is None
@@ -345,6 +366,7 @@ def _metric_rows(
         y_std.ravel(),
         bad_training_condition=bad_training_condition,
         bad_mask_override=bad_mask.ravel() if bad_mask is not None else None,
+        heldout_sigma=heldout_sigma.ravel() if heldout_sigma is not None else None,
     )
     rows.append(
         {
@@ -356,6 +378,7 @@ def _metric_rows(
             "n_test_total": int(y_true.size),
             "bin": "all",
             "x_plot": np.nan,
+            "uncertainty_denominator": uncertainty_denominator,
             "training_sigma_rms": np.nan if training_sigma_rms_all is None else float(training_sigma_rms_all),
             **metric_values,
         }
@@ -597,6 +620,10 @@ def _plot_observable_calibration(
     show_all_bins_line: bool,
 ) -> None:
     observable_metrics = _add_plot_train_size(metrics.loc[metrics["observable_key"] == observable_key])
+    denominator_values = set(
+        str(value) for value in observable_metrics.get("uncertainty_denominator", pd.Series()).dropna()
+    )
+    sigma_label = r"s_\mathrm{tot}" if denominator_values == {"emulator_plus_heldout"} else r"\sigma_\mathrm{pred}"
     plot_train_size_label = str(observable_metrics.attrs.get("_plot_train_size_label", "Training sample size"))
     if "emulator_type" not in observable_metrics:
         observable_metrics["emulator_type"] = "pca"
@@ -662,8 +689,8 @@ def _plot_observable_calibration(
 
     axes[0].axhline(1.0, color="0.45", lw=1.1, ls=":", label="ideal")
     axes[1].axhline(0.6827, color="0.45", lw=1.1, ls=":", label="ideal")
-    axes[0].set_ylabel(r"RMSE of $(y_\mathrm{pred}-y_\mathrm{true})/\sigma_\mathrm{pred}$")
-    axes[1].set_ylabel(r"fraction within $1\sigma_\mathrm{pred}$")
+    axes[0].set_ylabel(r"RMSE of $(y_\mathrm{pred}-y_\mathrm{true})/" + sigma_label + r"$")
+    axes[1].set_ylabel(r"fraction within $1" + sigma_label + r"$")
     axes[1].set_ylim(-0.03, 1.03)
     for axis in axes:
         axis.set_xlabel(plot_train_size_label)
@@ -728,6 +755,10 @@ def main() -> None:
         "validation_mode": args.validation_mode,
         "random_state": int(args.random_state),
         "observables": observables,
+        "include_heldout_uncertainty": bool(args.include_heldout_uncertainty),
+        "uncertainty_denominator": (
+            "emulator_plus_heldout" if args.include_heldout_uncertainty else "emulator"
+        ),
         "note": (
             "kfold: each subset size uses the first N Sobol evaluations and K-fold CV within that subset. "
             "train_rest: each subset size trains on the first N Sobol evaluations and tests on the remaining campaign tail. "
@@ -763,6 +794,7 @@ def main() -> None:
             if bool(config.get("drop_unsupported_bins", False)):
                 supported_bin_mask = _supported_bin_mask(
                     y_plot,
+                    y_noise=y_noise,
                     bad_training_condition=str(config.get("bad_training_condition", "nonfinite")),
                 )
                 x_plot = x_plot[supported_bin_mask]
@@ -830,6 +862,7 @@ def main() -> None:
                         continue
                     splits = [(subset_indices, np.arange(subset_size, n_total, dtype=int))]
                 true_blocks = []
+                heldout_sigma_blocks = []
                 bad_mask_blocks = []
                 method_blocks = {
                     method: {
@@ -849,6 +882,8 @@ def main() -> None:
                         flush=True,
                     )
                     true_blocks.append(y_plot[test_index])
+                    if alpha_sigma is not None:
+                        heldout_sigma_blocks.append(alpha_sigma[test_index])
                     if metric_bad_mask_all is not None:
                         bad_mask_blocks.append(metric_bad_mask_all[test_index])
                     n_train_values.append(len(train_index))
@@ -888,8 +923,10 @@ def main() -> None:
                     train_indices_by_split,
                 )
                 y_true_stack = np.vstack(true_blocks)
+                heldout_sigma_stack = np.vstack(heldout_sigma_blocks) if heldout_sigma_blocks else None
                 bad_mask_stack = np.vstack(bad_mask_blocks) if bad_mask_blocks else None
                 for method in emulator_types:
+                    metric_heldout_sigma = heldout_sigma_stack if args.include_heldout_uncertainty else None
                     metric_rows = _metric_rows(
                         observable_key=observable_key,
                         emulator_type=method,
@@ -900,6 +937,12 @@ def main() -> None:
                         y_true=y_true_stack,
                         y_pred=np.vstack(method_blocks[method]["pred"]),
                         y_std=np.vstack(method_blocks[method]["std"]),
+                        heldout_sigma=metric_heldout_sigma,
+                        uncertainty_denominator=(
+                            "emulator_plus_heldout"
+                            if metric_heldout_sigma is not None
+                            else "emulator"
+                        ),
                         bad_training_condition=(
                             "nonfinite"
                             if str(config.get("bad_training_value_fill", "")) in {"keep", "as_is"}

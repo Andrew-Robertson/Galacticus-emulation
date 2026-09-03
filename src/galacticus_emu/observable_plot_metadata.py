@@ -77,6 +77,12 @@ STANDARD_OBSERVABLE_PLOT_METADATA = {
         "x_axis_label": r"$\log_{10}(M_\star/M_\odot)$",
         "y_axis_label": r"$12+\log_{10}(\mathrm{O/H})$",
     },
+    "morphological_fraction_gama_moffett2016": {
+        "label": "Early-type fraction",
+        "target_label": "Moffett et al. (2016)",
+        "x_axis_label": r"$\log_{10}(M_\star/M_\odot)$",
+        "y_axis_label": r"$f_{\mathrm{early}}$",
+    },
 }
 
 

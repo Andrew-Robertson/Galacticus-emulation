@@ -26,6 +26,7 @@ from fit_multid_function_holdout_demo import (
     PRESETS,
     PRESET_OBSERVABLE_KEYS,
     _bad_mask_override_for_transform,
+    _bad_training_mask,
     _load_campaign,
     _json_safe_metadata,
     _metrics,
@@ -33,6 +34,7 @@ from fit_multid_function_holdout_demo import (
     _plot_parity,
     _prepare_training_targets,
     _quantile_columns,
+    _select_bins,
     _setting,
     _space_filling_examples,
     _supported_bin_mask,
@@ -331,6 +333,7 @@ def main() -> None:
         else:
             supported_bin_mask = _supported_bin_mask(
                 y_plot_all,
+                y_noise=y_std_all,
                 bad_training_condition=str(bad_training_condition),
             )
         if not np.any(supported_bin_mask):
@@ -338,12 +341,21 @@ def main() -> None:
         x_bins_plot = x_bins_plot[supported_bin_mask]
         target_plot = target_plot[supported_bin_mask]
         if target_std_plot is not None:
-            target_std_plot = target_std_plot[supported_bin_mask]
+            target_std_plot = _select_bins(target_std_plot, supported_bin_mask)
         y_plot_all = y_plot_all[:, supported_bin_mask]
         if y_std_all is not None:
             y_std_all = y_std_all[:, supported_bin_mask]
     if bad_mask_override is not None:
         bad_mask_override = bad_mask_override[:, supported_bin_mask]
+    bad_metric_mask_all = (
+        bad_mask_override
+        if bad_mask_override is not None
+        else _bad_training_mask(
+            y_plot_all,
+            y_noise=y_std_all,
+            bad_training_condition=str(bad_training_condition),
+        )
+    )
     y_fit_all, alpha_sigma_all, training_target_metadata = _prepare_training_targets(
         y_plot_all,
         y_std_all,
@@ -384,7 +396,13 @@ def main() -> None:
             fit_white_noise=args.fit_white_noise,
         )
 
-    metrics = _metrics(y_plot_all[test_index], y_pred, y_pred_std, x_bins_plot)
+    metrics = _metrics(
+        y_plot_all[test_index],
+        y_pred,
+        y_pred_std,
+        x_bins_plot,
+        valid_mask=~bad_metric_mask_all[test_index],
+    )
     metrics.insert(2, "pca_components_actual", pca_fit_metadata["n_components_actual"])
     metrics.insert(3, "pca_explained_variance", pca_fit_metadata["explained_variance_ratio_sum"])
     metrics.to_csv(metrics_path, index=False)
@@ -401,8 +419,8 @@ def main() -> None:
         y_pred=y_pred,
         y_pred_std=y_pred_std,
         example_indices=example_indices,
-        x_label=_x_label(attrs),
-        y_label=_y_label(attrs, transform_metadata),
+        x_label=_x_label(attrs, analysis),
+        y_label=_y_label(attrs, transform_metadata, analysis),
         title=_title(attrs, analysis),
         ymin=overlay_ymin,
         ymax=overlay_ymax,
@@ -414,6 +432,7 @@ def main() -> None:
         x_bins_plot=x_bins_plot,
         target_plot=target_plot,
         y_test=y_plot_all[test_index],
+        y_test_std=y_std_all[test_index] if y_std_all is not None else None,
         y_pred=y_pred,
         y_pred_std=y_pred_std,
         path=parity_path,
@@ -426,7 +445,7 @@ def main() -> None:
         x_bins_plot,
         n_components=pca_components,
         pca_scaling=args.pca_scaling,
-        x_label=_x_label(attrs),
+        x_label=_x_label(attrs, analysis),
         analysis=analysis,
         path=pca_modes_path,
         max_components_to_plot=args.plot_max_components,
@@ -444,6 +463,7 @@ def main() -> None:
             row[f"{prefix}_x_plot"] = float(x_value)
             row[f"{prefix}_true"] = float(y_plot_all[global_row, bin_index])
             row[f"{prefix}_true_std"] = float(y_std_all[global_row, bin_index]) if y_std_all is not None else np.nan
+            row[f"{prefix}_true_missing"] = bool(bad_metric_mask_all[global_row, bin_index])
             row[f"{prefix}_pred"] = float(y_pred[local_row, bin_index])
             row[f"{prefix}_pred_std"] = float(y_pred_std[local_row, bin_index])
         prediction_rows.append(row)

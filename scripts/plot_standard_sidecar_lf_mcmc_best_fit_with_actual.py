@@ -31,6 +31,17 @@ from process_halpha_dust_evaluation import _compute_case_lfs as _compute_halpha_
 
 
 DUST_PARAMETER_NAMES = ["delta_0", "delta_z", "delta_M", "delta_Mz", "attenuation_scatter"]
+EXTRA_ACTUAL_STYLES = (
+    (":", "tab:orange"),
+    ("-.", "tab:green"),
+    ((0, (3, 1, 1, 1)), "tab:red"),
+    ((0, (1, 1)), "tab:purple"),
+    ((0, (5, 1)), "tab:brown"),
+    ((0, (3, 2, 1, 2)), "tab:pink"),
+    ((0, (2, 1)), "tab:gray"),
+    ((0, (4, 1, 1, 1, 1, 1)), "tab:olive"),
+    ((0, (1, 2)), "tab:cyan"),
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -99,6 +110,10 @@ def _parse_label_path(value: str) -> tuple[str, Path]:
     if not label:
         raise ValueError(f"Expected non-empty LABEL in {value!r}")
     return label, Path(path).expanduser().resolve()
+
+
+def _extra_actual_style(index: int) -> tuple[str | tuple[int, tuple[int, ...]], str]:
+    return EXTRA_ACTUAL_STYLES[index % len(EXTRA_ACTUAL_STYLES)]
 
 
 def _read_standard_predictions(path: Path) -> pd.DataFrame:
@@ -373,7 +388,7 @@ def main() -> None:
         apply_display_offsets=True,
     )
     standard_overlays = [(args.actual_label, actual_standard, "--", "black", 2.0, 1.0, 6)]
-    for extra in args.extra_actual_hdf5:
+    for extra_index, extra in enumerate(args.extra_actual_hdf5):
         label, extra_hdf5 = _parse_label_path(extra)
         extra_standard = _read_galacticus_predictions(
             extra_hdf5,
@@ -383,7 +398,8 @@ def main() -> None:
             min_log10_y=args.min_log10_lf,
             apply_display_offsets=True,
         )
-        standard_overlays.append((label, extra_standard, ":", "black", 2.0, 1.0, 6))
+        linestyle, color = _extra_actual_style(extra_index)
+        standard_overlays.append((label, extra_standard, linestyle, color, 2.0, 1.0, 6))
 
     if args.posterior_draw_runs_dir is not None:
         first_label = "actual posterior draws"
@@ -416,8 +432,9 @@ def main() -> None:
             dust_case_label=args.actual_sidecar_case,
         )
     sidecar_overlays = [(args.actual_label, actual_halpha, "--", "black", 2.0, 1.0, 6)]
-    for extra in args.extra_actual_sidecar_dir:
+    for extra_index, extra in enumerate(args.extra_actual_sidecar_dir):
         label, extra_sidecar_dir = _parse_label_path(extra)
+        linestyle, color = _extra_actual_style(extra_index)
         sidecar_overlays.append(
             (
                 label,
@@ -426,8 +443,8 @@ def main() -> None:
                     min_log10_lf=args.min_log10_lf,
                     dust_case_label=args.actual_sidecar_case,
                 ),
-                ":",
-                "black",
+                linestyle,
+                color,
                 2.0,
                 1.0,
                 6,

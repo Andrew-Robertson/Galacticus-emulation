@@ -1263,7 +1263,7 @@
     },
     "smf_z3": {
       "analysis": "massFunctionStellarTomczak2014ZFOURGEz3",
-      "label": "Tomczak+14 SMF z~2",
+      "label": "Tomczak+14 SMF 1.00<z<1.25",
       "x_plot": [
         8.75,
         9.0,

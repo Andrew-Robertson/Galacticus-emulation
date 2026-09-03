@@ -4,13 +4,6 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Interactive Multi-Observable Demo</title>
-  <script>
-    window.MathJax = {
-      tex: { inlineMath: [['\\(', '\\)'], ['$', '$']] },
-      svg: { fontCache: 'global' }
-    };
-  </script>
-  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
   <style>
     :root {
       --bg: #f4efe6;
@@ -85,6 +78,7 @@
     .plot-title {
       font-size: 14px;
       font-weight: 700;
+      line-height: 1.25;
       margin: 2px 4px 6px;
       color: var(--ink);
     }
@@ -92,43 +86,42 @@
       position: relative;
     }
     .axis-label-x {
-      position: absolute;
-      left: 66px;
-      right: 18px;
-      bottom: 0;
-      text-align: center;
-      font-size: 12px;
-      color: var(--ink);
-      pointer-events: none;
+      display: none;
     }
     .axis-label-y {
-      position: absolute;
-      left: -8px;
-      top: 26px;
-      bottom: 44px;
-      width: 28px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transform: rotate(-90deg);
-      transform-origin: center center;
-      font-size: 12px;
-      color: var(--ink);
-      pointer-events: none;
+      display: none;
     }
     .slider-block + .slider-block {
       margin-top: 16px;
     }
     .slider-head {
-      display: flex;
-      justify-content: space-between;
-      gap: 10px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
       align-items: baseline;
       margin-bottom: 7px;
     }
     .slider-name {
       font-weight: 700;
-      font-size: 14px;
+      font-size: 13px;
+      line-height: 1.25;
+      min-width: 0;
+    }
+    .parameter-label-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      min-width: 0;
+      white-space: nowrap;
+    }
+    .parameter-symbol {
+      color: var(--ink);
+    }
+    .parameter-current-name {
+      color: var(--muted);
+      font-weight: 650;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .slider-value {
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -212,11 +205,6 @@
     .swatch.training { background: rgba(29, 38, 48, 0.20); }
     .swatch.target { background: var(--target); }
     .swatch.prediction { background: var(--accent); }
-    .swatch.band {
-      height: 10px;
-      background: var(--accent-soft);
-      border: 1px solid rgba(165, 75, 34, 0.28);
-    }
     svg {
       width: 100%;
       aspect-ratio: 1.17 / 1;
@@ -246,7 +234,7 @@
     <h1>Interactive Multi-Observable Galacticus Demo</h1>
     <p class="subhead">
       A live view of a saved Galacticus emulator bundle trained on several observables at once. Move
-      the parameter sliders to update the GP predictions, target comparisons, and emulator uncertainty bands.
+      the parameter sliders to update the emulator predictions, target comparisons, and emulator uncertainty bands.
     </p>
     <div class="layout">
       <section class="panel controls">
@@ -264,10 +252,9 @@
       <section class="panel plots">
         <div class="plot-grid" id="plot-grid"></div>
         <div class="legend">
-          <span class="legend-item"><span class="swatch training"></span> training preview</span>
+          <span class="legend-item"><span class="swatch training"></span> example training data</span>
           <span class="legend-item"><span class="swatch target"></span> target data</span>
-          <span class="legend-item"><span class="swatch band"></span> GP 1σ band</span>
-          <span class="legend-item"><span class="swatch prediction"></span> GP prediction</span>
+          <span class="legend-item"><span class="swatch prediction"></span> emulator prediction</span>
         </div>
         <div class="footer" id="status">Loading…</div>
       </section>
@@ -302,24 +289,175 @@
       while (node.firstChild) node.removeChild(node.firstChild);
     }
 
-    function mathWrap(texLike) {
-      let value = String(texLike || "").trim();
-      if (value.startsWith("log10(") && value.endsWith(")")) {
-        let inner = value.slice(6, -1).trim();
-        if (inner.startsWith("$") && inner.endsWith("$")) {
-          inner = inner.slice(1, -1);
-        }
-        value = `\\log_{10}\\left(${inner}\\right)`;
-      } else if (value.startsWith("$") && value.endsWith("$")) {
-        value = value.slice(1, -1);
-      }
-      return `\\(${value}\\)`;
+    const parameterSymbolHtml = {
+      diskSFRFrequencyNorm: "ν<sub>SF,d</sub> / Gyr<sup>-1</sup>",
+      spheroidSFREfficiency: "ε<sub>*,sph</sub>",
+      stellarPopulationMetalYield: "y<sub>Z</sub>",
+      diskVelocityCharacteristic: "V<sub>out,d</sub> / km s<sup>-1</sup>",
+      diskExponent: "α<sub>out,d</sub>",
+      spheroidVelocityCharacteristic: "V<sub>out,sph</sub> / km s<sup>-1</sup>",
+      coolingMultiplier: "f<sub>cool</sub>",
+      coreRadiusOverVirialRadius: "r<sub>core</sub> / R<sub>vir</sub>",
+      henriquesGamma: "γ<sub>reinc</sub>",
+      henriquesDelta1: "δ<sub>reinc,1</sub>",
+      henriquesDelta2: "δ<sub>reinc,2</sub>",
+      massRatioMajorMerger: "f<sub>major</sub>",
+      energyOrbital: "f<sub>orbit</sub>",
+      barFractionAngularMomentumRetainedSpheroid: "f<sub>j,sph</sub><sup>bar</sup>",
+      blackHoleSeedMass: "M<sub>BH,seed</sub> / M<sub>⊙</sub>",
+      BHefficiencyRadioMode: "ε<sub>BH,radio</sub>",
+      BHefficiencyWind: "ε<sub>BH,wind</sub>",
+      bondiEnhancementSpheroid: "α<sub>Bondi,sph</sub>",
+      bondiEnhancementHotHalo: "α<sub>Bondi,hot</sub>",
+      thinDiskMaximum: "x<sub>thin,max</sub>"
+    };
+
+    function escapeHtml(value) {
+      return String(value || "").replace(/[&<>"']/g, (character) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        "\"": "&quot;",
+        "'": "&#39;"
+      }[character]));
     }
 
-    function typesetMath(node) {
-      if (window.MathJax && window.MathJax.typesetPromise) {
-        window.MathJax.typesetPromise([node]).catch((error) => console.error(error));
+    function plainTexMath(value) {
+      return String(value || "")
+        .replace(/\\alpha/g, "α")
+        .replace(/\\gamma/g, "γ")
+        .replace(/\\delta/g, "δ")
+        .replace(/\\epsilon/g, "ε")
+        .replace(/\\Phi/g, "Φ")
+        .replace(/\\star/g, "★")
+        .replace(/\\odot/g, "⊙")
+        .replace(/\\bullet/g, "•")
+        .replace(/\\langle/g, "〈")
+        .replace(/\\rangle/g, "〉")
+        .replace(/\\approx/g, "≈")
+        .replace(/\\simeq/g, "≃")
+        .replace(/\\log_?\\{?10\\}?/g, "log10")
+        .replace(/\\dot\{([^}]*)\}/g, "$1̇")
+        .replace(/\\mathrm\{([^}]*)\}/g, "$1")
+        .replace(/\\rm\s+/g, "")
+        .replace(/[{}]/g, "")
+        .replace(/\\,/g, " ")
+        .replace(/\\/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
+    function plotTitleHtml(label) {
+      let value = String(label || "");
+      value = value.replace(/H\s*\$\\alpha\$/g, "Hα");
+      value = value.replace(/\$([^$]+)\$/g, (_, mathText) => plainTexMath(mathText));
+      return escapeHtml(value);
+    }
+
+    function normalizeTexLabel(value) {
+      let text = String(value || "").trim();
+      if (text.startsWith("log10(") && text.endsWith(")")) {
+        text = `\\log_{10}(${text.slice(6, -1)})`;
       }
+      return text
+        .replace(/\$/g, "")
+        .replace(/\\left/g, "")
+        .replace(/\\right/g, "")
+        .replace(/\\,/g, " ")
+        .replace(/\\mathrm\{([^{}]*)\}/g, "$1")
+        .replace(/\\text\{([^{}]*)\}/g, "$1")
+        .replace(/\\dot\{M\}/g, "Ṁ")
+        .replace(/\\log_\{10\}/g, "log_{10}")
+        .replace(/\\log_10/g, "log_{10}")
+        .replace(/\\log_\{e\}/g, "log_{e}")
+        .replace(/\\log_e/g, "log_{e}")
+        .replace(/\\alpha/g, "α")
+        .replace(/\\gamma/g, "γ")
+        .replace(/\\delta/g, "δ")
+        .replace(/\\epsilon/g, "ε")
+        .replace(/\\Phi/g, "Φ")
+        .replace(/\\sigma/g, "σ")
+        .replace(/\\star/g, "★")
+        .replace(/\\odot/g, "⊙")
+        .replace(/\\bullet/g, "•")
+        .replace(/\\langle/g, "〈")
+        .replace(/\\rangle/g, "〉")
+        .replace(/\\/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
+    function readScriptToken(text, startIndex) {
+      if (text[startIndex] === "{") {
+        const endIndex = text.indexOf("}", startIndex + 1);
+        if (endIndex !== -1) {
+          return { value: text.slice(startIndex + 1, endIndex), nextIndex: endIndex + 1 };
+        }
+      }
+      return { value: text[startIndex] || "", nextIndex: startIndex + 1 };
+    }
+
+    function texLabelParts(label) {
+      const text = normalizeTexLabel(label);
+      const parts = [];
+      let normal = "";
+      for (let index = 0; index < text.length; index += 1) {
+        const character = text[index];
+        if ((character === "_" || character === "^") && index + 1 < text.length) {
+          if (normal) {
+            parts.push({ text: normal, script: null });
+            normal = "";
+          }
+          const token = readScriptToken(text, index + 1);
+          parts.push({ text: token.value, script: character === "_" ? "sub" : "sup" });
+          index = token.nextIndex - 1;
+        } else {
+          normal += character;
+        }
+      }
+      if (normal) {
+        parts.push({ text: normal, script: null });
+      }
+      return parts;
+    }
+
+    function appendSvgAxisLabel(svg, label, attrs) {
+      const node = createSvgElement("text", attrs);
+      texLabelParts(label).forEach((part) => {
+        const tspanAttrs = {};
+        if (part.script === "sub") {
+          tspanAttrs["baseline-shift"] = "-28%";
+          tspanAttrs["font-size"] = "75%";
+        } else if (part.script === "sup") {
+          tspanAttrs["baseline-shift"] = "42%";
+          tspanAttrs["font-size"] = "75%";
+        }
+        const tspan = createSvgElement("tspan", tspanAttrs);
+        tspan.textContent = part.text;
+        node.appendChild(tspan);
+      });
+      svg.appendChild(node);
+      return node;
+    }
+
+    function parameterLabelHtml(column) {
+      const symbol = parameterSymbolHtml[column];
+      const currentName = `<span class="parameter-current-name" title="${escapeHtml(column)}">${escapeHtml(column)}</span>`;
+      if (!symbol) return currentName;
+      return `<span class="parameter-label-row"><span class="parameter-symbol">${symbol}</span>${currentName}</span>`;
+    }
+
+    function trainingRunCount() {
+      return meta.n_training_rows || meta.training_run_count || meta.training_rows || 1024;
+    }
+
+    function defaultResetDescription() {
+      const source = String(meta.galacticus_default_source || "").trim();
+      if (!source) return "not available";
+      if (source.includes("campaign_design") || source === "parameter prior defaults") {
+        return "campaign_design.json prior defaults: the prior median x0 where one is defined; otherwise the midpoint of the prior range.";
+      }
+      return `${source}; parameters without an explicit model default use the prior median x0 where one is defined, otherwise the midpoint of the prior range.`;
     }
 
     function linePath(xs, ys, xScale, yScale) {
@@ -523,7 +661,7 @@
 
         const xLabel = createSvgElement("text", {
           x: plotRect.left + frac * innerWidth,
-          y: height - 12,
+          y: height - 22,
           "text-anchor": i === 0 ? "start" : (i === 4 ? "end" : "middle"),
           "font-size": "11",
           fill: "#69737c"
@@ -542,12 +680,31 @@
         svg.appendChild(yLabel);
       }
 
+      appendSvgAxisLabel(svg, metaBlock.x_axis_label, {
+        x: plotRect.left + innerWidth / 2,
+        y: height - 5,
+        "text-anchor": "middle",
+        "font-size": "12",
+        fill: "#1d2630"
+      });
+
+      const yAxisCenter = plotRect.top + innerHeight / 2;
+      appendSvgAxisLabel(svg, metaBlock.y_axis_label, {
+        x: 14,
+        y: yAxisCenter,
+        transform: `rotate(-90 14 ${yAxisCenter})`,
+        "text-anchor": "middle",
+        "dominant-baseline": "middle",
+        "font-size": "12",
+        fill: "#1d2630"
+      });
+
       const card = svg.closest(".plot-card");
       if (card) {
         const xLabelNode = card.querySelector(".axis-label-x");
         const yLabelNode = card.querySelector(".axis-label-y");
-        if (xLabelNode) xLabelNode.innerHTML = mathWrap(metaBlock.x_axis_label);
-        if (yLabelNode) yLabelNode.innerHTML = mathWrap(metaBlock.y_axis_label);
+        if (xLabelNode) xLabelNode.textContent = "";
+        if (yLabelNode) yLabelNode.textContent = "";
       }
     }
 
@@ -556,7 +713,6 @@
         const svg = document.getElementById(`plot-${observableKey}`);
         drawSinglePlot(svg, observableKey, predictionPayload.predictions[observableKey]);
       });
-      typesetMath(plotGrid);
     }
 
     function renderControls() {
@@ -571,7 +727,7 @@
         block.className = "slider-block";
         block.innerHTML = `
           <div class="slider-head">
-            <div class="slider-name">${column}</div>
+            <div class="slider-name">${parameterLabelHtml(column)}</div>
             <div class="slider-value" id="value-${column}">${formatParamValue(range.default)}</div>
           </div>
           <input id="slider-${column}" type="range" min="${minSlider}" max="${maxSlider}" step="${sliderStep}" value="${defaultSlider}">
@@ -584,11 +740,10 @@
       });
 
       metaBox.innerHTML = `
-        <strong>${meta.observable_keys.length}</strong> observables from a ${meta.input_columns.length}D campaign.<br>
-        Training preview: ${meta.training_preview_rows || "stored"} curves shown as fed to the emulator.<br>
-        Default reset: ${meta.galacticus_default_source || "not available"}.<br>
-        Prediction latency: ${meta.prediction_benchmark ? meta.prediction_benchmark.milliseconds_per_prediction.toFixed(2) + " ms" : "n/a"} per request.<br>
-        Training noise model: known per-bin variances passed through the GP <code>alpha</code> term.
+        <strong>${meta.observable_keys.length}</strong> observables from a ${meta.input_columns.length}D campaign with ${trainingRunCount()} training runs.<br>
+        Example training data: ${meta.training_preview_rows || "stored"} curves shown.<br>
+        Default reset: ${defaultResetDescription()}<br>
+        Prediction latency: ${meta.prediction_benchmark ? meta.prediction_benchmark.milliseconds_per_prediction.toFixed(2) + " ms" : "n/a"} per request.
       `;
       bestFitButton.disabled = !meta.best_fit_params;
       galacticusDefaultsButton.disabled = !meta.galacticus_default_params;
@@ -614,7 +769,7 @@
         const card = document.createElement("div");
         card.className = "plot-card";
         card.innerHTML = `
-          <div class="plot-title">${meta.observables[observableKey].label}</div>
+          <div class="plot-title">${plotTitleHtml(meta.observables[observableKey].label)}</div>
           <div class="plot-shell">
             <div class="axis-label-y"></div>
             <svg id="plot-${observableKey}" viewBox="0 0 430 340" aria-label="${meta.observables[observableKey].label}"></svg>

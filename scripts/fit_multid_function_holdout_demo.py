@@ -22,10 +22,14 @@ from sklearn.model_selection import KFold
 from galacticus_emu.gp import fit_scaled_gp, predict_scaled_gp
 from galacticus_emu.interactive_observables import (
     OBSERVABLE_CONFIGS,
+    _bad_training_mask as _shared_bad_training_mask,
     _prepare_training_targets as _prepare_shared_training_targets,
+    _select_bins,
     _supported_bin_mask as _shared_supported_bin_mask,
+    _target_noise_from_analysis_group,
     training_bad_mask_override_from_transform,
 )
+from galacticus_emu.observable_plot_metadata import STANDARD_OBSERVABLE_PLOT_METADATA
 
 
 PRESETS = {
@@ -76,6 +80,19 @@ PRESETS = {
         "overlay_ymax": 10.0,
         "use_training_alpha": True,
         "bad_training_condition": "nonpositive",
+        "bad_training_value_fill": "bin_median",
+        "bad_training_sigma": 5.0,
+        "min_training_sigma": 1.0e-3,
+    },
+    "morphological_fraction_gama_moffett2016": {
+        "analysis": "morphologicalFractionGAMAMoffett2016",
+        "output_prefix": "morphological_fraction_gama_moffett2016_holdout_demo",
+        "figures_dir_name": "figures_morphological_fraction_gama_moffett2016_holdout_demo",
+        "emulator_dir_name": "emulator_morphological_fraction_gama_moffett2016_holdout_demo",
+        "overlay_ymin": 0.0,
+        "overlay_ymax": 1.0,
+        "use_training_alpha": True,
+        "bad_training_condition": "zero_and_zero_noise",
         "bad_training_value_fill": "bin_median",
         "bad_training_sigma": 5.0,
         "min_training_sigma": 1.0e-3,
@@ -136,6 +153,7 @@ PRESET_OBSERVABLE_KEYS = {
     "smf_zfourge_z0": "smf_z0",
     "smf_zfourge_z3": "smf_z3",
     "mzr_blanc2019": "mzr_blanc2019",
+    "morphological_fraction_gama_moffett2016": "morphological_fraction_gama_moffett2016",
     "sfr_function_robotham2011": "sfr_function_robotham2011",
     "size_mass_vdw2014_star_forming_z0": "size_mass_vdw2014_star_forming_z0",
     "size_mass_vdw2014_quiescent_z0": "size_mass_vdw2014_quiescent_z0",
@@ -349,7 +367,6 @@ def _load_campaign(
     y_dataset = attrs["yDataset"]
     target_dataset = attrs["yDatasetTarget"]
     covariance_dataset = attrs.get("yCovariance")
-    target_covariance_dataset = attrs.get("yCovarianceTarget")
     x_is_log = bool(attrs.get("xAxisIsLog", False))
     y_is_log = bool(attrs.get("yAxisIsLog", False))
 
@@ -373,11 +390,7 @@ def _load_campaign(
                 current_noise = np.sqrt(np.maximum(np.diag(current_covariance), 0.0))
             else:
                 current_noise = None
-            if target_covariance_dataset and target_covariance_dataset in group:
-                current_target_covariance = np.asarray(group[target_covariance_dataset][...], dtype=float)
-                current_target_noise = np.sqrt(np.maximum(np.diag(current_target_covariance), 0.0))
-            else:
-                current_target_noise = None
+            current_target_noise = _target_noise_from_analysis_group(group, attrs)
 
         if x_bins is None:
             x_bins = current_x
@@ -468,9 +481,28 @@ def _prepare_training_targets(
     )
 
 
-def _supported_bin_mask(y_values: np.ndarray, *, bad_training_condition: str) -> np.ndarray:
+def _supported_bin_mask(
+    y_values: np.ndarray,
+    y_noise: np.ndarray | None = None,
+    *,
+    bad_training_condition: str,
+) -> np.ndarray:
     return _shared_supported_bin_mask(
         y_values,
+        y_noise=y_noise,
+        bad_training_condition=bad_training_condition,
+    )
+
+
+def _bad_training_mask(
+    y_values: np.ndarray,
+    y_noise: np.ndarray | None = None,
+    *,
+    bad_training_condition: str,
+) -> np.ndarray:
+    return _shared_bad_training_mask(
+        y_values,
+        y_noise=y_noise,
         bad_training_condition=bad_training_condition,
     )
 
@@ -512,6 +544,7 @@ def _valid_observed_mask(
     *,
     bad_training_condition: str,
     bad_training_value_fill,
+    observed_std: np.ndarray | None = None,
 ) -> np.ndarray:
     valid = np.isfinite(observed)
     if _plot_keeps_bad_values(bad_training_value_fill):
@@ -520,32 +553,79 @@ def _valid_observed_mask(
         return valid & (observed > 0.0)
     if bad_training_condition == "zero_only":
         return valid & (observed != 0.0)
+    if bad_training_condition == "zero_and_zero_noise":
+        return valid & ~_shared_bad_training_mask(
+            observed,
+            y_noise=observed_std,
+            bad_training_condition=bad_training_condition,
+        )
     return valid
 
 
-def _metrics(y_true: np.ndarray, y_pred: np.ndarray, y_std: np.ndarray, x_bins_plot: np.ndarray) -> pd.DataFrame:
+def _metric_values(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    y_std: np.ndarray,
+    valid: np.ndarray,
+) -> dict[str, float | int]:
+    valid = valid & np.isfinite(y_true) & np.isfinite(y_pred) & np.isfinite(y_std)
+    n_valid = int(np.count_nonzero(valid))
+    if n_valid == 0:
+        return {
+            "n_valid": 0,
+            "rmse": np.nan,
+            "mae": np.nan,
+            "r2": np.nan,
+            "coverage_1sigma": np.nan,
+            "coverage_2sigma": np.nan,
+        }
+    y_true_valid = y_true[valid]
+    y_pred_valid = y_pred[valid]
+    y_std_valid = y_std[valid]
+    return {
+        "n_valid": n_valid,
+        "rmse": float(np.sqrt(mean_squared_error(y_true_valid, y_pred_valid))),
+        "mae": float(mean_absolute_error(y_true_valid, y_pred_valid)),
+        "r2": float(r2_score(y_true_valid, y_pred_valid)) if n_valid > 1 else np.nan,
+        "coverage_1sigma": float(np.mean(np.abs(y_pred_valid - y_true_valid) <= y_std_valid)),
+        "coverage_2sigma": float(np.mean(np.abs(y_pred_valid - y_true_valid) <= 2.0 * y_std_valid)),
+    }
+
+
+def _metrics(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    y_std: np.ndarray,
+    x_bins_plot: np.ndarray,
+    valid_mask: np.ndarray | None = None,
+) -> pd.DataFrame:
     rows = []
     for bin_index in range(y_true.shape[1]):
+        valid = np.ones(y_true.shape[0], dtype=bool)
+        if valid_mask is not None:
+            valid &= valid_mask[:, bin_index]
+        metric_values = _metric_values(
+            y_true[:, bin_index],
+            y_pred[:, bin_index],
+            y_std[:, bin_index],
+            valid,
+        )
         rows.append(
             {
                 "bin": int(bin_index),
                 "x_bin_plot": float(x_bins_plot[bin_index]),
-                "rmse": float(np.sqrt(mean_squared_error(y_true[:, bin_index], y_pred[:, bin_index]))),
-                "mae": float(mean_absolute_error(y_true[:, bin_index], y_pred[:, bin_index])),
-                "r2": float(r2_score(y_true[:, bin_index], y_pred[:, bin_index])),
-                "coverage_1sigma": float(np.mean(np.abs(y_pred[:, bin_index] - y_true[:, bin_index]) <= y_std[:, bin_index])),
-                "coverage_2sigma": float(np.mean(np.abs(y_pred[:, bin_index] - y_true[:, bin_index]) <= 2.0 * y_std[:, bin_index])),
+                **metric_values,
             }
         )
+    all_valid = np.ones(y_true.shape, dtype=bool)
+    if valid_mask is not None:
+        all_valid &= valid_mask
+    all_metric_values = _metric_values(y_true, y_pred, y_std, all_valid)
     rows.append(
         {
             "bin": "all",
             "x_bin_plot": np.nan,
-            "rmse": float(np.sqrt(mean_squared_error(y_true.ravel(), y_pred.ravel()))),
-            "mae": float(mean_absolute_error(y_true.ravel(), y_pred.ravel())),
-            "r2": float(r2_score(y_true.ravel(), y_pred.ravel())),
-            "coverage_1sigma": float(np.mean(np.abs(y_pred - y_true) <= y_std)),
-            "coverage_2sigma": float(np.mean(np.abs(y_pred - y_true) <= 2.0 * y_std)),
+            **all_metric_values,
         }
     )
     return pd.DataFrame(rows)
@@ -559,19 +639,35 @@ def _space_filling_examples(x_test: np.ndarray, n_examples: int) -> np.ndarray:
     return np.asarray(sorted({int(order[int(round(v))]) for v in values}), dtype=int)
 
 
-def _y_label(attrs: dict, transform_metadata: dict) -> str:
+def _metadata_for_analysis(analysis: str | None) -> dict:
+    if analysis is None:
+        return {}
+    for observable_key, config in OBSERVABLE_CONFIGS.items():
+        if str(config.get("analysis")) == str(analysis):
+            return STANDARD_OBSERVABLE_PLOT_METADATA.get(observable_key, {})
+    return {}
+
+
+def _y_label(attrs: dict, transform_metadata: dict, analysis: str | None = None) -> str:
+    metadata = _metadata_for_analysis(analysis)
+    if metadata.get("y_axis_label"):
+        return str(metadata["y_axis_label"])
     if transform_metadata["y_transform"] == "log10":
         return r"$\log_{10}(\mathrm{model\ output})$"
     return str(attrs.get("yAxisLabel", "output"))
 
 
-def _x_label(attrs: dict) -> str:
+def _x_label(attrs: dict, analysis: str | None = None) -> str:
+    metadata = _metadata_for_analysis(analysis)
+    if metadata.get("x_axis_label"):
+        return str(metadata["x_axis_label"])
     return str(attrs.get("xAxisLabel", "x"))
 
 
 def _title(attrs: dict, analysis: str) -> str:
-    target = str(attrs.get("targetLabel", "target"))
-    description = str(attrs.get("description", analysis))
+    metadata = _metadata_for_analysis(analysis)
+    target = str(metadata.get("target_label") or attrs.get("targetLabel", "target"))
+    description = str(metadata.get("label") or attrs.get("description", analysis))
     description = (
         description.replace("$", "")
         .replace(r"\le", "<=")
@@ -643,6 +739,7 @@ def _plot_overlay(
             observed,
             bad_training_condition=bad_training_condition,
             bad_training_value_fill=bad_training_value_fill,
+            observed_std=None if y_test_std is None else y_test_std[row_index],
         )
 
         if sanitized_y_test_std is None:
@@ -732,6 +829,7 @@ def _plot_parity(
     *,
     x_bins_plot: np.ndarray,
     y_test: np.ndarray,
+    y_test_std: np.ndarray | None,
     y_pred: np.ndarray,
     y_pred_std: np.ndarray,
     path: Path,
@@ -753,6 +851,7 @@ def _plot_parity(
             observed,
             bad_training_condition=bad_training_condition,
             bad_training_value_fill=bad_training_value_fill,
+            observed_std=None if y_test_std is None else y_test_std[:, bin_index],
         ) & np.isfinite(predicted)
 
         if not np.any(valid):
@@ -865,6 +964,7 @@ def main() -> None:
         else:
             supported_bin_mask = _supported_bin_mask(
                 y_plot_all,
+                y_noise=y_std_all,
                 bad_training_condition=str(bad_training_condition),
             )
         if not np.any(supported_bin_mask):
@@ -872,12 +972,21 @@ def main() -> None:
         x_bins_plot = x_bins_plot[supported_bin_mask]
         target_plot = target_plot[supported_bin_mask]
         if target_std_plot is not None:
-            target_std_plot = target_std_plot[supported_bin_mask]
+            target_std_plot = _select_bins(target_std_plot, supported_bin_mask)
         y_plot_all = y_plot_all[:, supported_bin_mask]
         if y_std_all is not None:
             y_std_all = y_std_all[:, supported_bin_mask]
     if bad_mask_override is not None:
         bad_mask_override = bad_mask_override[:, supported_bin_mask]
+    bad_metric_mask_all = (
+        bad_mask_override
+        if bad_mask_override is not None
+        else _bad_training_mask(
+            y_plot_all,
+            y_noise=y_std_all,
+            bad_training_condition=str(bad_training_condition),
+        )
+    )
     y_fit_all, alpha_sigma_all, training_target_metadata = _prepare_training_targets(
         y_plot_all,
         y_std_all,
@@ -909,8 +1018,8 @@ def main() -> None:
             y_pred=y_pred,
             y_pred_std=y_pred_std,
             example_indices=example_indices,
-            x_label=_x_label(attrs),
-            y_label=_y_label(attrs, transform_metadata),
+            x_label=_x_label(attrs, analysis),
+            y_label=_y_label(attrs, transform_metadata, analysis),
             title=_title(attrs, analysis),
             ymin=overlay_ymin,
             ymax=overlay_ymax,
@@ -922,6 +1031,7 @@ def main() -> None:
             x_bins_plot=x_bins_plot,
             target_plot=target_plot,
             y_test=y_test,
+            y_test_std=y_test_std,
             y_pred=y_pred,
             y_pred_std=y_pred_std,
             path=parity_path,
@@ -958,7 +1068,13 @@ def main() -> None:
             fit_white_noise=args.fit_white_noise,
         )
 
-    metrics = _metrics(y_plot_all[test_index], y_pred, y_pred_std, x_bins_plot)
+    metrics = _metrics(
+        y_plot_all[test_index],
+        y_pred,
+        y_pred_std,
+        x_bins_plot,
+        valid_mask=~bad_metric_mask_all[test_index],
+    )
     metrics.to_csv(metrics_path, index=False)
 
     example_indices = _space_filling_examples(x_train_all[test_index], args.n_example_curves)
@@ -973,8 +1089,8 @@ def main() -> None:
         y_pred=y_pred,
         y_pred_std=y_pred_std,
         example_indices=example_indices,
-        x_label=_x_label(attrs),
-        y_label=_y_label(attrs, transform_metadata),
+        x_label=_x_label(attrs, analysis),
+        y_label=_y_label(attrs, transform_metadata, analysis),
         title=_title(attrs, analysis),
         ymin=overlay_ymin,
         ymax=overlay_ymax,
@@ -987,6 +1103,7 @@ def main() -> None:
         x_bins_plot=x_bins_plot,
         target_plot=target_plot,
         y_test=y_plot_all[test_index],
+        y_test_std=y_std_all[test_index] if y_std_all is not None else None,
         y_pred=y_pred,
         y_pred_std=y_pred_std,
         path=parity_path,
@@ -1005,6 +1122,7 @@ def main() -> None:
             row[f"{prefix}_x_plot"] = float(x_value)
             row[f"{prefix}_true"] = float(y_plot_all[global_row, bin_index])
             row[f"{prefix}_true_std"] = float(y_std_all[global_row, bin_index]) if y_std_all is not None else np.nan
+            row[f"{prefix}_true_missing"] = bool(bad_metric_mask_all[global_row, bin_index])
             row[f"{prefix}_pred"] = float(y_pred[local_row, bin_index])
             row[f"{prefix}_pred_std"] = float(y_pred_std[local_row, bin_index])
         prediction_rows.append(row)
