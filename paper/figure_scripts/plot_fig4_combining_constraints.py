@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 import shlex
 import subprocess
@@ -8,20 +9,78 @@ import sys
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-CAMPAIGN_ROOT = Path("runs/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced")
-MCMC_ROOT = (
-    CAMPAIGN_ROOT
-    / "automatedPipeline_transformedParams_finalPaper_definitive"
-    / "MCMCs_production_from_exploratory_MAP"
-    / "standard_observables"
+DEFAULT_CAMPAIGN_ROOT = Path("runs/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced")
+DEFAULT_MCMC_SUBDIR = (
+    "automatedPipeline_transformedParams_finalPaper_definitive"
+    "/MCMCs_production_from_exploratory_MAP"
+    "/standard_observables"
 )
-FIGURE_DIR = MCMC_ROOT / "smf_sfrf_sizes" / "figures"
+DEFAULT_BUNDLE_SUBPATH = (
+    "automatedPipeline_transformedParams_finalPaper"
+    "/emulators/standard_observables/pca_99/standard_observables_bundle.joblib"
+)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Recreate the paper figure comparing individual and combined standard-observable constraints."
+    )
+    parser.add_argument(
+        "--campaign-root",
+        type=Path,
+        default=REPO_ROOT / DEFAULT_CAMPAIGN_ROOT,
+        help="Root of the sobol_1024_20p_simpleSizes_moreHalos_reduced campaign.",
+    )
+    parser.add_argument(
+        "--mcmc-root",
+        type=Path,
+        default=None,
+        help=(
+            "Directory containing the standard-observable production MCMC subdirectories. "
+            "Defaults to CAMPAIGN_ROOT/automatedPipeline_transformedParams_finalPaper_definitive/"
+            "MCMCs_production_from_exploratory_MAP/standard_observables."
+        ),
+    )
+    parser.add_argument(
+        "--bundle-path",
+        type=Path,
+        default=None,
+        help=(
+            "Standard-observable emulator bundle used for observable predictions. "
+            "Defaults to the bundle used for the submitted-paper figure."
+        ),
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        help="Output directory. Defaults to MCMC_ROOT/smf_sfrf_sizes/figures.",
+    )
+    return parser.parse_args()
 
 
 def main() -> None:
-    output_pdf = FIGURE_DIR / "smf_sfrf_sizes_corner_observable_composite.pdf"
-    output_png = FIGURE_DIR / "smf_sfrf_sizes_corner_observable_composite.png"
-    corner_png = FIGURE_DIR / "smf_sfrf_sizes_corner_observable_composite_corner.png"
+    args = parse_args()
+    campaign_root = args.campaign_root.expanduser().resolve()
+    mcmc_root = (
+        args.mcmc_root.expanduser().resolve()
+        if args.mcmc_root is not None
+        else campaign_root / DEFAULT_MCMC_SUBDIR
+    )
+    bundle_path = (
+        args.bundle_path.expanduser().resolve()
+        if args.bundle_path is not None
+        else campaign_root / DEFAULT_BUNDLE_SUBPATH
+    )
+    figure_dir = (
+        args.output_dir.expanduser().resolve()
+        if args.output_dir is not None
+        else mcmc_root / "smf_sfrf_sizes" / "figures"
+    )
+
+    output_pdf = figure_dir / "smf_sfrf_sizes_corner_observable_composite.pdf"
+    output_png = figure_dir / "smf_sfrf_sizes_corner_observable_composite.png"
+    corner_png = figure_dir / "smf_sfrf_sizes_corner_observable_composite_corner.png"
 
     command = [
         sys.executable,
@@ -30,22 +89,15 @@ def main() -> None:
         "--corner-output-path",
         str(corner_png),
         "--bundle-path",
-        str(
-            CAMPAIGN_ROOT
-            / "automatedPipeline_transformedParams_finalPaper"
-            / "emulators"
-            / "standard_observables"
-            / "pca_99"
-            / "standard_observables_bundle.joblib"
-        ),
+        str(bundle_path),
         "--posterior",
-        f"SMF z0+z3={MCMC_ROOT / 'smf_z0_z3' / 'mcmc_smf_z0_z3_mcmc_results.hdf5'}",
+        f"SMF z0+z3={mcmc_root / 'smf_z0_z3' / 'mcmc_smf_z0_z3_mcmc_results.hdf5'}",
         "--posterior",
-        f"SFRF={MCMC_ROOT / 'sfr_function_robotham2011' / 'mcmc_sfr_function_robotham2011_mcmc_results.hdf5'}",
+        f"SFRF={mcmc_root / 'sfr_function_robotham2011' / 'mcmc_sfr_function_robotham2011_mcmc_results.hdf5'}",
         "--posterior",
-        f"Sizes={MCMC_ROOT / 'size_mass_vdw2014_sf_q' / 'mcmc_size_mass_vdw2014_sf_q_mcmc_results.hdf5'}",
+        f"Sizes={mcmc_root / 'size_mass_vdw2014_sf_q' / 'mcmc_size_mass_vdw2014_sf_q_mcmc_results.hdf5'}",
         "--posterior",
-        f"Combined={MCMC_ROOT / 'smf_sfrf_sizes' / 'mcmc_smf_sfrf_sizes_mcmc_results.hdf5'}",
+        f"Combined={mcmc_root / 'smf_sfrf_sizes' / 'mcmc_smf_sfrf_sizes_mcmc_results.hdf5'}",
         "--corner-parameter",
         "diskVelocityCharacteristic",
         "--corner-parameter",
@@ -85,7 +137,7 @@ def main() -> None:
         "--observable-ymin",
         "smf_z3=-5.5",
         "--training-campaign-root",
-        str(CAMPAIGN_ROOT),
+        str(campaign_root),
         "--training-preview-rows",
         "all",
         "--training-alpha",

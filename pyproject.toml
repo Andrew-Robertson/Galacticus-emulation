@@ -23,6 +23,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+paper = [
+    "getdist",
+    "pypdf",
+]
 test = ["pytest"]
 
 [tool.setuptools]

@@ -7,6 +7,22 @@ documentation.
 
 ## Proposed Archives
 
+The local staging helper encodes the current archive split:
+
+```bash
+python scripts/stage_zenodo_data_release.py
+```
+
+This command prints a dry-run summary. To create the local staging tree under
+`dist/zenodo_data_release/galacticemu-paper-data-v1/`, run:
+
+```bash
+python scripts/stage_zenodo_data_release.py --execute
+```
+
+Add `--make-archives` when the staged tree is ready to be compressed into one
+`.tar.gz` file per package.
+
 ### Reduced 1024-Run Training Campaign
 
 Local source:
@@ -32,13 +48,13 @@ per-evaluation Galacticus outputs plus sidecar luminosity-function tables. The
 archive should exclude generated desktop files such as `.DS_Store`, Python
 caches, logs that are not useful provenance, and temporary plotting outputs.
 
-Suggested archive name:
+Staging package/archive name:
 
 ```text
 galacticemu_sobol1024_reduced_campaign_v1.tar.gz
 ```
 
-### Final Paper Pipeline Products
+### Paper Reproduction Products
 
 Local source:
 
@@ -46,13 +62,15 @@ Local source:
 runs/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced/automatedPipeline_transformedParams_finalPaper_definitive/MCMCs_production_from_exploratory_MAP
 ```
 
-This tree is about 8.3 GB locally. The public archive should prioritize:
+The full production tree is about 8.3 GB locally, so the staged public package
+selects the products needed by `paper/figure_scripts/` rather than copying every
+backend chain and scratch output. The public archive prioritizes:
 
 - trained emulator bundles and `.meta.json` files;
 - cross-validation tables and prediction summaries;
 - final MCMC result HDF5 files;
 - maximum-a-posteriori model-change XML files;
-- best-fit direct Galacticus validation outputs;
+- compact best-fit direct Galacticus validation outputs;
 - paper figure/table inputs and provenance commands.
 
 Compact copies of selected figure/table inputs are also tracked in git under
@@ -60,10 +78,10 @@ Compact copies of selected figure/table inputs are also tracked in git under
 authoritative source for the larger HDF5 chains, trained emulator bundles, and
 direct Galacticus products used to regenerate those derived inputs.
 
-Suggested archive name:
+Staging package/archive name:
 
 ```text
-galacticemu_final_paper_pipeline_products_v1.tar.gz
+galacticemu_paper_reproduction_products_v1.tar.gz
 ```
 
 ### Full Galacticus Example Run
@@ -79,11 +97,26 @@ with `/Outputs`, making it suitable for a public notebook that derives a new
 observable from a galaxy catalogue and then compares it with the reduced-output
 workflow.
 
-Suggested archive name:
+Staging package/archive name:
 
 ```text
 galacticemu_example_full_unit1_run_v1.tar.gz
 ```
+
+## Rebuilding The Paper Figures From Staged Data
+
+After extracting the reduced-campaign and paper-reproduction archives from the
+repository root, install the optional paper plotting dependencies and run:
+
+```bash
+python -m pip install -e ".[paper]"
+python paper/figure_scripts/rebuild_paper_figures.py \
+  --data-root . \
+  --output-dir paper/tmp/rebuilt_figures
+```
+
+The driver leaves outputs under `paper/tmp/` by default. Use that directory to
+compare against the checked-in manuscript PDFs in `paper/figures/`.
 
 ## Metadata To Include Beside Each Archive
 

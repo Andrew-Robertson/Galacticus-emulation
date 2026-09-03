@@ -39,6 +39,7 @@ jobs:
           python -m py_compile scripts/run_campaign_pipeline.py
           python -m py_compile scripts/submit_campaign_pipeline_slurm.py
           python -m py_compile scripts/smoke_test.py
+          python -m py_compile scripts/stage_zenodo_data_release.py
           python -m py_compile paper/figure_scripts/*.py
 
       - name: Validate pipeline configuration

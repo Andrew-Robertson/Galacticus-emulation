@@ -248,6 +248,16 @@ def parse_args() -> argparse.Namespace:
         default="Galacticus MAP (N-body)",
         help="Legend label for the UNIT direct-run overlay.",
     )
+    parser.add_argument(
+        "--actual-standard-path",
+        type=Path,
+        default=None,
+        help=(
+            "Direct Galacticus standard-observable values for the EPS MAP run. "
+            "May be romanEPS_massFunction.hdf5 or a compact CSV with x_display/y_display columns. "
+            "Defaults to the HDF5 file when present, otherwise the checked-in compact CSV."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -283,6 +293,20 @@ def _configure_matplotlib(font_scale: float) -> None:
 
 
 def _actual_standard_panel_data(actual_hdf5: Path, panel: PanelSpec) -> tuple[np.ndarray, np.ndarray, dict]:
+    if actual_hdf5.suffix.lower() == ".csv":
+        table = pd.read_csv(actual_hdf5)
+        sub = table[
+            (table["observable_key"] == panel.observable_key) & (table["analysis"] == panel.analysis)
+        ]
+        if "bin_index" in sub.columns:
+            sub = sub.sort_values("bin_index")
+        else:
+            sub = sub.sort_values("x_display")
+        return (
+            sub["x_display"].to_numpy(dtype=float),
+            sub["y_display"].to_numpy(dtype=float),
+            {"valuesAreDisplayCoordinates": True},
+        )
     with h5py.File(actual_hdf5, "r") as handle:
         group = handle[f"/analyses/{panel.analysis}"]
         attrs = {key: _decode_attr(value) for key, value in group.attrs.items()}
@@ -299,6 +323,8 @@ def _display_standard_panel(
 ) -> tuple[np.ndarray, np.ndarray]:
     x_display = np.asarray(x, dtype=float)
     y_display = np.asarray(y, dtype=float)
+    if bool(attrs.get("valuesAreDisplayCoordinates", False)):
+        return x_display, y_display
     if bool(attrs.get("xAxisIsLog", False)):
         x_display = np.log10(x_display)
     if bool(attrs.get("yAxisIsLog", False)):
@@ -610,6 +636,7 @@ def _plot_halpha_axis(
 
 def plot_standard(
     run_dir: Path,
+    actual_standard_path: Path,
     output_dir: Path,
     dpi: int,
     figsize: tuple[float, float],
@@ -618,14 +645,13 @@ def plot_standard(
     unit_label: str,
 ) -> list[Path]:
     csv_path = run_dir / f"{RUN_PREFIX}_best_fit_standard_observables.csv"
-    actual_hdf5 = run_dir / "bestFitModel_GalacticusRun" / "romanEPS_massFunction.hdf5"
     unit_hdf5s = _unit_standard_hdf5s(unit_run_dirs)
     table = pd.read_csv(csv_path)
 
     fig, axes = plt.subplots(4, 2, figsize=figsize, constrained_layout=True)
     axes_flat = axes.ravel()
     for axis, panel in zip(axes_flat, STANDARD_PANELS, strict=False):
-        _plot_standard_axis(axis, table, actual_hdf5, unit_hdf5s, panel)
+        _plot_standard_axis(axis, table, actual_standard_path, unit_hdf5s, panel)
 
     legend_axis = axes_flat[-1]
     legend_axis.axis("off")
@@ -760,6 +786,7 @@ def plot_halpha(
 
 def plot_combined(
     run_dir: Path,
+    actual_standard_path: Path,
     output_dir: Path,
     dpi: int,
     figsize: tuple[float, float],
@@ -768,7 +795,6 @@ def plot_combined(
     unit_label: str,
 ) -> list[Path]:
     standard_csv_path = run_dir / f"{RUN_PREFIX}_best_fit_standard_observables.csv"
-    standard_actual_hdf5 = run_dir / "bestFitModel_GalacticusRun" / "romanEPS_massFunction.hdf5"
     unit_hdf5s = _unit_standard_hdf5s(unit_run_dirs)
     standard_table = pd.read_csv(standard_csv_path)
 
@@ -780,7 +806,7 @@ def plot_combined(
     fig, axes = plt.subplots(4, 3, figsize=figsize, constrained_layout=True)
     standard_axes = axes[:, :2].ravel()
     for axis, panel in zip(standard_axes, STANDARD_PANELS, strict=False):
-        _plot_standard_axis(axis, standard_table, standard_actual_hdf5, unit_hdf5s, panel)
+        _plot_standard_axis(axis, standard_table, actual_standard_path, unit_hdf5s, panel)
 
     legend_axis = standard_axes[-1]
     legend_axis.axis("off")
@@ -814,11 +840,29 @@ def plot_combined(
     return [png_path, pdf_path]
 
 
+def _default_actual_standard_path(run_dir: Path) -> Path:
+    hdf5_path = run_dir / "bestFitModel_GalacticusRun" / "romanEPS_massFunction.hdf5"
+    if hdf5_path.exists():
+        return hdf5_path
+    run_csv_path = run_dir / "bestFitModel_GalacticusRun" / "standard_observable_actuals.csv"
+    if run_csv_path.exists():
+        return run_csv_path
+    figure_data_csv_path = REPO_ROOT / "paper/figure_data/final_calibration/galacticus_run_standard_observable_actuals.csv"
+    if figure_data_csv_path.exists():
+        return figure_data_csv_path
+    return hdf5_path
+
+
 def main() -> None:
     args = parse_args()
     run_dir = args.run_dir.expanduser().resolve()
     output_dir = (args.output_dir or (run_dir / "paperFigures")).expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
+    actual_standard_path = (
+        args.actual_standard_path.expanduser().resolve()
+        if args.actual_standard_path is not None
+        else _default_actual_standard_path(run_dir)
+    )
     _configure_matplotlib(args.font_scale)
     if args.unit_run_dir is None:
         unit_run_dirs = _default_unit_run_dirs(run_dir)
@@ -840,6 +884,7 @@ def main() -> None:
     outputs.extend(
         plot_standard(
             run_dir,
+            actual_standard_path,
             output_dir,
             args.dpi,
             tuple(args.standard_figsize),
@@ -863,6 +908,7 @@ def main() -> None:
     outputs.extend(
         plot_combined(
             run_dir,
+            actual_standard_path,
             output_dir,
             args.dpi,
             tuple(args.combined_figsize),

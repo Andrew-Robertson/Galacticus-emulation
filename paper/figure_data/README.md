@@ -45,8 +45,8 @@ belong in the Zenodo archive.
 Compact products from the final standard-observable plus H-alpha calibration:
 
 - best-fit standard-observable and sidecar luminosity-function CSVs;
-- direct-run H-alpha luminosity-function CSVs for the fiducial Galacticus and
-  UNIT validation runs;
+- direct-run standard-observable and H-alpha luminosity-function CSVs for the
+  fiducial Galacticus and UNIT validation runs;
 - maximum-a-posteriori model-change XML files;
 - the generated calibrated-parameter table used by the manuscript;
 - the final MCMC run summary JSON.
@@ -54,6 +54,10 @@ Compact products from the final standard-observable plus H-alpha calibration:
 The final MCMC chains and direct-run HDF5 catalogues are intentionally omitted
 from git. Recomputing posterior intervals or rebuilding the direct-Galacticus
 validation panels from first principles requires those Zenodo products.
+The compact `galacticus_run_standard_observable_actuals.csv` file is extracted
+from the final EPS MAP HDF5 output so the plotted validation curves can be
+regenerated without archiving that 1.8 GiB HDF5 file in the paper-reproduction
+package.
 
 ## Local Source Campaign
 

@@ -65,6 +65,21 @@ The `mode` field in a manifest is descriptive metadata. It does not change execu
 - `runs/`: generated changes files, logs, and run products
 - `playing/`: local scratch outputs and generated exploratory artifacts; ignored by git
 
+## Paper Reproduction And Data Release
+
+Paper-specific figure/table builders live under `paper/figure_scripts/`, with
+compact derived data in `paper/figure_data/` and checked-in manuscript PDFs in
+`paper/figures/`. The larger training outputs, emulator bundles, MCMC chains,
+and direct Galacticus products are staged for external archiving with:
+
+```bash
+python scripts/stage_zenodo_data_release.py
+```
+
+See [paper/figure_scripts/README.md](paper/figure_scripts/README.md) for the
+figure map and [docs/data_release_plan.md](docs/data_release_plan.md) for the
+Zenodo package split.
+
 ## Script Guide
 
 The top-level `scripts/` directory is intended to contain the main workflow entry points:
