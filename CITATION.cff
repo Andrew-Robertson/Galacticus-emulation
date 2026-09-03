@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+message: "If you use GalacticEmu, please cite the software and its accompanying paper."
+title: "GalacticEmu"
+type: software
+authors:
+  - family-names: "Robertson"
+    given-names: "Andrew"
+    orcid: "https://orcid.org/0000-0002-0086-0524"
+version: 0.1.0
+repository-code: "https://github.com/Andrew-Robertson/Galacticus-emulation"
+license: BSD-3-Clause

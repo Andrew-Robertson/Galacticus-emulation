@@ -18,8 +18,8 @@ cleanly.
   commits.
 - Keep `main` as the release branch; it now contains the former
   `sobral-log-error-likelihood` branch history.
-- Add release metadata: `LICENSE`, `CITATION.cff`, `.zenodo.json`, and
-  optionally `codemeta.json`.
+- Keep the software license and citation metadata current. Add Zenodo metadata
+  when preparing the archival release, and optionally add `codemeta.json`.
 - Replace absolute local paths in the manuscript and docs with repository-local
   paths or release DOI references.
 - Keep manuscript-only plotting/table scripts in `paper/figure_scripts/`, and
@@ -33,16 +33,16 @@ cleanly.
 - Remove generated files from the public surface: `.DS_Store`, `__pycache__`,
   LaTeX intermediates, temporary PDF renders, scratch figures, and local logs.
 
-## Repository State After Initial Cleanup
+## Repository State For The arXiv Submission
 
-Status checked on 2026-09-03 after the first cleanup pass:
+Status checked on 2026-09-03 after the release-readiness pass:
 
 - Current branch: `main`.
 - The former `sobral-log-error-likelihood` branch was a direct descendant of
   local `main`, so local `main` was fast-forwarded to the Sobral likelihood and
   final-paper history.
-- Local `main` is ahead of `origin/main`; pushing it will publish the existing
-  paper/app history as well as the Sobral log-error likelihood work.
+- Notebook development is kept on the separate `notebook-examples` branch and
+  is not part of the arXiv release.
 
 Initial cleanup completed:
 
@@ -54,13 +54,13 @@ Initial cleanup completed:
 - Added compact derived paper inputs under `paper/figure_data/`.
 - Generalized the kept HPC helper scripts enough that they no longer expose
   local machine paths.
+- Ran the local CI-equivalent checks and compiled the manuscript successfully.
+- Added a BSD 3-Clause software license and GitHub citation metadata.
 
-Remaining sequence before assigning the paper commit:
+Remaining sequence before assigning the arXiv paper tag:
 
-- Run the local CI-equivalent checks.
 - Push `main`.
-- Tag the paper release only after release metadata and the data DOI placeholders
-  or final DOIs are in place.
+- Tag the exact commit submitted to arXiv.
 
 ## Continuous Integration
 
@@ -91,12 +91,13 @@ source paths, and open data-licensing decisions.
 
 ## Notebooks
 
+- Develop the worked notebooks on `notebook-examples` during peer review and
+  merge them only after they run from a fresh environment.
+- Use one low-redshift stellar mass function as the worked emulator example.
 - Add stripped-output notebooks under `notebooks/`.
 - Provide an explicit data-download/cache helper; do not auto-download the
   multi-GB Zenodo archive on import.
 - Prefer `GALACTICUS_EMU_DATA` for pointing notebooks at an existing data copy.
-- Name the fast MCMC tutorial `05_run_emulator_mcmc_quickstart.ipynb` rather
-  than using "smoke" in the public title.
 
 ## Paper Reproduction
 
@@ -115,7 +116,7 @@ source paths, and open data-licensing decisions.
   standalone public script before tagging the release.
 - Record exact source data paths and commands in provenance files, while keeping
   machine-specific absolute paths out of the final manuscript.
-- Update the code/data availability text with the GitHub release tag, software
-  DOI, data DOI, Galacticus commit hash, and parameter-file release tag or DOI.
-- Resolve the remaining manuscript TODO for the parameter-file repository,
-  version, or DOI before tagging the paper release.
+- The arXiv version links to GitHub and states that the parameter files and
+  larger data products will be archived upon acceptance.
+- Update the accepted-paper version with the GitHub release tag, software DOI,
+  data DOI, Galacticus commit hash, and parameter-file release tag or DOI.

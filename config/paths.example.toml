@@ -2,7 +2,7 @@
 galacticus_binary = "$GALACTICUS_EXEC_PATH/Galacticus.exe"
 galacticus_parameter_files = "$GALACTICUS_PARAMETER_FILES"
 galacticus_dust_modelling = "$GALACTICUS_DUST_ROOT"
-run_root = "/Users/arobertson/Documents/Projects/GalacticusEmu/Galacticus-emulation/runs"
+run_root = "runs"
 
 [defaults]
 base_parameters = "$GALACTICUS_PARAMETER_FILES/hierarchicalParameters/romanEPS_local.xml"

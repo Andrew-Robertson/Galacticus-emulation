@@ -5,8 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "galacticus-emu"
 version = "0.1.0"
-description = "Thin orchestration and emulation tooling for Galacticus."
+description = "Tools for building emulators of Galacticus outputs and calibrating model parameters."
 readme = "README.md"
+license = {file = "LICENSE"}
+authors = [
+    {name = "Andrew Robertson"},
+]
 requires-python = ">=3.11"
 dependencies = [
     "emcee",
@@ -28,6 +32,10 @@ paper = [
     "pypdf",
 ]
 test = ["pytest"]
+
+[project.urls]
+Repository = "https://github.com/Andrew-Robertson/Galacticus-emulation"
+Paper = "https://github.com/Andrew-Robertson/Galacticus-emulation/tree/main/paper"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

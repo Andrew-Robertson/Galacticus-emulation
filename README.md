@@ -20,6 +20,10 @@ analysis are in the [paper directory](paper/README.md). A tagged release will
 preserve the version associated with the paper while development continues on
 the main branch.
 
+Worked example notebooks are planned during peer review. They will follow a
+low-redshift stellar mass function from archived Galacticus training outputs
+through emulator validation, construction, and MCMC calibration.
+
 ## Workflow
 
 A typical GalacticEmu calculation has the following stages:
@@ -152,3 +156,10 @@ python scripts/extract_campaign_hdf5_groups.py \
 ```
 
 Use `python <script> --help` for the options accepted by an individual command.
+
+## License
+
+The GalacticEmu source code is available under the
+[BSD 3-Clause License](LICENSE). The planned archival data release will state
+its own license. Bundled third-party manuscript style files under `paper/`
+retain the copyright and licensing notices in those files.
