@@ -6,7 +6,7 @@ import subprocess
 import sys
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 CAMPAIGN_ROOT = Path("runs/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced")
 MCMC_ROOT = (
@@ -25,7 +25,7 @@ def main() -> None:
 
     command = [
         sys.executable,
-        str(REPO_ROOT / "scripts" / "plot_standard_corner_observable_composite.py"),
+        str(Path(__file__).resolve().parent / "plot_standard_corner_observable_composite.py"),
         "--generate-corner",
         "--corner-output-path",
         str(corner_png),

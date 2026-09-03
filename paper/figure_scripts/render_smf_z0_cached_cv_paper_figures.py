@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 import sys
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 os.environ.setdefault("MPLCONFIGDIR", str(REPO_ROOT / ".mplconfig"))
 sys.path.insert(0, str(REPO_ROOT / "src"))
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
@@ -522,7 +522,7 @@ They are intended as the 1024-campaign replacement for the older polished figure
 Run from the repository root:
 
 ```bash
-python scripts/render_smf_z0_cached_cv_paper_figures.py \\
+python paper/figure_scripts/render_smf_z0_cached_cv_paper_figures.py \\
   runs/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced
 ```
 

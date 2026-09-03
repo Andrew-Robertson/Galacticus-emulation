@@ -1,0 +1,24 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<changes>
+  <change type="update" path="nodeOperator/nodeOperator[@value='stellarFeedbackDisks']/stellarFeedbackOutflows/stellarFeedbackOutflows/velocityCharacteristic" value="169.88285721401914" />
+  <change type="update" path="nodeOperator/nodeOperator[@value='stellarFeedbackDisks']/stellarFeedbackOutflows/stellarFeedbackOutflows/exponent" value="2.5498426485706127" />
+  <change type="update" path="coolingRate/multiplier" value="0.43568277307713882" />
+  <change type="update" path="blackHoleCGMHeating/efficiencyRadioMode" value="0.18266640025369951" />
+  <change type="update" path="starFormationRateSpheroids/starFormationTimescale/efficiency" value="0.083855549956656367" />
+  <change type="update" path="starFormationRateSurfaceDensityDisks/starFormationFrequencyNormalization" value="1.0071401493521459e-10" />
+  <change type="update" path="nodeOperator/nodeOperator[@value='blackHolesSeed']/blackHoleSeeds/mass" value="71721.440835744623" />
+  <change type="update" path="nodeOperator/nodeOperator[@value='stellarFeedbackSpheroids']/stellarFeedbackOutflows/stellarFeedbackOutflows/velocityCharacteristic" value="10.750929090564938" />
+  <change type="update" path="hotHaloOutflowReincorporation/gamma" value="1.6380979920906564" />
+  <change type="update" path="hotHaloOutflowReincorporation/delta1" value="-0.12690117341808357" />
+  <change type="update" path="hotHaloOutflowReincorporation/delta2" value="3.6048516508148336" />
+  <change type="update" path="mergerMassMovements/massRatioMajorMerger" value="0.46658631635636388" />
+  <change type="update" path="mergerRemnantSize/energyOrbital" value="1.5216053822485422" />
+  <change type="update" path="blackHoleAccretionRate/bondiHoyleAccretionEnhancementSpheroid" value="0.052372030561134292" />
+  <change type="update" path="blackHoleAccretionRate/bondiHoyleAccretionEnhancementHotHalo" value="3.2940823642898609" />
+  <change type="update" path="hotHaloMassDistributionCoreRadius/coreRadiusOverVirialRadius" value="0.30296044647609399" />
+  <change type="update" path="nodeOperator/nodeOperator[@value='barInstability']/galacticDynamicsBarInstability/fractionAngularMomentumRetainedSpheroid" value="0.17713100945630522" />
+  <change type="update" path="blackHoleWind/efficiencyWind" value="0.0032086118887652941" />
+  <change type="update" path="accretionDisks/accretionRateThinDiskMaximum" value="21.784434725712401" />
+  <change type="update" path="stellarPopulation/metalYield" value="0.036239570809684693" />
+  <!-- Sidecar LF nuisance parameters at MAP: delta_0=-0.738126, delta_z=0.517844, delta_M=0.795411, delta_Mz=0.0473573, attenuation_scatter=0.258142 -->
+</changes>

@@ -91,6 +91,7 @@ The top-level `scripts/` directory is intended to contain the main workflow entr
 
 Plotting helpers now live under `scripts/plotting/`, and exploratory diagnostics such as mass-metallicity, `M-\sigma`, and Faber-Jackson checks live under `scripts/playground/`.
 Older or superseded workflow helpers that are not the recommended starting point live under `scripts/legacy/`.
+Paper-specific figure and table builders live under `paper/figure_scripts/`.
 As a rule of thumb, keep a script at top level only when it is a reusable workflow CLI that another user should run directly. Put one-off diagnostics, comparison plots, and exploratory checks in `scripts/playground/` or `paper/figure_scripts/` if they exist solely to build manuscript figures. Generated outputs belong in `playing/` or `runs/`, not in `scripts/`.
 
 ## Interactive Emulator App

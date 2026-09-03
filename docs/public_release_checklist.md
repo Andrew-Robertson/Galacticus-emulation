@@ -14,17 +14,16 @@ cleanly.
 
 ## Repository Cleanup
 
-- Commit or intentionally discard all final-paper working-tree changes before
-  switching branches.
-- Merge `sobral-log-error-likelihood` into `main` after the working tree is
-  clean. The current local branch graph makes this a fast-forward merge from
-  `main` to the Sobral branch tip.
+- Keep final-paper working-tree changes grouped into small release-preparation
+  commits.
+- Keep `main` as the release branch; it now contains the former
+  `sobral-log-error-likelihood` branch history.
 - Add release metadata: `LICENSE`, `CITATION.cff`, `.zenodo.json`, and
   optionally `codemeta.json`.
 - Replace absolute local paths in the manuscript and docs with repository-local
   paths or release DOI references.
-- Move manuscript-only plotting/table scripts into `paper/figure_scripts/`, or
-  leave them in `scripts/` only if they are intended as reusable public CLIs.
+- Keep manuscript-only plotting/table scripts in `paper/figure_scripts/`, and
+  leave top-level `scripts/` for reusable public CLIs and workflow pieces.
 - Keep one public workflow path centered on
   `configs/pipelines/standard_observables_plus_halpha.yaml` and
   `scripts/run_campaign_pipeline.py`.
@@ -34,40 +33,30 @@ cleanly.
 - Remove generated files from the public surface: `.DS_Store`, `__pycache__`,
   LaTeX intermediates, temporary PDF renders, scratch figures, and local logs.
 
-## Current Working Tree Triage
+## Repository State After Initial Cleanup
 
-Status checked on 2026-09-03:
+Status checked on 2026-09-03 after the first cleanup pass:
 
-- Current branch: `sobral-log-error-likelihood`.
-- `sobral-log-error-likelihood` contains three commits not yet on local `main`:
-  the Sobral log-error likelihood commit and two later paper commits.
-- Local `main` has no commits missing from `sobral-log-error-likelihood`, so the
-  final merge back to `main` can be a fast-forward after the working tree is
-  clean.
-- Local `main` is ahead of `origin/main`, so pushing the release branch to
-  GitHub will publish the existing paper/app history as well as the Sobral
-  likelihood work.
+- Current branch: `main`.
+- The former `sobral-log-error-likelihood` branch was a direct descendant of
+  local `main`, so local `main` was fast-forwarded to the Sobral likelihood and
+  final-paper history.
+- Local `main` is ahead of `origin/main`; pushing it will publish the existing
+  paper/app history as well as the Sobral log-error likelihood work.
 
-Proposed cleanup buckets:
+Initial cleanup completed:
 
-- Release scaffolding to keep and commit first: `.github/workflows/ci.yml`,
-  `pyproject.toml`, `.gitignore`, and this checklist.
-- Final paper files to commit only after a paper-owner review: `paper/main.tex`,
-  `paper/bibliography.bib`, and `paper/main.pdf`.
-- Reusable code changes to review and keep if they are part of the public
-  emulator path: `src/galacticus_emu/interactive_observables.py`,
-  `src/galacticus_emu/interactive_sidecar_lf.py`,
-  `src/galacticus_emu/observable_plot_metadata.py`, and the public plotting/CV
-  scripts.
-- Paper-only scripts should move to `paper/figure_scripts/` or be documented as
-  provenance commands rather than public entry points.
-- Local/HPC helper scripts with hard-coded paths should stay out of the public
-  interface unless they are generalized.
+- Added CI scaffolding and release-planning docs.
+- Made the paper source portable by checking in static PDFs and using relative
+  figure paths.
+- Cleaned local absolute paths from public docs/scripts.
+- Moved manuscript-specific figure/table builders to `paper/figure_scripts/`.
+- Added compact derived paper inputs under `paper/figure_data/`.
+- Generalized the kept HPC helper scripts enough that they no longer expose
+  local machine paths.
 
-Merge sequence once cleanup is complete:
+Remaining sequence before assigning the paper commit:
 
-- Commit the chosen working-tree changes on `sobral-log-error-likelihood`.
-- Switch to `main` and run `git merge --ff-only sobral-log-error-likelihood`.
 - Run the local CI-equivalent checks.
 - Push `main`.
 - Tag the paper release only after release metadata and the data DOI placeholders
@@ -111,10 +100,12 @@ source paths, and open data-licensing decisions.
 
 ## Paper Reproduction
 
-- Add `paper/README.md` with commands for rebuilding figures and manuscript
-  products from the archived data.
-- Move final paper figures into `paper/figures/` and use relative paths in
+- Keep `paper/README.md` current with commands for rebuilding figures and
+  manuscript products from the archived data.
+- Keep final paper figures in `paper/figures/` and use relative paths in
   `paper/main.tex`.
+- Keep compact derived paper inputs in `paper/figure_data/`, with the larger
+  source HDF5 products in Zenodo.
 - Record exact source data paths and commands in provenance files, while keeping
   machine-specific absolute paths out of the final manuscript.
 - Update the code/data availability text with the GitHub release tag, software

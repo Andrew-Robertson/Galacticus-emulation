@@ -1,8 +1,8 @@
 # Paper Reproduction Notes
 
-This directory contains the manuscript source for the GalacticEmu paper and
-the small PDF figures needed to compile it without access to local `runs/`
-directories.
+This directory contains the manuscript source for the GalacticEmu paper, the
+static PDF figures needed to compile it, compact derived figure inputs, and the
+paper-specific scripts used to build manuscript products.
 
 ## Compile The Manuscript
 
@@ -31,6 +31,23 @@ cross-validation products, emulator bundles, MCMC chains, and direct
 Galacticus validation runs should be archived separately in the Zenodo data
 release.
 
+## Figure Data
+
+Small derived inputs are checked in under `paper/figure_data/`:
+
+- `smf_z0_cv/`: cached SMF z~0 cross-validation predictions, metrics, splits,
+  and summary metadata.
+- `combining_constraints/`: cached posterior-observable summaries for the
+  standard-observable constraint-combination figure.
+- `final_calibration/`: best-fit prediction tables, MAP XML files, emission-line
+  LF tables from direct runs, run metadata, and the generated calibrated
+  parameter table.
+
+These files are intended for quick inspection and lightweight figure audits.
+They do not replace the Zenodo data release, which should hold the reduced
+campaign outputs, emulator bundles, MCMC HDF5 files, and direct Galacticus
+HDF5 products.
+
 ## Data Products Needed To Rebuild Figures
 
 The current manuscript was built from the reduced campaign:
@@ -54,8 +71,9 @@ The public data release should include, at minimum:
 - direct Galacticus MAP validation outputs;
 - the figure/table provenance commands.
 
-## Script Placement
+## Figure Scripts
 
-Reusable workflow scripts should remain in the repository-level `scripts/`
-directory. Scripts that only reproduce manuscript figures or tables should
-live in `paper/figure_scripts/` once they have been reviewed for public use.
+Reusable workflow scripts remain in the repository-level `scripts/` directory.
+Scripts that only reproduce manuscript figures or tables live in
+`paper/figure_scripts/`; see `paper/figure_scripts/README.md` for the current
+script inventory and data requirements.

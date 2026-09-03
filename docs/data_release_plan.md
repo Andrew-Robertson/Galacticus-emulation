@@ -55,6 +55,11 @@ This tree is about 8.3 GB locally. The public archive should prioritize:
 - best-fit direct Galacticus validation outputs;
 - paper figure/table inputs and provenance commands.
 
+Compact copies of selected figure/table inputs are also tracked in git under
+`paper/figure_data/` for quick inspection. The Zenodo archive should remain the
+authoritative source for the larger HDF5 chains, trained emulator bundles, and
+direct Galacticus products used to regenerate those derived inputs.
+
 Suggested archive name:
 
 ```text

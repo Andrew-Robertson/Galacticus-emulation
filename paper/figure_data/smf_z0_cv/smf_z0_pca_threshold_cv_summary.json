@@ -1,0 +1,114 @@
+{
+  "command": "python scripts/run_smf_z0_pca_threshold_cv.py runs/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced --hdf5-filename galacticus.hdf5 --validation-mode kfold_subset --subset-size 64 --subset-size 128 --subset-size 256 --subset-size 512 --subset-size 1024 --n-folds 5 --pca-variance-threshold 0.90 --pca-variance-threshold 0.99 --pca-variance-threshold 0.999 --highlight-x 8.75 --highlight-x 9.75 --highlight-x 10.75 --holdout-threshold 0.99 --n-restarts-optimizer 0 --paper-figures-only --example-selection mean_smf_quantiles --output-dir runs/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced/cross_validation/pca_threshold_smf_z0_kfold5_64_to_1024",
+  "argv": [
+    "python",
+    "scripts/run_smf_z0_pca_threshold_cv.py",
+    "runs/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced",
+    "--hdf5-filename",
+    "galacticus.hdf5",
+    "--validation-mode",
+    "kfold_subset",
+    "--subset-size",
+    "64",
+    "--subset-size",
+    "128",
+    "--subset-size",
+    "256",
+    "--subset-size",
+    "512",
+    "--subset-size",
+    "1024",
+    "--n-folds",
+    "5",
+    "--pca-variance-threshold",
+    "0.90",
+    "--pca-variance-threshold",
+    "0.99",
+    "--pca-variance-threshold",
+    "0.999",
+    "--highlight-x",
+    "8.75",
+    "--highlight-x",
+    "9.75",
+    "--highlight-x",
+    "10.75",
+    "--holdout-threshold",
+    "0.99",
+    "--n-restarts-optimizer",
+    "0",
+    "--paper-figures-only",
+    "--example-selection",
+    "mean_smf_quantiles",
+    "--output-dir",
+    "runs/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced/cross_validation/pca_threshold_smf_z0_kfold5_64_to_1024"
+  ],
+  "campaign_root": "runs/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced",
+  "hdf5_filename": "galacticus.hdf5",
+  "observable": "smf_z0",
+  "analysis": "massFunctionStellarTomczak2014ZFOURGEz0",
+  "subset_sizes": [
+    64,
+    128,
+    256,
+    512,
+    1024
+  ],
+  "n_folds": 5,
+  "validation_mode": "kfold_subset",
+  "random_state": 12345,
+  "pca_variance_thresholds": [
+    0.9,
+    0.99,
+    0.999
+  ],
+  "highlighted_x_requested": [
+    8.75,
+    9.75,
+    10.75
+  ],
+  "example_selection": "mean_smf_quantiles",
+  "n_example_curves": 5,
+  "example_sample_indices": [
+    150,
+    528,
+    375,
+    618,
+    358
+  ],
+  "example_evaluation_ids": [
+    "sobol_1024_20p_simpleSizes_moreHalos-eval-0150",
+    "sobol_1024_20p_simpleSizes_moreHalos-eval-0528",
+    "sobol_1024_20p_simpleSizes_moreHalos-eval-0375",
+    "sobol_1024_20p_simpleSizes_moreHalos-eval-0618",
+    "sobol_1024_20p_simpleSizes_moreHalos-eval-0358"
+  ],
+  "highlighted_bins": [
+    {
+      "bin_index": 3,
+      "x_plot": 8.75
+    },
+    {
+      "bin_index": 7,
+      "x_plot": 9.75
+    },
+    {
+      "bin_index": 11,
+      "x_plot": 10.75
+    }
+  ],
+  "highlighted_training_rms_sigma": {
+    "3": 0.002787052077503739,
+    "7": 0.01146412452967733,
+    "11": 0.1793874095562616
+  },
+  "training_metadata": {
+    "training_alpha_used": true,
+    "bad_training_condition": "nonpositive",
+    "bad_training_value_fill": "keep",
+    "bad_training_sigma": 0.5,
+    "min_training_sigma": 0.001,
+    "n_bad_training_points": 552
+  },
+  "x_axis_label": "$\\log_{10}(M_\\star/\\mathrm{M}_\\odot)$",
+  "y_axis_label": "$\\mathrm{d}n/\\mathrm{d}\\log_\\mathrm{e} M_\\star$"
+}
