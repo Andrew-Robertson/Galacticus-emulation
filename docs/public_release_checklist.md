@@ -116,3 +116,5 @@ Merge sequence once cleanup is complete:
   machine-specific absolute paths out of the final manuscript.
 - Update the code/data availability text with the GitHub release tag, software
   DOI, data DOI, Galacticus commit hash, and parameter-file release tag or DOI.
+- Resolve the remaining manuscript TODO for the parameter-file repository,
+  version, or DOI before tagging the paper release.
