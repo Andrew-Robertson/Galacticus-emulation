@@ -34,6 +34,15 @@ def _default_project_root() -> Path:
 
 
 PROJECT_ROOT = _default_project_root()
+
+
+def _first_available_path(*paths: Path) -> Path:
+    for path in paths:
+        if path.exists():
+            return path
+    return paths[-1]
+
+
 DEFAULT_EXAMPLE_CAMPAIGN_ROOT = (
     PROJECT_ROOT / "runs" / "campaigns" / "sobol_1024_20p_simpleSizes_moreHalos_reduced"
 )
@@ -47,20 +56,26 @@ DEFAULT_HALPHA_HTML_PATH = PROJECT_ROOT / "assets" / "interactive_halpha_demo" /
 DEFAULT_DEMO_OBSERVABLES_BUNDLE_PATH = (
     PROJECT_ROOT / "demo_emulators" / "interactive_observables_demo" / "observables_demo_bundle_pca.joblib"
 )
+DEFAULT_DEPLOYMENT_OBSERVABLES_BUNDLE_PATH = (
+    PROJECT_ROOT / "demo_emulators" / "paper" / "standard_observables_mean_only.joblib"
+)
 DEFAULT_EXAMPLE_OBSERVABLES_BUNDLE_PATH = (
     DEFAULT_EXAMPLE_EMULATOR_ROOT
     / "standard_observables"
     / "pca_99"
     / "standard_observables_bundle.joblib"
 )
-DEFAULT_OBSERVABLES_BUNDLE_PATH = (
-    DEFAULT_EXAMPLE_OBSERVABLES_BUNDLE_PATH
-    if DEFAULT_EXAMPLE_OBSERVABLES_BUNDLE_PATH.exists()
-    else DEFAULT_DEMO_OBSERVABLES_BUNDLE_PATH
+DEFAULT_OBSERVABLES_BUNDLE_PATH = _first_available_path(
+    DEFAULT_EXAMPLE_OBSERVABLES_BUNDLE_PATH,
+    DEFAULT_DEPLOYMENT_OBSERVABLES_BUNDLE_PATH,
+    DEFAULT_DEMO_OBSERVABLES_BUNDLE_PATH,
 )
 DEFAULT_OBSERVABLES_HTML_PATH = PROJECT_ROOT / "assets" / "interactive_observables_demo" / "index.html"
 DEFAULT_DEMO_SIDECAR_LF_BUNDLE_PATH = (
     PROJECT_ROOT / "demo_emulators" / "interactive_sidecar_lf_demo" / "sidecar_lf_demo_bundle.joblib"
+)
+DEFAULT_DEPLOYMENT_SIDECAR_LF_BUNDLE_PATH = (
+    PROJECT_ROOT / "demo_emulators" / "paper" / "halpha_sobral_log_error_mean_only.joblib"
 )
 DEFAULT_EXAMPLE_SIDECAR_LF_BUNDLE_PATH = (
     DEFAULT_EXAMPLE_EMULATOR_ROOT
@@ -68,10 +83,10 @@ DEFAULT_EXAMPLE_SIDECAR_LF_BUNDLE_PATH = (
     / "pca_99"
     / "halpha_sobral_1dustdraw_pca99.joblib"
 )
-DEFAULT_SIDECAR_LF_BUNDLE_PATH = (
-    DEFAULT_EXAMPLE_SIDECAR_LF_BUNDLE_PATH
-    if DEFAULT_EXAMPLE_SIDECAR_LF_BUNDLE_PATH.exists()
-    else DEFAULT_DEMO_SIDECAR_LF_BUNDLE_PATH
+DEFAULT_SIDECAR_LF_BUNDLE_PATH = _first_available_path(
+    DEFAULT_EXAMPLE_SIDECAR_LF_BUNDLE_PATH,
+    DEFAULT_DEPLOYMENT_SIDECAR_LF_BUNDLE_PATH,
+    DEFAULT_DEMO_SIDECAR_LF_BUNDLE_PATH,
 )
 DEFAULT_SIDECAR_LF_HTML_PATH = DEFAULT_OBSERVABLES_HTML_PATH
 DEFAULT_OBSERVABLES_ORDER = [
