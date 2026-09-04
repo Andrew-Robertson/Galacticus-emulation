@@ -26,6 +26,9 @@ def test_checked_in_paper_bundles_are_self_contained() -> None:
         bundle_root / "halpha_sobral_log_error_mean_only.joblib"
     )
 
+    assert "smf_liwhite2009_sdss" not in standard["observable_keys"]
+    assert len(standard["observable_keys"]) == 7
+
     for bundle, metadata, predict in (
         (standard, observables_bundle_meta(standard), predict_observables_bundle),
         (sidecar, sidecar_bundle_meta(sidecar), predict_sidecar_lf_bundle),

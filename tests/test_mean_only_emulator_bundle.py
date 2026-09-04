@@ -59,3 +59,23 @@ def test_export_embeds_best_fit_values(tmp_path) -> None:
     exporter.embed_best_fit(bundle, summary_path)
 
     assert bundle["best_fit_params"] == {"alpha": 1.25, "beta": -0.5}
+
+
+def test_export_can_exclude_an_observable() -> None:
+    repository_root = Path(__file__).resolve().parents[1]
+    script_path = repository_root / "scripts" / "export_mean_only_emulator_bundle.py"
+    spec = importlib.util.spec_from_file_location("mean_only_export", script_path)
+    assert spec is not None and spec.loader is not None
+    exporter = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(exporter)
+
+    bundle = {
+        "observable_keys": ["keep", "remove"],
+        "observables": {"keep": {"models": []}, "remove": {"models": []}},
+        "observable_configs": {"keep": {}, "remove": {}},
+    }
+    exporter.exclude_observables(bundle, ["remove"])
+
+    assert bundle["observable_keys"] == ["keep"]
+    assert list(bundle["observables"]) == ["keep"]
+    assert list(bundle["observable_configs"]) == ["keep"]

@@ -20,7 +20,8 @@ python scripts/export_mean_only_emulator_bundle.py \
   demo_emulators/paper/standard_observables_mean_only.joblib \
   --campaign-root runs/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced \
   --best-fit-summary paper/figure_data/final_calibration/mcmc_all_standard_observables_plus_halpha_sobral_1dustdraw_pca99_sobralLogErr_run_summary.json \
-  --training-preview-rows 64
+  --training-preview-rows 64 \
+  --exclude-observable smf_liwhite2009_sdss
 
 python scripts/export_mean_only_emulator_bundle.py \
   runs/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced/scratch/sobral_log_errors_local/emulators/emission_line_lfs/pca_99/halpha_sobral_1dustdraw_pca99_sobralLogErr.joblib \

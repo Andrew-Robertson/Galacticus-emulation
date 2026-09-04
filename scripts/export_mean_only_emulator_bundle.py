@@ -37,6 +37,12 @@ def parse_args() -> argparse.Namespace:
         type=int,
         help="Embed this many processed training curves in each observable.",
     )
+    parser.add_argument(
+        "--exclude-observable",
+        action="append",
+        default=[],
+        help="Observable key to omit from the exported bundle. May be repeated.",
+    )
     return parser.parse_args()
 
 
@@ -80,6 +86,31 @@ def embed_best_fit(bundle: dict, summary_path: Path) -> dict:
     return bundle
 
 
+def exclude_observables(bundle: dict, observable_keys: list[str]) -> dict:
+    if not observable_keys:
+        return bundle
+    excluded = set(observable_keys)
+    available = set(bundle.get("observables", {}))
+    unknown = excluded - available
+    if unknown:
+        raise ValueError("Unknown observable key(s): " + ", ".join(sorted(unknown)))
+    bundle["observables"] = {
+        key: observable
+        for key, observable in bundle["observables"].items()
+        if key not in excluded
+    }
+    bundle["observable_keys"] = [
+        key for key in bundle.get("observable_keys", []) if key not in excluded
+    ]
+    if "observable_configs" in bundle:
+        bundle["observable_configs"] = {
+            key: config
+            for key, config in bundle["observable_configs"].items()
+            if key not in excluded
+        }
+    return bundle
+
+
 def embed_training_preview(bundle: dict, rows: int) -> dict:
     bundle_type = bundle.get("bundle_type")
     if bundle_type in {
@@ -112,6 +143,7 @@ def embed_training_preview(bundle: dict, rows: int) -> dict:
 def main() -> None:
     args = parse_args()
     bundle = load_emulator_bundle(args.input_bundle)
+    bundle = exclude_observables(bundle, args.exclude_observable)
     if args.campaign_root is not None:
         bundle["campaign_root"] = str(args.campaign_root)
     if args.training_preview_rows is not None:
