@@ -65,6 +65,18 @@ def _samples_path(bundle: dict) -> Path:
 
 
 def _input_ranges(bundle: dict) -> dict[str, dict[str, float | str]]:
+    embedded_ranges = bundle.get("input_ranges")
+    if embedded_ranges is not None:
+        return {
+            str(name): {
+                "min": float(values["min"]),
+                "max": float(values["max"]),
+                "default": float(values["default"]),
+                "scale": str(values["scale"]),
+            }
+            for name, values in embedded_ranges.items()
+        }
+
     specs_by_name = {spec.short_name: spec for spec in bundle["parameter_specs"]}
     samples = pd.read_csv(_samples_path(bundle)) if _samples_path(bundle).exists() else None
     ranges: dict[str, dict[str, float | str]] = {}
@@ -116,7 +128,12 @@ def _feature_matrix(bundle: dict, params: dict[str, float]) -> np.ndarray:
     return np.column_stack([slow_quantiles, sidecar_values])
 
 
-def _predict_observable(observable: dict, x: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def _predict_observable(
+    observable: dict,
+    x: np.ndarray,
+    *,
+    return_std: bool,
+) -> tuple[np.ndarray, np.ndarray]:
     n_components = len(observable["models"])
     coefficients = np.zeros((x.shape[0], n_components), dtype=float)
     coefficient_stds = np.zeros_like(coefficients)
@@ -126,6 +143,7 @@ def _predict_observable(observable: dict, x: np.ndarray) -> tuple[np.ndarray, np
             float(observable["y_means"][index]),
             float(observable["y_stds"][index]),
             x,
+            return_std=return_std,
         )
         coefficients[:, index] = pred
         coefficient_stds[:, index] = pred_std
@@ -143,10 +161,15 @@ def _predict_observable(observable: dict, x: np.ndarray) -> tuple[np.ndarray, np
 
 def predict_sidecar_lf_bundle(bundle: dict, params: dict[str, float]) -> dict[str, dict[str, np.ndarray]]:
     x = _feature_matrix(bundle, params)
+    return_std = bool(bundle.get("supports_predictive_uncertainty", True))
     predictions = {}
     for observable_key in bundle["observables"]:
         observable = bundle["observables"][observable_key]
-        y_pred, y_std = _predict_observable(observable, x)
+        y_pred, y_std = _predict_observable(
+            observable,
+            x,
+            return_std=return_std,
+        )
         predictions[observable_key] = {
             "x_plot": np.asarray(observable["x_plot"], dtype=float),
             "y_pred_plot": apply_sidecar_lf_y_display_offset(observable, y_pred),
@@ -191,6 +214,11 @@ def _filter_preview_table(table: pd.DataFrame, bundle: dict) -> pd.DataFrame:
 
 
 def _training_preview(bundle: dict, observable: dict, max_rows: int | None) -> np.ndarray:
+    embedded_preview = observable.get("y_train_preview")
+    if embedded_preview is not None:
+        values = np.asarray(embedded_preview, dtype=float)
+        return values if max_rows is None else values[:max_rows]
+
     output_columns = list(observable["output_columns"])
     use_columns = ["evaluation_id", "dust_draw_index", *output_columns]
     frames = []
@@ -215,6 +243,23 @@ def _training_preview(bundle: dict, observable: dict, max_rows: int | None) -> n
     return _log10_with_floor(values, min_log10_lf)
 
 
+def embed_sidecar_lf_training_preview(
+    bundle: dict,
+    *,
+    training_preview_rows: int | str | None = 64,
+) -> dict:
+    max_preview_rows = _training_preview_row_count(training_preview_rows, fallback=64)
+    bundle["input_ranges"] = _input_ranges(bundle)
+    for observable in bundle["observables"].values():
+        preview = _training_preview(bundle, observable, max_preview_rows)
+        observable["y_train_preview"] = preview
+    bundle["training_preview_rows"] = (
+        "all" if max_preview_rows is None else int(max_preview_rows)
+    )
+    bundle["training_preview_source"] = "embedded processed training targets"
+    return bundle
+
+
 def _y_limits(target: np.ndarray, preview: np.ndarray, min_log10_lf: float) -> tuple[float, float]:
     arrays = [np.asarray(target, dtype=float).ravel()]
     if preview.size:
@@ -236,11 +281,12 @@ def bundle_meta(
     max_preview_rows = _training_preview_row_count(training_preview_rows, fallback=64)
     parameter_names = list(bundle["parameter_names"])
     input_ranges = _input_ranges(bundle)
-    best_fit_params = (
-        None
-        if best_fit_summary_path is None
-        else _best_fit_params_from_summary(best_fit_summary_path, parameter_names)
-    )
+    best_fit_params = bundle.get("best_fit_params")
+    if best_fit_summary_path is not None:
+        best_fit_params = _best_fit_params_from_summary(
+            best_fit_summary_path,
+            parameter_names,
+        )
     min_log10_lf = float(bundle.get("training_options", {}).get("min_log10_lf", -8.0))
     observables = {}
     for observable_key, observable in bundle["observables"].items():
@@ -281,6 +327,9 @@ def bundle_meta(
         {
             "bundle_type": bundle["bundle_type"],
             "emulator_mode": "pca",
+            "supports_predictive_uncertainty": bool(
+                bundle.get("supports_predictive_uncertainty", True)
+            ),
             "input_columns": parameter_names,
             "input_ranges": input_ranges,
             "observable_keys": list(bundle["observables"]),
@@ -291,7 +340,10 @@ def bundle_meta(
             "galacticus_default_params_path": None,
             "n_training_rows": bundle.get("n_training_rows"),
             "training_preview_rows": "all" if max_preview_rows is None else int(max_preview_rows),
-            "training_preview_source": "sidecar luminosity-function tables",
+            "training_preview_source": bundle.get(
+                "training_preview_source",
+                "sidecar luminosity-function tables",
+            ),
             "observables": observables,
             "prediction_benchmark": bundle.get("prediction_benchmark"),
         }

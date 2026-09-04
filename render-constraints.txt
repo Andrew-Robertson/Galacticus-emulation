@@ -1,0 +1,5 @@
+# Match the numerical stack used to serialize the hosted emulator bundles.
+joblib==1.5.3
+numpy==2.3.5
+scikit-learn==1.8.0
+scipy==1.17.1

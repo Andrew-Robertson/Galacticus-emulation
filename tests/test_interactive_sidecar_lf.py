@@ -9,6 +9,7 @@ import numpy as np
 
 from galacticus_emu.interactive_sidecar_lf import (
     bundle_meta,
+    embed_sidecar_lf_training_preview,
     load_sidecar_lf_bundle,
     predict_sidecar_lf_bundle,
 )
@@ -127,6 +128,24 @@ class InteractiveSidecarLFTest(unittest.TestCase):
             self.assertEqual(len(observable["y_train_preview"]), 1)
             self.assertEqual(meta["input_ranges"]["diskVelocityCharacteristic"]["min"], 90.0)
             self.assertEqual(meta["input_ranges"]["diskVelocityCharacteristic"]["max"], 130.0)
+
+            bundle["best_fit_params"] = {
+                "diskVelocityCharacteristic": 105.0,
+                "delta_0": -0.1,
+            }
+            embed_sidecar_lf_training_preview(bundle, training_preview_rows=1)
+            bundle["campaign_root"] = str(root / "not-present")
+            embedded_meta = bundle_meta(bundle)
+            embedded_observable = embedded_meta["observables"]["halpha_sobral_z1"]
+            self.assertEqual(len(embedded_observable["y_train_preview"]), 1)
+            self.assertEqual(
+                embedded_meta["best_fit_params"]["diskVelocityCharacteristic"],
+                105.0,
+            )
+            self.assertEqual(
+                embedded_meta["input_ranges"]["diskVelocityCharacteristic"]["min"],
+                90.0,
+            )
 
 
 if __name__ == "__main__":

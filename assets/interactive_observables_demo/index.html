@@ -150,6 +150,9 @@
       color: var(--muted);
       font-size: 13px;
     }
+    [hidden] {
+      display: none !important;
+    }
     .button-row {
       display: flex;
       flex-wrap: wrap;
@@ -234,11 +237,11 @@
     <h1>Interactive Multi-Observable Galacticus Demo</h1>
     <p class="subhead">
       A live view of a saved Galacticus emulator bundle trained on several observables at once. Move
-      the parameter sliders to update the emulator predictions, target comparisons, and emulator uncertainty bands.
+      the parameter sliders to update the emulator predictions and target comparisons.
     </p>
     <div class="layout">
       <section class="panel controls">
-        <div class="toggle-row">
+        <div class="toggle-row" id="uncertainty-row">
           <input id="toggle-uncertainty" type="checkbox" checked>
           <label for="toggle-uncertainty">Show emulator uncertainty bands</label>
         </div>
@@ -269,6 +272,7 @@
     const metaBox = document.getElementById("meta-box");
     const statusEl = document.getElementById("status");
     const uncertaintyToggle = document.getElementById("toggle-uncertainty");
+    const uncertaintyRow = document.getElementById("uncertainty-row");
     const bestFitButton = document.getElementById("best-fit-button");
     const galacticusDefaultsButton = document.getElementById("galacticus-defaults-button");
     const plotRect = { left: 66, right: 18, top: 26, bottom: 44 };
@@ -603,7 +607,7 @@
         }));
       });
 
-      if (uncertaintyToggle.checked) {
+      if (meta.supports_predictive_uncertainty && uncertaintyToggle.checked) {
         const lower = prediction.y_pred_plot.map((value, index) => value - prediction.y_std_plot[index]);
         const upper = prediction.y_pred_plot.map((value, index) => value + prediction.y_std_plot[index]);
         clippedGroup.appendChild(createSvgElement("path", {
@@ -747,6 +751,8 @@
       `;
       bestFitButton.disabled = !meta.best_fit_params;
       galacticusDefaultsButton.disabled = !meta.galacticus_default_params;
+      uncertaintyToggle.checked = Boolean(meta.supports_predictive_uncertainty);
+      uncertaintyRow.hidden = !meta.supports_predictive_uncertainty;
 
       meta.input_columns.forEach((column) => {
         document.getElementById(`slider-${column}`).addEventListener("input", () => {

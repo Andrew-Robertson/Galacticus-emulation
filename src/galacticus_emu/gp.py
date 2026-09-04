@@ -54,10 +54,14 @@ def predict_scaled_gp(
     y_mean: float,
     y_std: float,
     x: np.ndarray,
+    *,
+    return_std: bool = True,
 ) -> tuple[np.ndarray, np.ndarray]:
+    if not return_std:
+        pred_scaled = model.predict(x, return_std=False)
+        return y_mean + y_std * pred_scaled, np.zeros_like(pred_scaled)
     pred_scaled, pred_std_scaled = model.predict(x, return_std=True)
     return y_mean + y_std * pred_scaled, y_std * pred_std_scaled
-
 
 def fit_cv_predictions(
     x: np.ndarray,

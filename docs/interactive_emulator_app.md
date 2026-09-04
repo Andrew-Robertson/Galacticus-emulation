@@ -2,9 +2,9 @@
 
 The interactive app uses browser sliders to show how changes to Galacticus
 parameters affect predicted observables without running Galacticus or training
-an emulator. The hosted version uses a compact pre-trained bundle, while the
-local launcher automatically uses the larger paper emulators when they are
-available.
+an emulator. The hosted version uses compact, mean-only copies of the paper
+emulators, while the local launcher automatically uses the full paper
+emulators when they are available.
 
 ## Hosted Demo
 
@@ -12,9 +12,10 @@ The hosted multi-observable emulator is available at:
 
 <https://galacticus-emulation.onrender.com>
 
-The current hosted bundle was trained on 512 runs spanning 19 Galacticus
-parameters. It is a compact predecessor of the paper emulator, not the final
-1024-run, 20-parameter model used in the analysis.
+The hosted standard-observable and H-alpha emulators use the same Ntrain=1024
+Gaussian-process mean predictions as the paper analysis. Predictive
+uncertainties are omitted from the hosted bundles to reduce their disk and
+memory requirements.
 
 ## Run The Demonstrations Locally
 
@@ -26,8 +27,16 @@ python scripts/serve_interactive_fastapi_demo.py
 
 Then open <http://127.0.0.1:8010/>. When the paper campaign is present in its
 default location, the landing page provides the standard-observable suite and
-the emission-line luminosity functions. Without those files, it falls back to
-the compact checked-in standard-observable emulator.
+the emission-line luminosity functions, including predictive uncertainty.
+Without those files, it falls back to the two compact paper emulators used by
+the hosted app.
+
+To use the compact deployment bundles even when the full campaign is present,
+run:
+
+```bash
+python scripts/serve_interactive_fastapi_demo.py --deployment
+```
 
 ## Use The Full Paper Emulators
 
@@ -39,19 +48,19 @@ pointed at the extracted campaign data. The paper campaign is:
 runs/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced
 ```
 
-The app uses the trained products in that campaign's pipeline output:
+The standard-observable emulator comes from the definitive paper pipeline:
 
 ```text
-runs/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced/pipeline/emulators/standard_observables/pca_99/standard_observables_bundle.joblib
-runs/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced/pipeline/emulators/emission_line_lfs/pca_99/halpha_sobral_1dustdraw_pca99.joblib
+runs/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced/automatedPipeline_transformedParams_finalPaper_definitive/emulators/standard_observables/pca_99/standard_observables_bundle.joblib
 ```
 
-From the repository root, run:
+The final MCMC used the Sobral-log-error H-alpha emulator at:
 
-```bash
-python scripts/serve_pipeline_emulator_app.py
+```text
+runs/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced/scratch/sobral_log_errors_local/emulators/emission_line_lfs/pca_99/halpha_sobral_1dustdraw_pca99_sobralLogErr.joblib
 ```
 
+The default interactive launcher selects these paths when they are present.
 Then open:
 
 ```text
@@ -98,10 +107,11 @@ pipeline/emulators/standard_observables/*/standard_observables_bundle.joblib
 pipeline/emulators/emission_line_lfs/*/*.joblib
 ```
 
-The full Galacticus HDF5 outputs are not needed to run the browser app once the
-emulator bundles have been trained. They are only needed if someone wants to
-derive a new observable from the original Galacticus runs and then train or
-validate a new emulator for that derived observable.
+The emulator predictions do not require the full Galacticus HDF5 outputs once
+the bundles have been trained. The local paper launcher uses the reduced files
+to reconstruct the displayed training-preview curves with the same missing-data
+treatment used during training. Those processed previews are already embedded
+in the hosted bundles.
 
 ## Direct Uvicorn Entry Point
 
@@ -115,6 +125,5 @@ PYTHONPATH=src uvicorn galacticus_emu.interactive_fastapi:app \
 
 In that mode, set `INTERACTIVE_OBSERVABLES_BUNDLE_PATH` and
 `INTERACTIVE_SIDECAR_LF_BUNDLE_PATH` if you want to force particular bundle
-files. When the definitive campaign exists locally, the FastAPI defaults prefer
-its trained products over the small checked-in demo artifacts; the launcher
-above also sets those variables explicitly and hides the older one-off demos.
+files. The launcher above sets these variables explicitly and exposes only the
+standard-observable and emission-line interfaces.

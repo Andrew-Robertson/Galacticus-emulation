@@ -1180,6 +1180,7 @@ def predict_observables_bundle(bundle: dict, params: dict[str, float]) -> dict[s
     x_raw = np.asarray([[float(params[column]) for column in bundle["input_columns"]]], dtype=float)
     input_parameter_specs = _parameter_specs_for_columns(list(bundle["input_columns"]))
     x_quantile = transform_to_prior_quantiles(input_parameter_specs, x_raw)
+    return_std = bool(bundle.get("supports_predictive_uncertainty", True))
     predictions = {}
     for observable_key in bundle["observable_keys"]:
         observable = bundle["observables"][observable_key]
@@ -1192,6 +1193,7 @@ def predict_observables_bundle(bundle: dict, params: dict[str, float]) -> dict[s
                     float(observable["y_means"][index]),
                     float(observable["y_stds"][index]),
                     x_quantile,
+                    return_std=return_std,
                 )
                 y_pred[index] = float(pred[0])
                 y_std[index] = float(pred_std[0])
@@ -1205,6 +1207,7 @@ def predict_observables_bundle(bundle: dict, params: dict[str, float]) -> dict[s
                     float(observable["y_means"][index]),
                     float(observable["y_stds"][index]),
                     x_quantile,
+                    return_std=return_std,
                 )
                 coefficient_predictions[index] = float(pred[0])
                 coefficient_stds[index] = float(pred_std[0])
@@ -1340,6 +1343,9 @@ def bundle_meta(
     return _json_ready({
         "bundle_type": bundle["bundle_type"],
         "emulator_mode": bundle.get("emulator_mode", "bin_by_bin"),
+        "supports_predictive_uncertainty": bool(
+            bundle.get("supports_predictive_uncertainty", True)
+        ),
         "hdf5_filename": bundle.get("hdf5_filename"),
         "input_columns": bundle["input_columns"],
         "input_ranges": input_ranges,

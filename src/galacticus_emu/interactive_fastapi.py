@@ -176,6 +176,14 @@ def observables_order() -> list[str]:
 
 
 @lru_cache(maxsize=1)
+def interactive_campaign_root() -> Path | None:
+    value = os.environ.get("INTERACTIVE_CAMPAIGN_ROOT")
+    if not value:
+        return None
+    return Path(value).expanduser().resolve()
+
+
+@lru_cache(maxsize=1)
 def observables_best_fit_summary_path() -> Path | None:
     value = os.environ.get("INTERACTIVE_OBSERVABLES_BEST_FIT_SUMMARY_PATH")
     if not value:
@@ -226,6 +234,8 @@ def get_observables_bundle() -> dict:
     if not path.exists():
         raise FileNotFoundError(path)
     bundle = load_observables_bundle(path)
+    if interactive_campaign_root() is not None:
+        bundle["campaign_root"] = str(interactive_campaign_root())
     ordered_keys = [
         key
         for key in observables_order()
@@ -249,7 +259,10 @@ def get_sidecar_lf_bundle() -> dict:
     path = sidecar_lf_bundle_path()
     if not path.exists():
         raise FileNotFoundError(path)
-    return load_sidecar_lf_bundle(path)
+    bundle = load_sidecar_lf_bundle(path)
+    if interactive_campaign_root() is not None:
+        bundle["campaign_root"] = str(interactive_campaign_root())
+    return bundle
 
 
 @lru_cache(maxsize=1)
@@ -447,6 +460,9 @@ def create_app() -> FastAPI:
             "halpha_bundle_path": str(halpha_bundle_path()),
             "observables_bundle_path": str(observables_bundle_path()),
             "sidecar_lf_bundle_path": str(sidecar_lf_bundle_path()),
+            "interactive_campaign_root": None
+            if interactive_campaign_root() is None
+            else str(interactive_campaign_root()),
             "observables_hdf5_filename": observables_hdf5_filename(),
             "observables_training_preview_rows": observables_training_preview_rows(),
             "observables_best_fit_summary_path": None

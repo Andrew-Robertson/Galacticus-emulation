@@ -3,8 +3,8 @@ services:
     name: galacticus-emu-demo
     runtime: python
     plan: free
-    buildCommand: pip install .
-    startCommand: python scripts/serve_interactive_fastapi_demo.py --host 0.0.0.0 --port $PORT
+    buildCommand: pip install . -c render-constraints.txt
+    startCommand: python scripts/serve_interactive_fastapi_demo.py --deployment --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
