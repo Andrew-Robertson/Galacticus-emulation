@@ -90,14 +90,13 @@ DEFAULT_SIDECAR_LF_BUNDLE_PATH = _first_available_path(
 )
 DEFAULT_SIDECAR_LF_HTML_PATH = DEFAULT_OBSERVABLES_HTML_PATH
 DEFAULT_OBSERVABLES_ORDER = [
-    "smf_liwhite2009_sdss",
-    "sfr_function_robotham2011",
-    "mzr_blanc2019",
-    "bh_velocity_dispersion",
-    "size_mass_vdw2014_star_forming_z0",
-    "size_mass_vdw2014_quiescent_z0",
     "smf_z0",
     "smf_z3",
+    "size_mass_vdw2014_star_forming_z0",
+    "size_mass_vdw2014_quiescent_z0",
+    "sfr_function_robotham2011",
+    "bh_velocity_dispersion",
+    "mzr_blanc2019",
 ]
 
 

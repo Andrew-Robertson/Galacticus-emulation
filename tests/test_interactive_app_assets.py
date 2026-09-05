@@ -117,3 +117,17 @@ def test_local_demo_configures_paper_best_fits(monkeypatch, tmp_path) -> None:
     assert Path(os.environ["INTERACTIVE_CAMPAIGN_ROOT"]) == launcher.PAPER_CAMPAIGN_ROOT
     assert os.environ["INTERACTIVE_OBSERVABLES_TRAINING_PREVIEW_ROWS"] == "64"
     assert os.environ["INTERACTIVE_SIDECAR_LF_TRAINING_PREVIEW_ROWS"] == "64"
+
+
+def test_observable_display_order_matches_paper() -> None:
+    from galacticus_emu.interactive_fastapi import DEFAULT_OBSERVABLES_ORDER
+
+    assert DEFAULT_OBSERVABLES_ORDER == [
+        "smf_z0",
+        "smf_z3",
+        "size_mass_vdw2014_star_forming_z0",
+        "size_mass_vdw2014_quiescent_z0",
+        "sfr_function_robotham2011",
+        "bh_velocity_dispersion",
+        "mzr_blanc2019",
+    ]
