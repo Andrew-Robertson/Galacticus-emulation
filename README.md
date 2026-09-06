@@ -7,17 +7,17 @@
 GalacticEmu is a set of Python tools for building emulators of
 [Galacticus](https://github.com/galacticusorg/galacticus) outputs and using
 them to calibrate galaxy-formation model parameters. The current workflows can
-construct training campaigns, reduce Galacticus outputs, train and
-cross-validate Gaussian-process emulators, and sample emulator-based
-likelihoods with MCMC.
+construct training campaigns, train and cross-validate Gaussian-process
+emulators, and sample emulator-based likelihoods with MCMC.
 
 Semi-analytic models follow the formation and evolution of galaxy populations
 by combining dark-matter halo assembly histories with simplified,
 physically motivated descriptions of processes such as gas cooling, star
 formation, feedback, chemical enrichment, and galaxy mergers. They are much
 less computationally expensive than full hydrodynamical simulations and are
-used both to investigate the physics of galaxy formation and to predict galaxy
-observables for cosmological surveys.
+used both to investigate the physics of galaxy formation and to generate mock
+galaxy catalogues for interpreting observations and forecasting cosmological
+surveys.
 
 The parameters controlling these physical prescriptions cannot all be fixed
 from first principles and must be calibrated against observations. A careful
@@ -25,8 +25,8 @@ calibration involves comparing several observables while exploring a
 high-dimensional parameter space, which can require far more model evaluations
 than it is practical to run directly with Galacticus. An emulator learns the
 mapping between model parameters and predicted observables from a finite set of
-training runs, allowing that mapping to be evaluated rapidly during validation,
-sensitivity studies, and MCMC calibration.
+training runs, allowing the model predictions to be evaluated rapidly enough
+for MCMC calibration.
 
 **[Explore the interactive emulator](https://galacticus-emulation.onrender.com/observables)**
 to see how changing Galacticus parameters affects several predicted
@@ -41,19 +41,14 @@ inspecting or reproducing that particular analysis are in the
 [paper directory](paper/README.md). A tagged release will preserve the version
 associated with the paper while development continues on the main branch.
 
-Worked example notebooks are planned during peer review. They will give a
-guided account of the method by following a low-redshift stellar mass function
-from archived Galacticus training outputs through emulator validation,
-construction, and MCMC calibration.
-
 ## Workflow
 
 A typical GalacticEmu calculation has the following stages:
 
 1. Define the parameters to vary and choose the training points.
 2. Generate the Galacticus parameter changes and commands for each point.
-3. Run Galacticus locally or on an HPC system.
-4. Extract the outputs needed for emulation from the full Galacticus files.
+3. Run Galacticus for each set of training parameters.
+4. Read the observables required for emulation from the Galacticus outputs.
 5. Train and cross-validate emulators for the chosen observables.
 6. Use the emulators in likelihood analyses, including MCMC parameter
    calibration.
@@ -166,9 +161,9 @@ HPC setup.
 
 Full Galacticus outputs contain galaxy catalogues and can be much larger than
 the data needed to emulate observables that Galacticus calculated during the
-training runs. To retain the analysis outputs and lightweight provenance while
-excluding the large `/Outputs` catalogue group, make a reduced copy of a
-campaign with:
+training runs. If smaller files are useful for storage or transfer, you can
+retain the analysis outputs and lightweight provenance while excluding the
+large `/Outputs` catalogue group by making a reduced copy of a campaign with:
 
 ```bash
 python scripts/extract_campaign_hdf5_groups.py \
