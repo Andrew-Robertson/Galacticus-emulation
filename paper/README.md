@@ -3,9 +3,8 @@
 This directory contains the material associated with
 *Emulator-Assisted Calibration of a Semi-Analytic Galaxy Formation Model for
 the Roman Galaxy Redshift Survey*. It is the starting point for readers who
-want to compile the manuscript, inspect how a figure was made, reproduce the
-reported plots and tables, or adapt the plotting scripts for a different
-presentation of the results.
+want to inspect how a figure was made, reproduce the reported plots and tables,
+or adapt the plotting scripts for a different presentation of the results.
 
 The paper will refer to a tagged release of GalacticEmu so that the associated
 code remains fixed even as the main branch continues to develop.
@@ -18,20 +17,19 @@ for inspection and lightweight replotting. The larger source products are not
 stored in git. These include the reduced 1024-run training campaign, trained
 emulators, MCMC result files, and full Galacticus validation outputs.
 
-Those larger products are intended for a Zenodo release after peer review,
-when the final contents are less likely to change. The planned archive is
-described in [`../docs/data_release_plan.md`](../docs/data_release_plan.md).
-Until that archive is public, some figures can be inspected and replotted from
-the included compact data, but the complete calculation cannot yet be rerun
-from public files alone.
+Those larger products will be deposited on Zenodo with the final version of the
+paper. The planned archive is described in
+[`../docs/data_release_plan.md`](../docs/data_release_plan.md). Until that
+archive is public, some figures can be inspected and replotted from the
+included compact data, but the complete calculation cannot yet be rerun from
+public files alone.
 
-End-to-end reproduction also requires the exact versions of the separate
-`Galacticus-ParameterFiles` and `Galacticus-dust-modelling` repositories used
-for the analysis. These repositories are not yet public. Before the archival
-release, they should either be made public and tagged or the required files
-should be included in an archive with their provenance and licences recorded.
-The Galacticus and Galacticus-datasets commits are already recorded in the
-data-release plan.
+The reduced-campaign archive will include the fully resolved Galacticus
+parameter file for every training evaluation, together with the corresponding
+parameter changes and run commands. These files preserve the complete model
+configuration actually used for each run. The Galacticus,
+Galacticus-datasets, and emission-line post-processing software versions will
+also be recorded with the archive.
 
 ## Directory Layout
 
@@ -44,17 +42,6 @@ data-release plan.
 The larger archive will supply the reduced campaign outputs, emulator bundles,
 MCMC files, and direct Galacticus runs required by scripts that cannot operate
 from the compact data alone.
-
-## Compile The Manuscript
-
-From this directory, run:
-
-```bash
-latexmk -pdf main.tex
-```
-
-If `latexmk` is unavailable, use the equivalent PDFLaTeX and BibTeX sequence
-provided by the local TeX installation.
 
 ## Inspect Or Reproduce A Figure
 
