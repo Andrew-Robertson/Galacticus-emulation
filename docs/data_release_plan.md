@@ -153,7 +153,5 @@ Each archive should be accompanied by:
   or split into smaller products by purpose.
 - Decide whether to include posterior-draw direct Galacticus runs beyond the
   single UNIT example.
-- Confirm that `Andrew-Robertson/Galacticus-ParameterFiles` is public and that
-  tag `paper-arxiv-v1` has been pushed.
 - Record the exact `galacticus_sed_calculator` revision used for the training
   campaign.
