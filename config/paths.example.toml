@@ -1,7 +1,6 @@
 [paths]
 galacticus_binary = "$GALACTICUS_EXEC_PATH/Galacticus.exe"
 galacticus_parameter_files = "$GALACTICUS_PARAMETER_FILES"
-galacticus_dust_modelling = "$GALACTICUS_DUST_ROOT"
 run_root = "runs"
 
 [defaults]
@@ -13,5 +12,5 @@ threads = 4
 GALACTICUS_EXEC_PATH = "/absolute/path/to/galacticus/build/or/bin"
 GALACTICUS_DATA_PATH = "/absolute/path/to/galacticus/datasets"
 GALACTICUS_PARAMETER_FILES = "/absolute/path/to/Galacticus-ParameterFiles"
-GALACTICUS_DUST_ROOT = "/absolute/path/to/Galacticus-dust-modelling"
+GALACTICUS_SED_CALC_PATH = "/absolute/path/to/galacticus_sed_calculator"
 SHMR_PATH = "/absolute/path/to/make-SHMR-datasets"

@@ -141,8 +141,8 @@ Each archive should be accompanied by:
 - Galacticus commit hash: `a8fd4a98520d4821b5b3d0551a13fa92ca100c90`;
 - Galacticus datasets hash: `18d9ec9d7111db34980c822eb24f4ae2aa76a943`;
 - parameter-file repository commit or release tag;
-- dust-modelling repository commit or release tag, if dust post-processing
-  code is required to reproduce a product;
+- `galacticus_sed_calculator` commit or release tag for emission-line dust
+  post-processing;
 - license and citation instructions.
 
 ## Open Decisions
@@ -153,5 +153,7 @@ Each archive should be accompanied by:
 - Decide whether to include posterior-draw direct Galacticus runs beyond the
   single UNIT example.
 - Resolve the final public URL/DOI for the parameter files.
-- Clean the sibling `Galacticus-ParameterFiles` and `Galacticus-dust-modelling`
-  repositories before recording their provenance commits.
+- Clean the sibling `Galacticus-ParameterFiles` repository before recording
+  its provenance commit.
+- Record the exact `galacticus_sed_calculator` revision used for the training
+  campaign.

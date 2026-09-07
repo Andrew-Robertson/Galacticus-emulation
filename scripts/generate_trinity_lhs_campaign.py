@@ -197,13 +197,20 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument("--write-slurm-array", action="store_true")
-    parser.add_argument("--platform-config", default=None)
-    parser.add_argument("--platform-config-file", default=None)
+    parser.add_argument("--slurm-nodes", type=int, default=1)
+    parser.add_argument("--slurm-ntasks", type=int, default=1)
     parser.add_argument("--slurm-cpus-per-task", type=int, default=None)
     parser.add_argument("--slurm-time-limit", default=None)
     parser.add_argument("--slurm-partition", default=None)
     parser.add_argument("--slurm-account", default=None)
     parser.add_argument("--slurm-conda-env", default=None)
+    parser.add_argument("--slurm-memory", default=None)
+    parser.add_argument("--slurm-memory-per-cpu", default=None)
+    parser.add_argument("--slurm-qos", default=None)
+    parser.add_argument("--slurm-constraint", default=None)
+    parser.add_argument("--slurm-module-command", action="append", default=[])
+    parser.add_argument("--slurm-email", default=None)
+    parser.add_argument("--slurm-mail-type", default=None)
     return parser.parse_args()
 
 
@@ -223,13 +230,20 @@ def main() -> None:
     slurm_array = None
     if args.write_slurm_array:
         slurm_array = SlurmArrayDefinition(
+            nodes=args.slurm_nodes,
+            ntasks=args.slurm_ntasks,
             cpus_per_task=args.slurm_cpus_per_task,
             time_limit=args.slurm_time_limit,
             partition=args.slurm_partition,
             account=args.slurm_account,
             conda_env=args.slurm_conda_env,
-            platform_config_name=args.platform_config,
-            platform_config_file=args.platform_config_file,
+            memory=args.slurm_memory,
+            memory_per_cpu=args.slurm_memory_per_cpu,
+            qos=args.slurm_qos,
+            constraint=args.slurm_constraint,
+            module_commands=tuple(args.slurm_module_command),
+            email=args.slurm_email,
+            mail_type=args.slurm_mail_type,
         )
     output_root = write_campaign(
         config=config,

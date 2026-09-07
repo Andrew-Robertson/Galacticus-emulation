@@ -107,9 +107,9 @@ used for the paper.
 ## External Requirements And Paths
 
 Running a new training campaign requires a Galacticus executable, its data
-files, and the Galacticus parameter files used to define the calculation. Some
-of the emission-line workflows also use a separate set of dust-processing
-utilities. These are external to GalacticEmu.
+files, and the Galacticus parameter files used to define the calculation.
+Emission-line dust post-processing also requires the
+`galacticus_sed_calculator` package. These are external to GalacticEmu.
 
 Several scripts refer to these locations through the following environment
 variables. The names are conventions used by this project; a given workflow
@@ -119,7 +119,8 @@ may need only a subset of them.
 - `GALACTICUS_DATA_PATH`: Galacticus datasets directory
 - `GALACTICUS_PARAMETER_FILES`: repository containing the run-definition and
   parameter-change files
-- `GALACTICUS_DUST_ROOT`: repository containing the dust-processing code
+- `GALACTICUS_SED_CALC_PATH`: repository containing
+  `galacticus_sed_calculator`
 - `SHMR_PATH`: external stellar-to-halo mass relation data used by some older
   workflows
 
@@ -127,10 +128,8 @@ Machine-specific values can instead be recorded in `config/paths.toml`. Start
 from [`config/paths.example.toml`](config/paths.example.toml) and edit the copy
 for the machine on which the calculation will run.
 
-The exact parameter-file and dust-processing versions needed for the paper are
-discussed in [`paper/README.md`](paper/README.md). Public, versioned copies of
-those two dependencies still need to be prepared before the complete paper
-workflow can be reproduced from public sources alone.
+The software and data versions needed for the paper will be recorded with the
+archival data release described in [`paper/README.md`](paper/README.md).
 
 ## Inspecting The Workflow
 

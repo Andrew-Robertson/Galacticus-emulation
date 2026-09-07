@@ -102,8 +102,13 @@ if [[ "${MAKE_REDUCED_COPY:-1}" == "1" ]]; then
 fi
 
 if [[ "${RUN_MASS_FUNCTION_PLOT:-1}" == "1" ]]; then
-  echo "Generating mass-function diagnostic plots for $DRAW_LABEL"
-  python "$GALACTICUS_DUST_ROOT/dust_model/scripts/plotMassFunctionResults.py"
+  MASS_FUNCTION_PLOT_SCRIPT="${MASS_FUNCTION_PLOT_SCRIPT:-${GALACTICUS_DUST_ROOT:+$GALACTICUS_DUST_ROOT/dust_model/scripts/plotMassFunctionResults.py}}"
+  if [[ -n "$MASS_FUNCTION_PLOT_SCRIPT" && -f "$MASS_FUNCTION_PLOT_SCRIPT" ]]; then
+    echo "Generating mass-function diagnostic plots for $DRAW_LABEL"
+    python "$MASS_FUNCTION_PLOT_SCRIPT"
+  else
+    echo "Skipping mass-function diagnostic plots: no plotting script was configured"
+  fi
 fi
 
 echo "Job completed successfully for $DRAW_LABEL"

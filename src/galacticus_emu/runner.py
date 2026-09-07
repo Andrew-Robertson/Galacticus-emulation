@@ -1,20 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-import sys
 
 from .config import PathsConfig
 from .manifest import EvaluationManifest
-
-
-def get_dust_model_write_changes_file(config: PathsConfig):
-    """Import the shared changes-file writer from Galacticus-dust-modelling."""
-    dust_repo = str(config.galacticus_dust_modelling)
-    if dust_repo not in sys.path:
-        sys.path.insert(0, dust_repo)
-    from dust_model.parameter_changes import write_changes_file
-
-    return write_changes_file
+from .parameter_changes import write_changes_file as write_parameter_changes_file
 
 
 def write_changes_file(
@@ -28,8 +18,7 @@ def write_changes_file(
         (parameter.name, f"{parameter.value:.16g}")
         for parameter in manifest.parameter_points
     ]
-    shared_write_changes_file = get_dust_model_write_changes_file(config)
-    shared_write_changes_file(
+    write_parameter_changes_file(
         parameter_path_value_pairs=parameter_path_value_pairs,
         output_path=output_path,
     )
@@ -49,8 +38,7 @@ def write_output_changes_file(
     output_file_value = str(output_file_path)
     if command_root is not None:
         output_file_value = str(output_file_path.relative_to(Path(command_root)))
-    shared_write_changes_file = get_dust_model_write_changes_file(config)
-    shared_write_changes_file(
+    write_parameter_changes_file(
         parameter_path_value_pairs=[
             ("outputFileName", output_file_value),
         ],

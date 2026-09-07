@@ -26,13 +26,20 @@ class CampaignDefinition:
 
 @dataclass(frozen=True)
 class SlurmArrayDefinition:
+    nodes: int = 1
+    ntasks: int = 1
     cpus_per_task: int | None = None
     time_limit: str | None = None
     partition: str | None = None
     account: str | None = None
     conda_env: str | None = None
-    platform_config_name: str | None = None
-    platform_config_file: str | None = None
+    memory: str | None = None
+    memory_per_cpu: str | None = None
+    qos: str | None = None
+    constraint: str | None = None
+    module_commands: tuple[str, ...] = ()
+    email: str | None = None
+    mail_type: str | None = None
 
 
 def campaign_root(config: PathsConfig, campaign_name: str) -> Path:

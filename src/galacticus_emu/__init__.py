@@ -43,6 +43,7 @@ from .lhs import (
 )
 from .manifest import EvaluationManifest, ParameterPoint, RunGroup
 from .persistence import load_emulator_bundle, sanitize_output_name, save_emulator_bundle
+from .parameter_changes import build_changes_tree, write_changes_file
 from .runner import build_galacticus_commands
 from .specs import default_parameter_specs, trinity_parameter_specs
 from .trinity import (
@@ -71,6 +72,7 @@ __all__ = [
     "TruncatedLogNormalPrior",
     "UniformPrior",
     "build_galacticus_commands",
+    "build_changes_tree",
     "benchmark_halpha_bundle",
     "benchmark_observables_bundle",
     "benchmark_sidecar_lf_bundle",
@@ -109,4 +111,5 @@ __all__ = [
     "TRINITY_SCATTER_OUTPUT_COLUMNS",
     "TRINITY_TRAINABLE_OUTPUT_COLUMNS",
     "write_campaign",
+    "write_changes_file",
 ]

@@ -9,7 +9,6 @@ import sys
 REPO_ROOT = Path(__file__).resolve().parents[1]
 os.environ.setdefault("MPLCONFIGDIR", str(REPO_ROOT / ".mplconfig"))
 sys.path.insert(0, str(REPO_ROOT / "src"))
-sys.path.insert(0, str(REPO_ROOT.parent / "Galacticus-dust-modelling"))
 
 import h5py
 import matplotlib.pyplot as plt
@@ -26,7 +25,6 @@ try:
 except ModuleNotFoundError:  # pragma: no cover
     emcee = None
 
-from dust_model.parameter_changes import write_changes_file
 from galacticus_emu import (
     TRINITY_RUN_CONFIGS,
     TRINITY_TRAINABLE_OUTPUT_COLUMNS,
@@ -37,6 +35,7 @@ from galacticus_emu import (
     transform_from_prior_quantiles,
     transform_to_prior_quantiles,
     trinity_parameter_specs,
+    write_changes_file,
 )
 
 

@@ -21,11 +21,9 @@ def expand_env_vars(value: str, env: dict[str, str]) -> str:
 class PathsConfig:
     galacticus_binary_expr: str
     galacticus_parameter_files_expr: str
-    galacticus_dust_modelling_expr: str
     run_root_expr: str
     galacticus_binary: Path
     galacticus_parameter_files: Path
-    galacticus_dust_modelling: Path
     run_root: Path
     base_parameters: str
     mass_function_parameters: str
@@ -56,11 +54,6 @@ def load_paths_config(path: str | Path) -> PathsConfig:
             "GALACTICUS_PARAMETER_FILES",
             expand_env_vars(paths["galacticus_parameter_files"], env),
         )
-    if "galacticus_dust_modelling" in paths:
-        env.setdefault(
-            "GALACTICUS_DUST_ROOT",
-            expand_env_vars(paths["galacticus_dust_modelling"], env),
-        )
     if "galacticus_data_path" in raw.get("environment", {}):
         env.setdefault("GALACTICUS_DATA_PATH", raw["environment"]["galacticus_data_path"])
     if "GALACTICUS_EXEC_PATH" in raw.get("environment", {}):
@@ -69,11 +62,9 @@ def load_paths_config(path: str | Path) -> PathsConfig:
     return PathsConfig(
         galacticus_binary_expr=paths["galacticus_binary"],
         galacticus_parameter_files_expr=paths["galacticus_parameter_files"],
-        galacticus_dust_modelling_expr=paths["galacticus_dust_modelling"],
         run_root_expr=paths["run_root"],
         galacticus_binary=Path(expand_env_vars(paths["galacticus_binary"], env)),
         galacticus_parameter_files=Path(expand_env_vars(paths["galacticus_parameter_files"], env)),
-        galacticus_dust_modelling=Path(expand_env_vars(paths["galacticus_dust_modelling"], env)),
         run_root=Path(expand_env_vars(paths["run_root"], env)),
         base_parameters=defaults["base_parameters"],
         mass_function_parameters=defaults["mass_function_parameters"],
