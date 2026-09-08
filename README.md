@@ -129,7 +129,7 @@ from [`config/paths.example.toml`](config/paths.example.toml) and edit the copy
 for the machine on which the calculation will run.
 
 The Galacticus parameter files prepared for the arXiv v1 paper release are in
-[`Andrew-Robertson/Galacticus-ParameterFiles` at tag `paper-arxiv-v1`](https://github.com/Andrew-Robertson/Galacticus-ParameterFiles/tree/paper-arxiv-v1).
+[`Andrew-Robertson/Galacticus-ParameterFiles` at tag `galacticemu-roman-grs-arxiv-v1`](https://github.com/Andrew-Robertson/Galacticus-ParameterFiles/tree/galacticemu-roman-grs-arxiv-v1).
 The remaining software and data versions needed for the paper will be recorded
 with the archival data release described in [`paper/README.md`](paper/README.md).
 

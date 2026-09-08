@@ -33,7 +33,7 @@ also be recorded with the archive.
 
 The modular Galacticus parameter files prepared for the arXiv v1 paper release
 are in
-[`Andrew-Robertson/Galacticus-ParameterFiles` at tag `paper-arxiv-v1`](https://github.com/Andrew-Robertson/Galacticus-ParameterFiles/tree/paper-arxiv-v1).
+[`Andrew-Robertson/Galacticus-ParameterFiles` at tag `galacticemu-roman-grs-arxiv-v1`](https://github.com/Andrew-Robertson/Galacticus-ParameterFiles/tree/galacticemu-roman-grs-arxiv-v1).
 
 ## Directory Layout
 

@@ -141,7 +141,7 @@ Each archive should be accompanied by:
 - Galacticus commit hash: `a8fd4a98520d4821b5b3d0551a13fa92ca100c90`;
 - Galacticus datasets hash: `18d9ec9d7111db34980c822eb24f4ae2aa76a943`;
 - parameter-file repository tag:
-  `https://github.com/Andrew-Robertson/Galacticus-ParameterFiles/tree/paper-arxiv-v1`;
+  `https://github.com/Andrew-Robertson/Galacticus-ParameterFiles/tree/galacticemu-roman-grs-arxiv-v1`;
 - `galacticus_sed_calculator` commit or release tag for emission-line dust
   post-processing;
 - license and citation instructions.
