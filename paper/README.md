@@ -35,6 +35,10 @@ The modular Galacticus parameter files prepared for the arXiv v1 paper release
 are in
 [`Andrew-Robertson/Galacticus-ParameterFiles` at tag `galacticemu-roman-grs-arxiv-v1`](https://github.com/Andrew-Robertson/Galacticus-ParameterFiles/tree/galacticemu-roman-grs-arxiv-v1).
 
+To reproduce the emission-line dust post-processing, use
+[`galacticus_sed_calculator` v0.1.0](https://github.com/roman-grs-pit/galacticus_sed_calculator/tree/v0.1.0)
+(commit `9b635751b7dfb3506e90ac328246107771d59066`).
+
 ## Directory Layout
 
 - `figures/` contains the PDF figures included by `main.tex`.

@@ -142,8 +142,10 @@ Each archive should be accompanied by:
 - Galacticus datasets hash: `18d9ec9d7111db34980c822eb24f4ae2aa76a943`;
 - parameter-file repository tag:
   `https://github.com/Andrew-Robertson/Galacticus-ParameterFiles/tree/galacticemu-roman-grs-arxiv-v1`;
-- `galacticus_sed_calculator` commit or release tag for emission-line dust
-  post-processing;
+- `galacticus_sed_calculator` release for reproducing the emission-line dust
+  post-processing: `v0.1.0`
+  (`9b635751b7dfb3506e90ac328246107771d59066`), available at
+  `https://github.com/roman-grs-pit/galacticus_sed_calculator/tree/v0.1.0`;
 - license and citation instructions.
 
 ## Open Decisions
@@ -153,5 +155,3 @@ Each archive should be accompanied by:
   or split into smaller products by purpose.
 - Decide whether to include posterior-draw direct Galacticus runs beyond the
   single UNIT example.
-- Record the exact `galacticus_sed_calculator` revision used for the training
-  campaign.
