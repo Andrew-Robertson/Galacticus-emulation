@@ -36,10 +36,10 @@ require a local installation.
 The repository is under active development. It began as the workflow used for
 *Emulator-Assisted Calibration of a Semi-Analytic Galaxy Formation Model for
 the Roman Galaxy Redshift Survey*, and also provides a basis for future
-Galacticus calibration work. The manuscript, figure data, and instructions for
-inspecting or reproducing that particular analysis are in the
-[paper directory](paper/README.md). A tagged release will preserve the version
-associated with the paper while development continues on the main branch.
+Galacticus calibration work. Materials for the Roman GRS calibration paper,
+including its manuscript, figure data, and reproduction guide, are in
+[`paper/`](paper/README.md). The planned `roman-grs-calibration-arxiv-v1` tag
+will preserve that version while development continues on the main branch.
 
 ## Workflow
 
@@ -53,9 +53,9 @@ A typical GalacticEmu calculation has the following stages:
 6. Use the emulators in likelihood analyses, including MCMC parameter
    calibration.
 
-The main workflow used for the paper is described by
+The complete workflow for the Roman GRS calibration analysis is described by
 [`configs/pipelines/standard_observables_plus_halpha.yaml`](configs/pipelines/standard_observables_plus_halpha.yaml).
-It is also a useful concrete example of how these stages fit together.
+It also provides a concrete example of how these stages fit together.
 
 ## Repository Layout
 
@@ -63,8 +63,8 @@ It is also a useful concrete example of how these stages fit together.
 - `scripts/` contains command-line programs for campaign construction, output
   reduction, emulator training, validation, MCMC, and plotting.
 - `configs/pipelines/` contains YAML descriptions of multi-stage workflows.
-- `paper/` contains the manuscript and the material specific to reproducing
-  its figures and tables.
+- `paper/` contains the manuscript and reproduction material for the Roman GRS
+  calibration analysis.
 - `demo_emulators/` contains small pre-trained emulator bundles, allowing the
   interactive emulator interface to run without first training new models.
 - `data/` contains observational data used by some of the comparison scripts.
@@ -92,9 +92,9 @@ them into the active Conda environment. The `-e` option installs GalacticEmu
 in editable mode, so changes made in the repository are immediately available
 without reinstalling it.
 
-Some paper figures require `getdist` for posterior plots and `pypdf` for PDF
-composition. If you want to reproduce those figures, install the `paper`
-extra:
+Some figures from the Roman GRS calibration paper require `getdist` for
+posterior plots and `pypdf` for PDF composition. To reproduce those figures,
+install the `paper` extra:
 
 ```bash
 python -m pip install -e ".[paper]"
@@ -102,7 +102,7 @@ python -m pip install -e ".[paper]"
 
 The dependency versions are not currently locked, so these commands create a
 working environment rather than reproducing the exact software environment
-used for the paper.
+used for the Roman GRS calibration analysis.
 
 ## External Requirements And Paths
 
@@ -129,10 +129,12 @@ Machine-specific values can instead be recorded in `config/paths.toml`. Start
 from [`config/paths.example.toml`](config/paths.example.toml) and edit the copy
 for the machine on which the calculation will run.
 
-The Galacticus parameter files prepared for the arXiv v1 paper release are in
+The Galacticus parameter files used for the arXiv v1 release of the Roman GRS
+calibration study are in
 [`Andrew-Robertson/Galacticus-ParameterFiles` at tag `galacticemu-roman-grs-arxiv-v1`](https://github.com/Andrew-Robertson/Galacticus-ParameterFiles/tree/galacticemu-roman-grs-arxiv-v1).
-The remaining software and data versions needed for the paper will be recorded
-with the archival data release described in [`paper/README.md`](paper/README.md).
+The remaining software and data versions needed to reproduce this analysis
+will be recorded with the archival data release described in
+[`paper/README.md`](paper/README.md).
 
 ## Inspecting The Workflow
 
@@ -179,6 +181,6 @@ Use `python <script> --help` for the options accepted by an individual command.
 ## License
 
 The GalacticEmu source code is available under the
-[BSD 3-Clause License](LICENSE). The planned archival data release will state
-its own license. Bundled third-party manuscript style files under `paper/`
-retain the copyright and licensing notices in those files.
+[BSD 3-Clause License](LICENSE). The planned Roman GRS archival data release
+will state its own license. Bundled third-party manuscript style files under
+`paper/` retain the copyright and licensing notices in those files.
