@@ -131,3 +131,59 @@ def test_observable_display_order_matches_paper() -> None:
         "bh_velocity_dispersion",
         "mzr_blanc2019",
     ]
+
+
+def test_interactive_pages_have_route_specific_public_copy() -> None:
+    from galacticus_emu.interactive_fastapi import (
+        get_observables_html,
+        get_sidecar_lf_html,
+    )
+
+    get_observables_html.cache_clear()
+    get_sidecar_lf_html.cache_clear()
+    observables_html = get_observables_html()
+    sidecar_lf_html = get_sidecar_lf_html()
+
+    assert 'window.API_BASE = "/observables"' in observables_html
+    assert 'window.PAGE_TITLE = "Interactive Multi-Observable Galacticus Demo"' in observables_html
+    assert "predicted galaxy observables respond" in observables_html
+    assert 'window.API_BASE = "/sidecar-lfs"' in sidecar_lf_html
+    assert 'window.PAGE_TITLE = "Interactive H-alpha Luminosity-Function Demo"' in sidecar_lf_html
+    assert "predicted H-alpha luminosity functions" in sidecar_lf_html
+    assert "target comparisons" not in observables_html
+    assert "target comparisons" not in sidecar_lf_html
+
+
+def test_interactive_legend_precedes_plot_grid() -> None:
+    repository_root = Path(__file__).resolve().parents[1]
+    html_text = (
+        repository_root / "assets" / "interactive_observables_demo" / "index.html"
+    ).read_text()
+
+    assert html_text.index('<div class="legend">') < html_text.index(
+        '<div class="plot-grid" id="plot-grid"></div>'
+    )
+
+
+def test_landing_page_uses_public_facing_demo_descriptions(monkeypatch) -> None:
+    from galacticus_emu import interactive_fastapi
+
+    monkeypatch.setattr(
+        interactive_fastapi,
+        "_enabled_demos",
+        lambda: {
+            "smf": False,
+            "halpha": False,
+            "observables": True,
+            "sidecar_lfs": True,
+        },
+    )
+
+    html_text = interactive_fastapi._landing_page()
+
+    assert "Galacticus Emulator Demos" in html_text
+    assert "Galaxy Observables" in html_text
+    assert "H-alpha Luminosity Functions" in html_text
+    assert "observational measurements" in html_text
+    assert "sidecar luminosity-function emulators" not in html_text.lower()
+    assert "Health check" not in html_text

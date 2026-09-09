@@ -234,10 +234,10 @@
 </head>
 <body>
   <div class="page">
-    <h1>Interactive Multi-Observable Galacticus Demo</h1>
-    <p class="subhead">
-      A live view of a saved Galacticus emulator bundle trained on several observables at once. Move
-      the parameter sliders to update the emulator predictions and target comparisons.
+    <h1 id="page-title">Interactive Multi-Observable Galacticus Demo</h1>
+    <p class="subhead" id="page-description">
+      Use the parameter sliders to explore how the predicted galaxy observables respond.
+      Observational measurements are shown as fixed reference data.
     </p>
     <div class="layout">
       <section class="panel controls">
@@ -253,12 +253,12 @@
         <div class="meta-box" id="meta-box">Loading emulator metadata…</div>
       </section>
       <section class="panel plots">
-        <div class="plot-grid" id="plot-grid"></div>
         <div class="legend">
           <span class="legend-item"><span class="swatch training"></span> example training data</span>
           <span class="legend-item"><span class="swatch target"></span> target data</span>
           <span class="legend-item"><span class="swatch prediction"></span> emulator prediction</span>
         </div>
+        <div class="plot-grid" id="plot-grid"></div>
         <div class="footer" id="status">Loading…</div>
       </section>
     </div>
@@ -266,6 +266,14 @@
 
   <script>
     const API_BASE = window.API_BASE || "";
+    const PAGE_TITLE = window.PAGE_TITLE || "Interactive Multi-Observable Galacticus Demo";
+    const PAGE_DESCRIPTION = window.PAGE_DESCRIPTION || (
+      "Use the parameter sliders to explore how the predicted galaxy observables respond. " +
+      "Observational measurements are shown as fixed reference data."
+    );
+    document.title = PAGE_TITLE;
+    document.getElementById("page-title").textContent = PAGE_TITLE;
+    document.getElementById("page-description").textContent = PAGE_DESCRIPTION;
     const NS = "http://www.w3.org/2000/svg";
     const slidersContainer = document.getElementById("sliders");
     const plotGrid = document.getElementById("plot-grid");

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 import html
+import json
 import os
 from pathlib import Path
 
@@ -116,11 +117,29 @@ def _env_flag(name: str, default: bool = True) -> bool:
     return value.strip().lower() not in {"0", "false", "no", "off"}
 
 
-def _inject_api_base(html_text: str, api_base: str) -> str:
-    script = f'  <script>window.API_BASE = "{api_base}";</script>\n'
+def _inject_page_config(
+    html_text: str,
+    api_base: str,
+    *,
+    page_title: str | None = None,
+    page_description: str | None = None,
+) -> str:
+    config = {"API_BASE": api_base}
+    if page_title is not None:
+        config["PAGE_TITLE"] = page_title
+    if page_description is not None:
+        config["PAGE_DESCRIPTION"] = page_description
+    assignments = "".join(
+        f"window.{name} = {json.dumps(value)};" for name, value in config.items()
+    )
+    script = f"  <script>{assignments}</script>\n"
     if "</head>" in html_text:
         return html_text.replace("</head>", f"{script}</head>", 1)
     return script + html_text
+
+
+def _inject_api_base(html_text: str, api_base: str) -> str:
+    return _inject_page_config(html_text, api_base)
 
 
 def _bundle_enabled(flag_name: str, path: Path) -> bool:
@@ -291,12 +310,28 @@ def get_halpha_html() -> str:
 
 @lru_cache(maxsize=1)
 def get_observables_html() -> str:
-    return _inject_api_base(observables_html_path().read_text(), "/observables")
+    return _inject_page_config(
+        observables_html_path().read_text(),
+        "/observables",
+        page_title="Interactive Multi-Observable Galacticus Demo",
+        page_description=(
+            "Use the parameter sliders to explore how the predicted galaxy observables respond. "
+            "Observational measurements are shown as fixed reference data."
+        ),
+    )
 
 
 @lru_cache(maxsize=1)
 def get_sidecar_lf_html() -> str:
-    return _inject_api_base(sidecar_lf_html_path().read_text(), "/sidecar-lfs")
+    return _inject_page_config(
+        sidecar_lf_html_path().read_text(),
+        "/sidecar-lfs",
+        page_title="Interactive H-alpha Luminosity-Function Demo",
+        page_description=(
+            "Use the parameter sliders to explore how the predicted H-alpha luminosity functions "
+            "respond across redshift. Observational measurements are shown as fixed reference data."
+        ),
+    )
 
 
 def _enabled_demos() -> dict[str, bool]:
@@ -333,8 +368,8 @@ def _landing_page() -> str:
         cards.append(
             """
             <a class="card" href="/observables">
-              <h2>Interactive Observable Suite</h2>
-              <p>Galacticus parameter sliders and live predictions for stellar mass functions, size relations, the MZR, and related observables.</p>
+              <h2>Galaxy Observables</h2>
+              <p>Explore predicted stellar mass functions, galaxy sizes, star formation rates, metallicities, and black hole scaling relations as the Galacticus parameters change.</p>
             </a>
             """
         )
@@ -342,8 +377,8 @@ def _landing_page() -> str:
         cards.append(
             """
             <a class="card" href="/sidecar-lfs">
-              <h2>Interactive Emission-Line LFs</h2>
-              <p>Galacticus and dust-parameter sliders with live PCA-GP predictions for saved sidecar luminosity-function emulators.</p>
+              <h2>H-alpha Luminosity Functions</h2>
+              <p>Explore predicted H-alpha luminosity functions across redshift as the Galacticus and dust-model parameters change.</p>
             </a>
             """
         )
@@ -442,17 +477,14 @@ def _landing_page() -> str:
 </head>
 <body>
   <main class="page">
-    <h1>Galacticus Emulator Demo Hub</h1>
+    <h1>Galacticus Emulator Demos</h1>
     <p class="subhead">
-      Explore how Galacticus observables respond as the model parameters change. The emulators are
-      trained offline, and the web app evaluates their saved predictions live.
+      Explore how predicted galaxy populations and observables change as Galacticus model parameters
+      are varied. Choose a demo below to compare emulator predictions with observational measurements.
     </p>
     <section class="grid">
       {"".join(cards)}
     </section>
-    <div class="footer">
-      Health check: <code>/healthz</code>
-    </div>
   </main>
 </body>
 </html>"""
