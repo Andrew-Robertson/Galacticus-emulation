@@ -162,7 +162,7 @@ def _plot_heldout_curves(
 ) -> None:
     x_from_predictions = _prediction_matrix(predictions, "_x_plot")[0]
     y_true = _prediction_matrix(predictions, "_true")
-    y_true_std = _prediction_matrix(predictions, "_true_std")
+    y_true_std = _prediction_matrix(predictions, "_true_std").copy()
     y_pred = _prediction_matrix(predictions, "_pred")
     y_pred_std = _prediction_matrix(predictions, "_pred_std")
     if not np.allclose(x_plot, x_from_predictions, equal_nan=True):

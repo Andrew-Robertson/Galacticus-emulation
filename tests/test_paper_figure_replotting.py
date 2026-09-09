@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -17,6 +18,7 @@ def test_checked_in_figure_data_rebuilds_supported_paper_figures(tmp_path: Path)
         ],
         cwd=repository_root,
         check=True,
+        env={**os.environ, "PANDAS_COPY_ON_WRITE": "1"},
     )
 
     expected_pdfs = [

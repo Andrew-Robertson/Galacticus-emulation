@@ -664,7 +664,7 @@ def _plot_heldout_curves(
         sample_rows = rows.loc[rows["sample_index"] == sample_index].sort_values("bin_index")
         pred = sample_rows["y_pred"].to_numpy(dtype=float)
         std = sample_rows["y_std"].to_numpy(dtype=float)
-        heldout_err = sample_rows["alpha_sigma"].to_numpy(dtype=float)
+        heldout_err = sample_rows["alpha_sigma"].to_numpy(dtype=float, copy=True)
         heldout_err[~np.isfinite(heldout_err)] = 0.0
         is_labeled_example = sample_index == example_index
         axis.errorbar(
