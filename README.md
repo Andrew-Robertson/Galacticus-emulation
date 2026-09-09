@@ -28,7 +28,7 @@ mapping between model parameters and predicted observables from a finite set of
 training runs, allowing the model predictions to be evaluated rapidly enough
 for MCMC calibration.
 
-**[Explore the interactive emulator](https://galacticus-emulation.onrender.com/observables)**
+**[Explore the interactive emulator](https://galacticus-emulation.onrender.com)**
 to see how changing Galacticus parameters affects several predicted
 observables. The hosted demonstration uses pre-trained emulators and does not
 require a local installation.
