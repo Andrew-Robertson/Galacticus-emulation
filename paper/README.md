@@ -6,8 +6,10 @@ the Roman Galaxy Redshift Survey*. It is the starting point for readers who
 want to inspect how a figure was made, reproduce the reported plots and tables,
 or adapt the plotting scripts for a different presentation of the results.
 
-The paper will refer to a tagged release of GalacticEmu so that the associated
-code remains fixed even as the main branch continues to develop.
+The code associated with the arXiv v1 paper is identified by the
+[`roman-grs-calibration-arxiv-v1` tagged release](https://github.com/Andrew-Robertson/Galacticus-emulation/tree/roman-grs-calibration-arxiv-v1),
+so that the calculation can be inspected from a fixed version even as the main
+branch continues to develop.
 
 ## Current Data Availability
 

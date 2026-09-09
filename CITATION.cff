@@ -7,5 +7,17 @@ authors:
     given-names: "Andrew"
     orcid: "https://orcid.org/0000-0002-0086-0524"
 version: 0.1.0
+date-released: 2026-09-09
 repository-code: "https://github.com/Andrew-Robertson/Galacticus-emulation"
 license: BSD-3-Clause
+preferred-citation:
+  type: article
+  title: "Emulator-Assisted Calibration of a Semi-Analytic Galaxy Formation Model for the Roman Galaxy Redshift Survey"
+  authors:
+    - family-names: "Robertson"
+      given-names: "Andrew"
+      orcid: "https://orcid.org/0000-0002-0086-0524"
+    - family-names: "Benson"
+      given-names: "Andrew"
+      orcid: "https://orcid.org/0000-0001-5501-6008"
+  year: 2026
