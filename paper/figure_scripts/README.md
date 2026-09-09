@@ -3,8 +3,9 @@
 This directory is for reproducing, auditing, and adapting the plots and tables
 used in the paper. A new reader should be able to start here, identify the
 script behind a manuscript figure, inspect the compact data products in
-`paper/figure_data/`, and then rerun the script with the larger Zenodo data
-archive when needed.
+`paper/figure_data/`, replot the figures supported by those products, and then
+recompute the underlying results with the larger Zenodo data archive when
+needed.
 
 The repository has two script areas:
 
@@ -18,6 +19,26 @@ The repository has two script areas:
 Run commands from the repository root unless a script says otherwise. Use
 `python <script> --help` to inspect the command-line options before adapting a
 plot.
+
+## Replot From A Fresh Checkout
+
+Four manuscript figures can be rebuilt directly from the compact data tracked
+in git: the three low-redshift stellar-mass-function emulator-validation
+figures and the final MAP validation figure. After installing GalacticEmu, run:
+
+```bash
+python paper/figure_scripts/rebuild_paper_figures.py --from-figure-data
+```
+
+The rebuilt PDFs and PNGs are written to `paper/tmp/rebuilt_figures/`. This
+command redraws already-computed results; it does not retrain the emulators,
+rerun MCMC, or reevaluate Galacticus.
+
+The posterior-corner figures and calibrated-parameter statistics require MCMC
+samples that are too large to keep in git. Those products will become
+reproducible from the planned Zenodo archive.
+
+## Recompute From The Data Archive
 
 To rebuild the public paper figures from a checkout plus the Zenodo-style data
 tree, run:
@@ -34,18 +55,20 @@ test rebuild does not overwrite the manuscript PDFs in `paper/figures/`.
 
 ## Figure Map
 
-| Manuscript item | Checked-in output | Main script or workflow | Checked-in data | Full data needed |
+| Manuscript item | Checked-in output | Main script or workflow | Replot from checkout? | Data needed to recompute |
 | --- | --- | --- | --- | --- |
-| SMF z~0 holdout curves, parity, and training-size panels | `paper/figures/smf_z0_pca99_holdout_curves_highlight_bins.pdf`, `paper/figures/smf_z0_pca99_parity_highlight_bins_random_quarter.pdf`, `paper/figures/smf_z0_pca_threshold_rmse_r2_vs_training_size.pdf` | `scripts/run_smf_z0_pca_threshold_cv.py`; `paper/figure_scripts/render_smf_z0_cached_cv_paper_figures.py` is a lighter paper-style renderer for cached campaign products | `paper/figure_data/smf_z0_cv/` | Reduced 1024-run campaign from Zenodo to recompute the CV products |
-| Standard-observable constraint-combination figure | `paper/figures/smf_sfrf_sizes_corner_observable_composite.pdf` | `paper/figure_scripts/plot_fig4_combining_constraints.py`, which calls `plot_standard_corner_observable_composite.py` | `paper/figure_data/combining_constraints/` | Standard-observable emulator bundle, MCMC HDF5 files, and reduced campaign preview data from Zenodo |
-| Final MAP validation figure | `paper/figures/final_map_validation_all_observables_4x3.pdf` | `paper/figure_scripts/plot_final_map_validation_paper_figures.py` | `paper/figure_data/final_calibration/` | Final best-fit prediction CSVs plus compact direct-run standard/H-alpha outputs from Zenodo |
-| Final calibrated-parameter table | Embedded in `paper/main.tex`; mirrored as `paper/figure_data/final_calibration/final_calibrated_parameters_table.tex` | `paper/figure_scripts/generate_final_calibrated_parameters_table.py` | `paper/figure_data/final_calibration/` | Final combined MCMC HDF5 results from Zenodo |
-| Final posterior-corner figure with dust inset | `paper/figures/final_posterior_corner_galacticus20_with_dust5_inset_inwards.pdf` | `paper/figure_scripts/plot_final_posterior_corner_with_dust_inset.py`, which calls `scripts/plot_observable_mcmc_overlay_getdist.py` and overlays the dust-panel PDF inset | Existing static PDF only | Final standard-only and standard-plus-H-alpha MCMC HDF5 results from Zenodo |
+| SMF z~0 holdout curves, parity, and training-size panels | `paper/figures/smf_z0_pca99_holdout_curves_highlight_bins.pdf`, `paper/figures/smf_z0_pca99_parity_highlight_bins_random_quarter.pdf`, `paper/figures/smf_z0_pca_threshold_rmse_r2_vs_training_size.pdf` | `paper/figure_scripts/replot_smf_z0_cv_from_figure_data.py`; recompute with `scripts/run_smf_z0_pca_threshold_cv.py` | Yes, from `paper/figure_data/smf_z0_cv/` | Reduced 1024-run campaign from Zenodo |
+| Standard-observable constraint-combination figure | `paper/figures/smf_sfrf_sizes_corner_observable_composite.pdf` | `paper/figure_scripts/plot_fig4_combining_constraints.py`, which calls `plot_standard_corner_observable_composite.py` | No; the compact CSV contains the observable-panel values but not the posterior samples needed for the corner panel | Standard-observable emulator bundle, MCMC HDF5 files, and reduced campaign preview data from Zenodo |
+| Final MAP validation figure | `paper/figures/final_map_validation_all_observables_4x3.pdf` | `paper/figure_scripts/plot_final_map_validation_paper_figures.py` | Yes, from `paper/figure_data/final_calibration/` | Final best-fit prediction tables and direct Galacticus outputs from Zenodo |
+| Final calibrated-parameter table | Embedded in `paper/main.tex`; mirrored as `paper/figure_data/final_calibration/final_calibrated_parameters_table.tex` | `paper/figure_scripts/generate_final_calibrated_parameters_table.py` | The submitted table can be inspected, but its posterior statistics cannot be recalculated | Final combined MCMC HDF5 results from Zenodo |
+| Final posterior-corner figure with dust inset | `paper/figures/final_posterior_corner_galacticus20_with_dust5_inset_inwards.pdf` | `paper/figure_scripts/plot_final_posterior_corner_with_dust_inset.py`, which calls `scripts/plot_observable_mcmc_overlay_getdist.py` and overlays the dust-panel PDF inset | No; posterior samples are required | Final standard-only and standard-plus-H-alpha MCMC HDF5 results from Zenodo |
 
 ## Script Inventory
 
-- `render_smf_z0_cached_cv_paper_figures.py` renders paper-style SMF z~0
-  validation figures from cached campaign cross-validation products.
+- `replot_smf_z0_cv_from_figure_data.py` renders the three paper SMF z~0
+  validation figures from the compact data tracked in git.
+- `render_smf_z0_cached_cv_paper_figures.py` is an older renderer for cached
+  products stored inside a full campaign directory.
 - `rebuild_paper_figures.py` runs the paper-facing figure/table builders
   against a repo-relative data tree, such as a checkout after extracting the
   Zenodo archives.
@@ -66,8 +89,8 @@ test rebuild does not overwrite the manuscript PDFs in `paper/figures/`.
 ## Data Boundaries
 
 The checked-in `paper/figure_data/` files are curated for inspection,
-provenance, and lightweight alternative plots. They are not the canonical raw
-data release. Scripts that evaluate posterior samples, read trained emulator
+provenance, and lightweight replotting. They are not the canonical raw data
+release. Scripts that evaluate posterior samples, read trained emulator
 bundles, or read direct Galacticus outputs still require the larger archived
 products described in `docs/data_release_plan.md`.
 

@@ -30,13 +30,17 @@ STEPS = (
     "final_posterior_corner",
     "final_parameter_table",
 )
+FIGURE_DATA_STEPS = (
+    "smf_cv",
+    "final_map_validation",
+)
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Rebuild the paper figures/tables from repo scripts plus the Zenodo-style data tree. "
-            "By default, outputs go to paper/tmp/rebuilt_figures."
+            "Rebuild paper figures and tables from either the checked-in compact figure data or "
+            "the Zenodo-style data tree. By default, outputs go to paper/tmp/rebuilt_figures."
         )
     )
     parser.add_argument(
@@ -56,6 +60,14 @@ def parse_args() -> argparse.Namespace:
         action="append",
         choices=STEPS,
         help="Run only this step. Repeat for multiple steps. Defaults to all steps.",
+    )
+    parser.add_argument(
+        "--from-figure-data",
+        action="store_true",
+        help=(
+            "Replot the figures supported by compact checked-in data, without the Zenodo archive. "
+            "Defaults to the SMF validation and final MAP validation figures."
+        ),
     )
     parser.add_argument(
         "--no-cached-smf-cv",
@@ -142,6 +154,17 @@ def rebuild_smf_cv(data_root: Path, output_dir: Path, *, use_cache: bool) -> Non
     _run(command)
 
 
+def replot_smf_cv_from_figure_data(output_dir: Path) -> None:
+    _run(
+        [
+            sys.executable,
+            str(REPO_ROOT / "paper/figure_scripts/replot_smf_z0_cv_from_figure_data.py"),
+            "--output-dir",
+            str(output_dir),
+        ]
+    )
+
+
 def rebuild_combining_constraints(data_root: Path, output_dir: Path) -> None:
     _run(
         [
@@ -162,6 +185,19 @@ def rebuild_final_map_validation(data_root: Path, output_dir: Path) -> None:
             str(REPO_ROOT / "paper/figure_scripts/plot_final_map_validation_paper_figures.py"),
             "--run-dir",
             str(data_root / FINAL_JOINT_RUN),
+            "--output-dir",
+            str(output_dir),
+        ]
+    )
+
+
+def replot_final_map_validation_from_figure_data(output_dir: Path) -> None:
+    _run(
+        [
+            sys.executable,
+            str(REPO_ROOT / "paper/figure_scripts/plot_final_map_validation_paper_figures.py"),
+            "--figure-data-dir",
+            str(REPO_ROOT / "paper/figure_data/final_calibration"),
             "--output-dir",
             str(output_dir),
         ]
@@ -200,18 +236,33 @@ def main() -> None:
     output_dir = args.output_dir.expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    selected = list(args.only or STEPS)
+    if args.from_figure_data and args.no_cached_smf_cv:
+        raise ValueError("--no-cached-smf-cv cannot be combined with --from-figure-data")
+
+    selected = list(args.only or (FIGURE_DATA_STEPS if args.from_figure_data else STEPS))
+    unsupported = [step for step in selected if args.from_figure_data and step not in FIGURE_DATA_STEPS]
+    if unsupported:
+        names = ", ".join(unsupported)
+        raise ValueError(
+            f"These steps require the archived data products and cannot use --from-figure-data: {names}"
+        )
     if args.skip_final_posterior_corner and "final_posterior_corner" in selected:
         selected.remove("final_posterior_corner")
 
     for step in selected:
         print(f"\n== {step} ==", flush=True)
         if step == "smf_cv":
-            rebuild_smf_cv(data_root, output_dir, use_cache=not args.no_cached_smf_cv)
+            if args.from_figure_data:
+                replot_smf_cv_from_figure_data(output_dir)
+            else:
+                rebuild_smf_cv(data_root, output_dir, use_cache=not args.no_cached_smf_cv)
         elif step == "combining_constraints":
             rebuild_combining_constraints(data_root, output_dir)
         elif step == "final_map_validation":
-            rebuild_final_map_validation(data_root, output_dir)
+            if args.from_figure_data:
+                replot_final_map_validation_from_figure_data(output_dir)
+            else:
+                rebuild_final_map_validation(data_root, output_dir)
         elif step == "final_posterior_corner":
             rebuild_final_posterior_corner(data_root, output_dir)
         elif step == "final_parameter_table":

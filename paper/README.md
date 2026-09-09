@@ -66,6 +66,18 @@ map gives, for each manuscript figure or table:
 The scripts have command-line options so that their plotting choices can be
 inspected and adapted.
 
+The three low-redshift stellar-mass-function emulator-validation figures and
+the final MAP validation figure can be replotted from a fresh checkout using
+only the compact data tracked in this repository:
+
+```bash
+python paper/figure_scripts/rebuild_paper_figures.py --from-figure-data
+```
+
+The rebuilt PDFs and PNGs are written under `paper/tmp/rebuilt_figures/`. The
+posterior-corner figures and posterior-derived parameter table require the MCMC
+samples from the planned Zenodo archive.
+
 The manuscript currently uses these figure files:
 
 - `figures/smf_z0_pca99_holdout_curves_highlight_bins.pdf`

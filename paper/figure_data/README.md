@@ -20,11 +20,13 @@ Cached cross-validation products for the SMF z~0 emulator validation figures:
 - `smf_z0_pca_threshold_cv_metrics.csv`
 - `smf_z0_pca_threshold_cv_splits.csv`
 - `smf_z0_pca_threshold_cv_summary.json`
+- `smf_z0_target.csv`
 
 These files come from the PCA-threshold/bin-by-bin comparison run for the
 1024-point Sobol campaign. The generating validation script is
 `scripts/run_smf_z0_pca_threshold_cv.py`; it is a reusable analysis workflow
-rather than a manuscript-only renderer.
+rather than a manuscript-only renderer. The compact target table records the
+observational values and uncertainties that were stored with the campaign.
 
 ### `combining_constraints/`
 
@@ -58,6 +60,13 @@ The compact `galacticus_run_standard_observable_actuals.csv` file is extracted
 from the final EPS MAP HDF5 output so the plotted validation curves can be
 regenerated without archiving that 1.8 GiB HDF5 file in the paper-reproduction
 package.
+
+The published UNIT curves are averages over the five completed sectors used by
+the plotting workflow: `unit_011_020`, `unit_021_030`, `unit_051_060`,
+`unit_081_090`, and `unit_091_100`. The averages are recorded in
+`unit_nbody_standard_observable_actuals.csv` and
+`unit_nbody_emission_line_dust_lf_long.csv`; values were averaged before the
+logarithmic plotting transform, matching the full-data renderer.
 
 ## Local Source Campaign
 

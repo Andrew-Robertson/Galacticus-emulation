@@ -185,6 +185,15 @@ def parse_args() -> argparse.Namespace:
         help="Final joint calibration run directory.",
     )
     parser.add_argument(
+        "--figure-data-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Replot from compact checked-in CSV products instead of a full run directory. "
+            "Use paper/figure_data/final_calibration for a fresh repository checkout."
+        ),
+    )
+    parser.add_argument(
         "--output-dir",
         type=Path,
         default=None,
@@ -635,28 +644,26 @@ def _plot_halpha_axis(
 
 
 def plot_standard(
-    run_dir: Path,
+    prediction_csv: Path,
     actual_standard_path: Path,
+    unit_standard_paths: list[Path],
     output_dir: Path,
     dpi: int,
     figsize: tuple[float, float],
     output_suffix: str,
-    unit_run_dirs: list[Path],
     unit_label: str,
 ) -> list[Path]:
-    csv_path = run_dir / f"{RUN_PREFIX}_best_fit_standard_observables.csv"
-    unit_hdf5s = _unit_standard_hdf5s(unit_run_dirs)
-    table = pd.read_csv(csv_path)
+    table = pd.read_csv(prediction_csv)
 
     fig, axes = plt.subplots(4, 2, figsize=figsize, constrained_layout=True)
     axes_flat = axes.ravel()
     for axis, panel in zip(axes_flat, STANDARD_PANELS, strict=False):
-        _plot_standard_axis(axis, table, actual_standard_path, unit_hdf5s, panel)
+        _plot_standard_axis(axis, table, actual_standard_path, unit_standard_paths, panel)
 
     legend_axis = axes_flat[-1]
     legend_axis.axis("off")
     legend_axis.legend(
-        handles=_legend_handles(include_unit=bool(unit_hdf5s), unit_label=unit_label),
+        handles=_legend_handles(include_unit=bool(unit_standard_paths), unit_label=unit_label),
         loc="upper left",
         frameon=False,
         borderpad=0.2,
@@ -706,19 +713,17 @@ def _combined_halpha(actual_csvs: list[Path], sample_label: str) -> tuple[np.nda
 
 
 def plot_halpha(
-    run_dir: Path,
+    prediction_csv: Path,
+    actual_csv: Path,
+    unit_actual_csvs: list[Path],
     output_dir: Path,
     dpi: int,
     figsize: tuple[float, float],
     layout: str,
     output_suffix: str,
-    unit_run_dirs: list[Path],
     unit_label: str,
 ) -> list[Path]:
-    csv_path = run_dir / f"{RUN_PREFIX}_best_fit_sidecar_lfs.csv"
-    actual_csv = run_dir / "bestFitModel_GalacticusRun" / "emission_line_dust" / "emission_line_dust_lf_long.csv"
-    unit_actual_csvs = _unit_halpha_csvs(unit_run_dirs)
-    table = pd.read_csv(csv_path)
+    table = pd.read_csv(prediction_csv)
 
     if layout == "2x2":
         nrows, ncols = 2, 2
@@ -785,33 +790,33 @@ def plot_halpha(
 
 
 def plot_combined(
-    run_dir: Path,
+    standard_prediction_csv: Path,
+    halpha_prediction_csv: Path,
     actual_standard_path: Path,
+    actual_halpha_csv: Path,
+    unit_standard_paths: list[Path],
+    unit_halpha_csvs: list[Path],
     output_dir: Path,
     dpi: int,
     figsize: tuple[float, float],
     output_suffix: str,
-    unit_run_dirs: list[Path],
     unit_label: str,
 ) -> list[Path]:
-    standard_csv_path = run_dir / f"{RUN_PREFIX}_best_fit_standard_observables.csv"
-    unit_hdf5s = _unit_standard_hdf5s(unit_run_dirs)
-    standard_table = pd.read_csv(standard_csv_path)
-
-    halpha_csv_path = run_dir / f"{RUN_PREFIX}_best_fit_sidecar_lfs.csv"
-    halpha_actual_csv = run_dir / "bestFitModel_GalacticusRun" / "emission_line_dust" / "emission_line_dust_lf_long.csv"
-    unit_actual_csvs = _unit_halpha_csvs(unit_run_dirs)
-    halpha_table = pd.read_csv(halpha_csv_path)
+    standard_table = pd.read_csv(standard_prediction_csv)
+    halpha_table = pd.read_csv(halpha_prediction_csv)
 
     fig, axes = plt.subplots(4, 3, figsize=figsize, constrained_layout=True)
     standard_axes = axes[:, :2].ravel()
     for axis, panel in zip(standard_axes, STANDARD_PANELS, strict=False):
-        _plot_standard_axis(axis, standard_table, actual_standard_path, unit_hdf5s, panel)
+        _plot_standard_axis(axis, standard_table, actual_standard_path, unit_standard_paths, panel)
 
     legend_axis = standard_axes[-1]
     legend_axis.axis("off")
     legend_axis.legend(
-        handles=_legend_handles(include_unit=bool(unit_hdf5s or unit_actual_csvs), unit_label=unit_label),
+        handles=_legend_handles(
+            include_unit=bool(unit_standard_paths or unit_halpha_csvs),
+            unit_label=unit_label,
+        ),
         loc="center",
         bbox_to_anchor=(0.47, 0.5),
         frameon=False,
@@ -824,8 +829,8 @@ def plot_combined(
         _plot_halpha_axis(
             axes[row, 2],
             halpha_table,
-            halpha_actual_csv,
-            unit_actual_csvs,
+            actual_halpha_csv,
+            unit_halpha_csvs,
             observable_key,
             title=HALPHA_TITLES[observable_key],
             target_label="Sobral et al. (2013)",
@@ -856,64 +861,113 @@ def _default_actual_standard_path(run_dir: Path) -> Path:
 def main() -> None:
     args = parse_args()
     run_dir = args.run_dir.expanduser().resolve()
-    output_dir = (args.output_dir or (run_dir / "paperFigures")).expanduser().resolve()
-    output_dir.mkdir(parents=True, exist_ok=True)
-    actual_standard_path = (
-        args.actual_standard_path.expanduser().resolve()
-        if args.actual_standard_path is not None
-        else _default_actual_standard_path(run_dir)
+    figure_data_dir = (
+        args.figure_data_dir.expanduser().resolve()
+        if args.figure_data_dir is not None
+        else None
     )
+    default_output_dir = (
+        REPO_ROOT / "paper/tmp/rebuilt_figures"
+        if figure_data_dir is not None
+        else run_dir / "paperFigures"
+    )
+    output_dir = (args.output_dir or default_output_dir).expanduser().resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
     _configure_matplotlib(args.font_scale)
-    if args.unit_run_dir is None:
-        unit_run_dirs = _default_unit_run_dirs(run_dir)
+
+    if figure_data_dir is not None:
+        if args.unit_run_dir is not None:
+            raise ValueError("--unit-run-dir cannot be combined with --figure-data-dir")
+        standard_prediction_csv = (
+            figure_data_dir / f"{RUN_PREFIX}_best_fit_standard_observables.csv"
+        )
+        halpha_prediction_csv = figure_data_dir / f"{RUN_PREFIX}_best_fit_sidecar_lfs.csv"
+        actual_standard_path = (
+            args.actual_standard_path.expanduser().resolve()
+            if args.actual_standard_path is not None
+            else figure_data_dir / "galacticus_run_standard_observable_actuals.csv"
+        )
+        actual_halpha_csv = figure_data_dir / "galacticus_run_emission_line_dust_lf_long.csv"
+        unit_standard_paths = [figure_data_dir / "unit_nbody_standard_observable_actuals.csv"]
+        unit_halpha_csvs = [figure_data_dir / "unit_nbody_emission_line_dust_lf_long.csv"]
     else:
-        unit_run_dirs = [path.expanduser().resolve() for path in args.unit_run_dir]
+        standard_prediction_csv = run_dir / f"{RUN_PREFIX}_best_fit_standard_observables.csv"
+        halpha_prediction_csv = run_dir / f"{RUN_PREFIX}_best_fit_sidecar_lfs.csv"
+        actual_standard_path = (
+            args.actual_standard_path.expanduser().resolve()
+            if args.actual_standard_path is not None
+            else _default_actual_standard_path(run_dir)
+        )
+        actual_halpha_csv = (
+            run_dir
+            / "bestFitModel_GalacticusRun"
+            / "emission_line_dust"
+            / "emission_line_dust_lf_long.csv"
+        )
+        unit_run_dirs = (
+            _default_unit_run_dirs(run_dir)
+            if args.unit_run_dir is None
+            else [path.expanduser().resolve() for path in args.unit_run_dir]
+        )
         unit_run_dirs = [
             path
             for path in unit_run_dirs
             if _unit_standard_hdf5(path) is not None or _unit_halpha_csv(path) is not None
         ]
-    if unit_run_dirs:
-        print(
-            "Using UNIT N-body overlays from: "
-            + ", ".join(path.name for path in unit_run_dirs),
-            file=sys.stderr,
-        )
+        unit_standard_paths = _unit_standard_hdf5s(unit_run_dirs)
+        unit_halpha_csvs = _unit_halpha_csvs(unit_run_dirs)
+
+    required_paths = [
+        standard_prediction_csv,
+        halpha_prediction_csv,
+        actual_standard_path,
+        actual_halpha_csv,
+        *unit_standard_paths,
+        *unit_halpha_csvs,
+    ]
+    missing_paths = [path for path in required_paths if not path.exists()]
+    if missing_paths:
+        missing = "\n".join(f"- {path}" for path in missing_paths)
+        raise FileNotFoundError(f"Missing final MAP figure inputs:\n{missing}")
 
     outputs = []
     outputs.extend(
         plot_standard(
-            run_dir,
+            standard_prediction_csv,
             actual_standard_path,
+            unit_standard_paths,
             output_dir,
             args.dpi,
             tuple(args.standard_figsize),
             args.output_suffix,
-            unit_run_dirs,
             args.unit_label,
         )
     )
     outputs.extend(
         plot_halpha(
-            run_dir,
+            halpha_prediction_csv,
+            actual_halpha_csv,
+            unit_halpha_csvs,
             output_dir,
             args.dpi,
             tuple(args.halpha_figsize),
             args.halpha_layout,
             args.output_suffix,
-            unit_run_dirs,
             args.unit_label,
         )
     )
     outputs.extend(
         plot_combined(
-            run_dir,
+            standard_prediction_csv,
+            halpha_prediction_csv,
             actual_standard_path,
+            actual_halpha_csv,
+            unit_standard_paths,
+            unit_halpha_csvs,
             output_dir,
             args.dpi,
             tuple(args.combined_figsize),
             args.output_suffix,
-            unit_run_dirs,
             args.unit_label,
         )
     )

@@ -52,6 +52,8 @@ Initial cleanup completed:
 - Cleaned local absolute paths from public docs/scripts.
 - Moved manuscript-specific figure/table builders to `paper/figure_scripts/`.
 - Added compact derived paper inputs under `paper/figure_data/`.
+- Added a clone-only command that replots the three SMF emulator-validation
+  figures and the final MAP validation figure from compact checked-in data.
 - Generalized the kept HPC helper scripts enough that they no longer expose
   local machine paths.
 - Ran the local CI-equivalent checks and compiled the manuscript successfully.
