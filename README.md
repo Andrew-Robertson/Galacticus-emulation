@@ -38,8 +38,9 @@ The repository is under active development. It began as the workflow used for
 the Roman Galaxy Redshift Survey*, and also provides a basis for future
 Galacticus calibration work. Materials for the Roman GRS calibration paper,
 including its manuscript, figure data, and reproduction guide, are in
-[`paper/`](paper/README.md). The planned `roman-grs-calibration-arxiv-v1` tag
-will preserve that version while development continues on the main branch.
+[`paper/`](paper/README.md). The
+[`roman-grs-calibration-arxiv-v1` tagged release](https://github.com/Andrew-Robertson/Galacticus-emulation/tree/roman-grs-calibration-arxiv-v1)
+preserves that version while development continues on the main branch.
 
 ## Workflow
 

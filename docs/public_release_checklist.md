@@ -35,7 +35,7 @@ cleanly.
 
 ## Repository State For The arXiv Submission
 
-Status checked on 2026-09-03 after the release-readiness pass:
+Status checked on 2026-09-09 after the release-readiness pass:
 
 - Current branch: `main`.
 - The former `sobral-log-error-likelihood` branch was a direct descendant of
@@ -59,10 +59,15 @@ Initial cleanup completed:
 - Ran the local CI-equivalent checks and compiled the manuscript successfully.
 - Added a BSD 3-Clause software license and GitHub citation metadata.
 
-Remaining sequence before assigning the arXiv paper tag:
+Public-release checks completed before assigning the arXiv paper tag:
 
-- Push `main`.
-- Tag the exact commit submitted to arXiv.
+- Verified that the public repository can be cloned without GitHub
+  credentials.
+- Confirmed that GitHub Actions passes on public `main`.
+- Checked the public links to the interactive demonstration, paper guide,
+  tagged Galacticus parameter files, and tagged SED calculator.
+- Prepared the exact public commit for the
+  `roman-grs-calibration-arxiv-v1` annotated tag.
 
 ## Continuous Integration
 
