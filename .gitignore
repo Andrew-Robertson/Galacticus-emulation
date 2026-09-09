@@ -45,6 +45,7 @@ paper/*.toc
 paper/*.xdv
 paper/_minted-*/
 paper/tmp/
+paper/arXiv/
 paper/Galacticus_GP_calibration_*.pdf
 
 # macOS

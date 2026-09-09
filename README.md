@@ -109,7 +109,8 @@ used for the paper.
 Running a new training campaign requires a Galacticus executable, its data
 files, and the Galacticus parameter files used to define the calculation.
 Emission-line dust post-processing also requires the
-`galacticus_sed_calculator` package. These are external to GalacticEmu.
+[`galacticus_sed_calculator`](https://github.com/roman-grs-pit/galacticus_sed_calculator)
+package. These are external to GalacticEmu.
 
 Several scripts refer to these locations through the following environment
 variables. The names are conventions used by this project; a given workflow
