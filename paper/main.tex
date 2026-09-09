@@ -56,29 +56,24 @@
 \affiliation{The Observatories of the Carnegie Institution for Science, 813 Santa Barbara Street, Pasadena, 91101, CA, USA}
 
 \begin{abstract}
-Realistic simulations of the \romanspace{} Galaxy Redshift Survey require
-galaxy populations with self-consistent stellar masses, star-formation rates,
-sizes, metallicities, dust attenuation, and emission-line luminosities.
-For this purpose, we present an emulator-assisted calibration of the semi-analytic model \galacticus{}.
-Because direct posterior exploration with \galacticus{} is computationally
-prohibitive, we train Gaussian-process emulators to predict the observables
-entering the calibration likelihood.
-We calibrate the model simultaneously to stellar mass functions, the
-star-formation-rate function, size--mass relations, the black-hole
-mass--velocity-dispersion relation, the mass--metallicity relation,
-and \ha{} luminosity functions.
-Combining these observables breaks parameter degeneracies present in
-individual fits and can reveal tensions where different observables favour
-different regions of parameter space.
-The resulting model provides a broadly successful simultaneous description
-of the calibration data, including the abundance and redshift evolution of
-\ha{} emitters relevant to the \romanspace{} Galaxy Redshift Survey.
-A direct \galacticus{} calculation at the maximum a posteriori point gives
-similarly good agreement with the calibration data.
-More generally, emulation makes multi-observable posterior calibration
-practical for computationally expensive galaxy-formation models, with the
-same framework readily adaptable to different observational constraints and
-scientific applications.
+Mock catalogues for the \romanspace{} Galaxy Redshift Survey benefit from galaxy
+populations whose physical properties and emission-line observables are predicted
+within a single galaxy-formation framework. We present an emulator-assisted
+calibration of the semi-analytic model \galacticus{} for this purpose. Because
+direct posterior exploration with \galacticus{} is computationally prohibitive,
+we train Gaussian-process emulators to predict the observables entering the
+calibration likelihood. We calibrate the model simultaneously to stellar mass
+functions, the star-formation-rate function, size--mass relations, the
+black-hole mass--velocity-dispersion relation, the mass--metallicity relation,
+and \ha{} luminosity functions. Combining these observables breaks parameter
+degeneracies present in individual fits and can reveal tensions where different
+observables favour different regions of parameter space. The resulting model
+provides a broadly successful simultaneous description of the calibration data,
+including the abundance and redshift evolution of \ha{} emitters relevant to the
+\romanspace{} Galaxy Redshift Survey. A direct \galacticus{} calculation at the
+maximum a posteriori point gives similarly good agreement with the calibration
+data, providing a calibrated galaxy-formation model suitable for constructing
+physically consistent mock catalogues for  \romanspace{}.
 \end{abstract}
 
 %\keywords{}
@@ -139,13 +134,13 @@ expensive. One solution is to construct an \emph{emulator}: a statistical
 model trained on a finite set of direct model evaluations that predicts the
 model output at new points in parameter space at much lower computational
 cost. Several studies have used such emulators to explore or calibrate
-semi-analytic models. For \textsc{galform}, \citet{2010MNRAS.407.2017B}
+semi-analytic models. For \textsc{Galform}, \citet{2010MNRAS.407.2017B}
 combined emulation with so-called \emph{history matching} to identify the
 region of a 16-dimensional parameter space compatible with local luminosity
 functions, an approach later applied to the evolving stellar mass function
 by \citet{2017MNRAS.466.2418R}. More recently,
 \citet{2021MNRAS.506.4011E} used deep-learning emulators to calibrate
-\textsc{galform} to a broad set of low-redshift observables, while
+\textsc{Galform} to a broad set of low-redshift observables, while
 \citet{2024MNRAS.535.3324M} applied a related approach to \ha{} emitters for
 \euclid{} and \romanspace{} survey predictions.
 
@@ -284,7 +279,7 @@ Here \(\mathcal{LN}_{[a,b]}(x_0,\sigma_{\ln})\) denotes a log-normal prior trunc
 Units for dimensional parameters are shown in the parameter column, and priors are given for the numerical value in those units.
 }
 \label{tab:parameters}
-\begin{tabular}{@{}p{0.21\textwidth}p{0.52\textwidth}p{0.21\textwidth}@{}}
+\begin{tabular}{@{}p{0.21\textwidth}p{0.54\textwidth}p{0.21\textwidth}@{}}
 \toprule
 Parameter & Description & Prior \\
 \midrule
@@ -301,8 +296,8 @@ Parameter & Description & Prior \\
 \(f_{\rm cool}\) & Gas cooling-rate multiplier & \(\mathcal{LN}_{[0.05,1.2]}(0.5,1)\) \\
 \(r_{\rm core}/R_{\rm vir}\) & Hot-gas core radius in units of virial radius & \(\mathcal{LN}_{[0.03,1]}(0.3,1)\) \\
 \(\gamma_{\rm reinc}\) & Ejected-gas reincorporation normalization & \(\mathcal{LN}_{[1,25]}(5,0.5)\) \\
-\(\delta_{\rm reinc,1}\) & Redshift exponent in the Henriques reincorporation model & \(\mathcal{U}_{[-2,4]}\) \\
-\(\delta_{\rm reinc,2}\) & Virial-velocity exponent in the Henriques reincorporation model & \(\mathcal{U}_{[-1,5]}\) \\[0.8\baselineskip]
+\(\delta_{\rm reinc,1}\) & Redshift exponent in the \citet{2013MNRAS.431.3373H} reincorporation model & \(\mathcal{U}_{[-2,4]}\) \\
+\(\delta_{\rm reinc,2}\) & Virial-velocity exponent in the \citet{2013MNRAS.431.3373H} reincorporation model & \(\mathcal{U}_{[-1,5]}\) \\[0.8\baselineskip]
 \multicolumn{3}{@{}l}{\normalfont Mergers and disk instabilities} \\
 \(f_{\rm major}\) & Mass-ratio threshold for major mergers & \(\mathcal{LN}_{[0.1,0.5]}(0.25,0.5)\) \\
 \(f_{\rm orbit}\) & Orbital-energy factor for merger-remnant sizes & \(\mathcal{LN}_{[0.25,4]}(1,0.5)\) \\
@@ -332,17 +327,6 @@ Section~\ref{sec:smf-example} uses the low-redshift stellar mass function as a c
 \label{sec:dust-postprocessing}
 
 A model that produces realistic emission-line luminosities is required for the \romanspace{} grism-survey application that motivates this calibration, because the \romanspace{} redshift sample will be selected primarily through rest-frame optical emission lines. We therefore include the \ha{} luminosity functions of \citet{2013MNRAS.428.1128S} among the calibration observables, requiring predictions for both intrinsic \ha{} emission and its attenuation by dust.
-
-The \ha{} emission associated with star formation is produced mainly by
-recombination in H,{\sc ii} regions around young massive stars, and therefore
-traces recent star formation \citep[e.g.][]{1998ARA&A..36..189K}. We calculate
-this emission using the \galacticus{} implementation described by
-\citet{2018MNRAS.474..177M}, which uses pre-computed \textsc{Cloudy}
-\citep{2013RMxAA..49..137F} photoionization models together with the
-star-formation and chemical-enrichment histories of each galaxy. For each
-\galacticus{} run, we use the resulting intrinsic \ha{} luminosities stored in
-the output catalogue, combining the contributions from star-forming regions in
-the disk and spheroid with any contribution from the AGN.
 
 The \ha{} emission associated with star formation is produced mainly by
 recombination in H\,{\sc ii} regions around young massive stars, and therefore
@@ -400,9 +384,9 @@ bin. For binned relations, such as the size--mass,
 black-hole--velocity-dispersion, and mass--metallicity relations, the emulated
 quantity is the mean transformed galaxy property in each bin, and the
 finite-sampling uncertainty corresponds to the uncertainty on this mean.
-These per-bin uncertainties are passed to the GP as a diagonal training-noise
-term, so that noisier training outputs are treated as less precise estimates of
-the underlying model prediction.
+These per-bin uncertainties are included during Gaussian-process training as a
+diagonal training-noise term, so that noisier training outputs are treated as
+less precise estimates of the underlying model prediction.
 
 \begin{table*}
 \centering
@@ -563,7 +547,8 @@ That is, for \galacticus{} parameter $\theta_i$ with prior cumulative distributi
   u_i = P_i(<\theta_i),
 \end{equation}
 so that each input parameter is mapped onto the unit interval.
-This is the space in which the Sobol design was constructed, and is therefore the space in which the training data are approximately space filling.
+Because the Sobol design was constructed in this space, the training points
+provide approximately uniform coverage in prior-quantile coordinates.
 It also avoids asking the GP to learn across raw parameters with very different units, ranges, and prior shapes; an interval of fixed width in $u_i$ contains the same prior probability for each parameter.
 The \ha{} luminosity-function emulator has five additional inputs: the dust post-processing parameters described in Section~\ref{sec:dust-postprocessing}.
 
@@ -572,7 +557,9 @@ After the PCA transformation, each retained coefficient is standardised once mor
 This is separate from the bin-wise standardisation applied before PCA, and is undone before reconstructing the observable vector.
 Let $\mathbf{u}$ denote the complete input vector supplied to a given GP after the input transformations just described.
 The kernel specifies the covariance between the values of the function at two points in this input space.
-We use a Mat\'ern kernel with $\nu=2.5$, multiplied by a constant amplitude, and allow a separate length scale for each input coordinate.
+We use a Mat\'ern kernel with $\nu=2.5$ \citep[e.g.][]{2006gpml.book.....R},
+multiplied by a constant amplitude, and allow a separate length scale for each
+input coordinate.
 For two input vectors, $\mathbf{u}$ and $\mathbf{u}'$, the kernel is
 \begin{equation}
   k(\mathbf{u},\mathbf{u}')
@@ -585,7 +572,7 @@ where
 \begin{equation}
   r^2 = \sum_i \left(\frac{u_i-u_i'}{\ell_i}\right)^2.
 \end{equation}
-Here $A$ is the covariance amplitude and $\ell_i$ is the length scale associated with the $i$th emulator input.
+Here $A$ is the covariance amplitude and $\ell_i$ is the length scale associated with coordinate $u_i$ of the transformed input space.
 Small values of $\ell_i$ allow the emulator prediction to vary rapidly as that input coordinate is changed, while large values correspond to smoother variation.
 For each PCA coefficient, the kernel hyperparameters are therefore the overall covariance amplitude and one length scale for each emulator input.
 We determine the kernel hyperparameters by maximizing the GP marginal
@@ -795,10 +782,10 @@ we propagate the diagonal uncertainties to logarithmic number density using
   \simeq
   \frac{\sigma_\Phi}{\Phi\ln 10}.
 \end{equation}
-For the \citet{2013MNRAS.428.1128S} \ha{} luminosity functions, we use the
-tabulated uncertainties in $\log_{10}\Phi$ directly. The resulting
-uncertainties are treated as symmetric Gaussian errors in the transformed
-observable space. This approximation is most appropriate when the fractional
+For the \citet{2013MNRAS.428.1128S} \ha{} luminosity functions, the published
+uncertainties are already given in $\log_{10}\Phi$, so no conversion from linear
+number density is required. We use these tabulated values directly as symmetric
+Gaussian uncertainties in the transformed observable space. This approximation is most appropriate when the fractional
 uncertainties are moderate. For sparsely populated number-density bins, the underlying counting uncertainty is intrinsically asymmetric and is only approximately represented in this way.
 
 
@@ -853,7 +840,9 @@ fits.
 
 To build intuition for how different observables constrain the model, we consider a set of diagnostic calibrations using the stellar mass functions, the star-formation-rate function, and stellar mass--size relations. These provide a controlled example of how combining observables can reduce parameter degeneracies and reveal tensions between different aspects of the galaxy population.
 
-In each diagnostic fit, all 20 \galacticus{} parameters listed in Table~\ref{tab:parameters} are varied. For visual clarity, Fig.~\ref{fig:combining_constraints} shows only a subset of six parameters, chosen because they control several of the main processes regulating the stellar component. These are the normalisation and circular-velocity scaling of stellar feedback in disks, $V_{\rm out,d}$ and $\alpha_{\rm out,d}$; the corresponding feedback velocity scale in spheroids, $V_{\rm out,sph}$; the overall gas cooling rate, $f_{\rm cool}$; and the parameters setting the rate at which gas is converted into stars in spheroids and disks, $\epsilon_{\star,{\rm sph}}$ and $\nu_{\rm SF,d}$. We focus on these six parameters for illustration, although the remaining parameters, including those controlling the recycling of ejected gas and the growth and feedback of black holes, also affect the stellar mass and star-formation histories.
+In each diagnostic fit, all 20 \galacticus{} parameters listed in Table~\ref{tab:parameters} are varied. For visual clarity, Fig.~\ref{fig:combining_constraints} shows only a subset of six parameters, chosen because they control several of the main processes regulating the stellar component. These are the normalisation and circular-velocity scaling of stellar feedback in disks, $V_{\rm out,d}$ and $\alpha_{\rm out,d}$; the corresponding feedback velocity scale in spheroids, $V_{\rm out,sph}$; the overall gas cooling rate, $f_{\rm cool}$; and the parameters setting the rate at which gas is converted into stars in spheroids and disks, $\epsilon_{\star,{\rm sph}}$ and $\nu_{\rm SF,d}$. We focus on these six parameters for illustration, although the remaining parameters, including those controlling the recycling
+of ejected gas, black-hole growth, and feedback from accreting black holes, also
+affect the stellar mass and star-formation histories.
 
 The left-hand part of Fig.~\ref{fig:combining_constraints} shows that
 calibrations to individual observables leave substantial parameter
@@ -951,10 +940,10 @@ The low-redshift stellar mass function, the star-formation-rate function, and
 the gas-phase mass--metallicity relation are especially well reproduced.
 The higher-redshift stellar mass function shows larger residuals, with the
 model tending to overpredict the abundance of lower-mass galaxies.
-Similar behaviour has been found in comparisons of semi-analytic models, in
-which models calibrated to reproduce the low-redshift stellar mass function
-often overpredict the high-redshift mass function, particularly at the
-low-mass end \citep{2018MNRAS.475.2936K}.
+A similar trend was reported by \citet{2018MNRAS.475.2936K}, who compared
+several semi-analytic models and found that models calibrated to reproduce the
+low-redshift stellar mass function commonly overpredict the high-redshift mass
+function, particularly at the low-mass end.
 
 The model also predicts a black-hole mass--velocity-dispersion relation that
 is too shallow. As a result, the predicted black-hole masses are increasingly
@@ -1000,21 +989,33 @@ star-formation-rate function alone favours substantially higher values.
 In the adopted disk star-formation prescription, the molecular fraction is
 set by the \citet{2006ApJ...650..933B} pressure relation, while \(\nu_{\rm SF,d}\) sets the rate at which
 molecular gas is converted into stars. For comparison,
-\citet{2008AJ....136.2782L} found an approximately constant molecular-gas
+\citet{2008AJ....136.2782L} inferred an approximately constant molecular-gas
 star-formation efficiency of \(5.25\times10^{-10}\,{\rm yr}^{-1}\) in nearby
 spiral galaxies, corresponding to a molecular-gas depletion time of approximately 1.9 Gyr. The MAP value found here, \(1.01\times10^{-10}\,{\rm yr}^{-1}\), instead implies a depletion time of approximately 10 Gyr. The joint
 calibration therefore favours substantially slower conversion of molecular
 gas into stars than is inferred for nearby spiral galaxies.
 
 This should not necessarily be interpreted as evidence for such long
-molecular-gas depletion times in real galaxies. Within the model, \(\nu_{\rm SF,d}\) is constrained indirectly through its effects on the galaxy properties included in the calibration, and can compensate for other aspects of the gas supply and regulation of star formation. Indeed, Fig.~\ref{fig:combining_constraints} shows that different calibration observables favour different values of \(\nu_{\rm SF,d}\). The low value preferred by the joint calibration should therefore not be interpreted as a direct measurement of molecular-gas depletion times.
+molecular-gas depletion times in real galaxies. In the calibration,
+$\nu_{\rm SF,d}$ is inferred from observables that respond to several coupled
+processes, rather than from direct measurements of molecular gas masses and
+star-formation rates. Its posterior can therefore shift to offset other aspects
+of the model, such as gas supply, feedback, or the partitioning of cold gas into
+molecular and atomic phases. Indeed, Fig.~\ref{fig:combining_constraints} shows
+that different calibration observables favour different values of
+$\nu_{\rm SF,d}$. The low value preferred by the joint calibration should
+therefore be interpreted as an effective model parameter within this calibration,
+rather than as a direct measurement of molecular-gas depletion times.
+
 
 The dust-attenuation parameters are also summarised in
 Appendix~\ref{app:calibrated-model}. Their posteriors favour a lower
 attenuation normalisation and a stronger stellar-mass dependence than the
-baseline \gbten{} relation. These parameters are constrained jointly with the
-\galacticus{} model, so their inferred values depend on the intrinsic
-emission-line luminosities predicted by \galacticus{}.
+baseline \gbten{} relation. Because the attenuation model is fitted simultaneously with the
+galaxy-formation parameters, the inferred dust relation partly reflects the
+intrinsic \ha{} luminosities predicted by \galacticus{}. These dust parameters
+should therefore be interpreted within the joint model, rather than as an
+independent measurement of the \ha{} attenuation--stellar-mass relation.
 
 
 \subsection{Direct \galacticus{} Validation At The MAP Point}
@@ -1023,10 +1024,12 @@ emission-line luminosities predicted by \galacticus{}.
 Figure~\ref{fig:final-standard-observables} includes two direct \galacticus{}
 evaluations at the final MAP parameter vector. The first uses the same set of EPS
 merger trees as was used for the emulator training set. This provides a direct
-validation of the emulator prediction at the MAP point. Across the calibration
-observables, the direct EPS \galacticus{} calculation closely follows the
-emulator MAP prediction, with differences that are generally small compared
-with the emulator predictive uncertainty. This confirms that the emulator-derived MAP solution corresponds to a direct \galacticus{} model that provides a good simultaneous description of the calibration observables.
+validation of the emulator prediction at the MAP point. Across the calibration observables, the direct EPS \galacticus{} calculation
+closely follows the emulator MAP prediction, with residuals generally comparable
+to the emulator predictive uncertainty. This is the expected scale for a direct
+model evaluation at an emulator-derived optimum, and confirms that the MAP
+solution corresponds to a \galacticus{} model that provides a good simultaneous
+description of the calibration observables.
 
 The same MAP parameter vector was also evaluated using \(N\)-body merger trees
 from one of the UNIT simulations \citep{2019MNRAS.487...48C}. Owing to the large volume of UNIT, we did not run \galacticus{} over the full
@@ -1040,8 +1043,8 @@ treatment of the EPS calculation.
 
 The resulting UNIT predictions are generally close to those obtained with the
 EPS trees. The differences are small for most of the low-redshift observables,
-although a more noticeable offset is present in the mass--metallicity
-relation, and differences also become somewhat larger for the higher-redshift
+although a noticeable offset is present in the mass--metallicity
+relation. Differences become somewhat larger for the higher-redshift
 \ha{} luminosity functions. In our EPS calculation, the abundance of the
 $z=0$ host haloes is set directly by the adopted Sheth--Tormen halo mass
 function. At earlier redshifts, however, the halo population depends
@@ -1094,7 +1097,17 @@ exclude otherwise viable regions of parameter space. Emulator-assisted
 calibration makes it practical to relax more of these assumptions and explore
 a larger fraction of the model's allowed behaviour.
 
-The emulator also provides a useful way to assess new observations. Rather than testing only whether an existing calibrated or fiducial model agrees with a new data set, one can ask whether agreement can be achieved elsewhere within the allowed model parameter space while retaining consistency with the existing calibration data. An observable that is poorly reproduced by the fiducial model might become consistent with the data after varying a particular subset of parameters. Conversely, an observable that cannot be reproduced anywhere in the region of parameter space allowed by the existing calibration provides evidence either of a limitation of the modelling framework or of tension between the observational constraints. In this way, the emulator can be used to distinguish shortcomings of a particular calibration from more fundamental tensions with the model.
+The emulator also provides a useful way to assess new observations. Rather than
+testing only whether an existing calibrated or fiducial model agrees with a new
+data set, one can ask whether agreement can be achieved elsewhere within the
+allowed model parameter space. This question can be posed either on its own, to
+test the flexibility of the model, or jointly with the existing calibration data,
+to ask whether the new observable can be accommodated without degrading the
+previous fit. An observable that is poorly reproduced by the fiducial model might
+become consistent with the data after varying a particular subset of parameters.
+Conversely, an observable that cannot be reproduced anywhere in the relevant
+region of parameter space provides evidence either of a limitation of the
+modelling framework or of tension between observational constraints.
 
 The same approach could also be applied to observables directly relevant for cosmological inference. For example, by constructing training sets from a suite of $N$-body simulations spanning different cosmologies, one could emulate galaxy clustering statistics, such as the galaxy two-point correlation function, as functions of both cosmological and \galacticus{} parameters. Uncertainty in galaxy formation could then be marginalised over when constraining cosmology. Similar approaches have recently been demonstrated using empirical models of the galaxy–halo connection, including subhalo abundance matching and its extension to star-forming galaxies \citep{2026MNRAS.545f2143M,2026arXiv260419449O}. A \galacticus{} emulator would provide a route to propagating uncertainties in a physics-based model of galaxy formation into cosmological constraints.
 
@@ -1121,7 +1134,7 @@ bins as independent would strongly penalise such a shift. Where available, full 
 
 The finite-sampling uncertainties in the emulator training outputs may likewise be correlated between observable bins. Accounting for these correlations is possible in principle, for example through multi-output Gaussian processes \citep{alvarez2012ftml-kernels} or, for the PCA emulators, by propagating the output covariance through the PCA transformation. Doing so would require an extension of the implementation used here.\footnote{Our emulators use the \texttt{scikit-learn} Gaussian-process implementation, which allows heteroscedastic training uncertainties to be supplied for individual training points, but does not support a full covariance matrix for correlated training errors.} The simpler treatment used here is therefore a practical approximation rather than a statement that such correlations are negligible.
 
-%The choice of calibration observables also determines which aspects of the model are strongly constrained. In a formal likelihood, the influence of each observable is determined by its statistical uncertainties, covariance structure, and number of fitted data points. Consequently, parameters associated with physical processes that are only indirectly probed by the calibration data may remain weakly constrained. For example, parameters connected to SMBH growth may be only weakly constrained if the fitted observables do not directly probe the galaxy populations or regimes where those parameters matter most. For applications where reproducing a particular observable is especially important, an alternative is to modify its relative weight in the calibration objective. Previous emulator studies of \textsc{galform} have explored such heuristic reweighting, including when calibrating predictions for H$\alpha$ emitters \citep{Madar2024}. Such an approach would be straightforward with our emulator, but we do not pursue it here.
+%The choice of calibration observables also determines which aspects of the model are strongly constrained. In a formal likelihood, the influence of each observable is determined by its statistical uncertainties, covariance structure, and number of fitted data points. Consequently, parameters associated with physical processes that are only indirectly probed by the calibration data may remain weakly constrained. For example, parameters connected to SMBH growth may be only weakly constrained if the fitted observables do not directly probe the galaxy populations or regimes where those parameters matter most. For applications where reproducing a particular observable is especially important, an alternative is to modify its relative weight in the calibration objective. Previous emulator studies of \textsc{Galform} have explored such heuristic reweighting, including when calibrating predictions for H$\alpha$ emitters \citep{Madar2024}. Such an approach would be straightforward with our emulator, but we do not pursue it here.
 
 %Finally, agreement with observables included in the calibration should not be regarded as an independent prediction of the model. These data have directly influenced the inferred parameter values, and agreement with them instead demonstrates the extent to which the model can simultaneously accommodate the set of calibration constraints. Predictions for observables not included in the calibration provide a more independent test. This distinction is particularly relevant for SAMs, where fixing previously calibrated parameters increases the predictive power of subsequent calculations, but also inherits the assumptions and possible sub-optimality of the earlier calibration.
 
@@ -1130,7 +1143,7 @@ The finite-sampling uncertainties in the emulator training outputs may likewise 
 
 A clear next step is to extend the calibration to higher redshift. JWST has revealed unexpectedly abundant bright galaxy candidates at $z \gtrsim 9$, prompting renewed discussion of whether models calibrated primarily to lower-redshift data require changes in star-formation efficiency, burstiness, dust attenuation, or other early-Universe physics \citep[e.g.][]{2023MNRAS.519..843M, 2024ApJ...976L..15C}. Emulator-assisted calibration would make it possible to ask whether a single region of \galacticus{} parameter space can simultaneously accommodate low-redshift constraints and high-redshift JWST measurements, and to identify which physical parameters are driven towards different values by the two regimes.
 
-Future work could also use targeted or sequential training designs. The present emulator is trained over a broad prior volume, which is valuable for global exploration but becomes inefficient once the posterior is localised to a much smaller region of parameter space. Additional \galacticus{} evaluations could instead be targeted towards regions of high posterior probability or large emulator uncertainty, improving the emulator where additional accuracy matters most for the inference. Related iterative strategies have previously been used in emulator-based studies of \textsc{galform}, where successive waves of model evaluations were concentrated within the regions of parameter space retained by \emph{Bayesian history matching} \citep{2010MNRAS.407.2017B, 2014arXiv1405.4976V, 2017MNRAS.466.2418R}. Such sequential designs may be particularly valuable in high-dimensional parameter spaces, where densely sampling the full prior volume rapidly becomes prohibitively expensive.
+Future work could also use targeted or sequential training designs. The present emulator is trained over a broad prior volume, which is valuable for global exploration but becomes inefficient once the posterior is localised to a much smaller region of parameter space. Additional \galacticus{} evaluations could instead be targeted towards regions of high posterior probability or large emulator uncertainty, improving the emulator where additional accuracy matters most for the inference. Related iterative strategies have previously been used in emulator-based studies of \textsc{Galform}, where successive waves of model evaluations were concentrated within the regions of parameter space retained by \emph{Bayesian history matching} \citep{2010MNRAS.407.2017B, 2014arXiv1405.4976V, 2017MNRAS.466.2418R}. Such sequential designs may be particularly valuable in high-dimensional parameter spaces, where densely sampling the full prior volume rapidly becomes prohibitively expensive.
 
 A longer-term goal is to extend the framework beyond parameter calibration to
 comparisons between alternative physical prescriptions within \galacticus{}.
@@ -1213,7 +1226,7 @@ prescriptions, or target applications.
 
 \section*{Acknowledgments}
 
-AR and AB gratefully acknowledges funding from NASA Grant  \#80NSSC24M0021, ``Project Infrastructure for the Roman Galaxy Redshift Survey''. Calculations in this work were performed using the OBS HPC resource operated by Carnegie Science as well as the Resnick High Performance Computing Center, a facility supported by Resnick Sustainability Institute at the California Institute of Technology. This work made use of the following software packages: \href{https://www.astropy.org/}{{Astropy}}
+AR and AB gratefully acknowledge funding from NASA Grant  \#80NSSC24M0021, ``Project Infrastructure for the Roman Galaxy Redshift Survey''. Calculations in this work were performed using the OBS HPC resource operated by Carnegie Science as well as the Resnick High Performance Computing Center, a facility supported by Resnick Sustainability Institute at the California Institute of Technology. This work made use of the following software packages: \href{https://www.astropy.org/}{{Astropy}}
 \citep{astropy1, astropy2},
 \href{https://emcee.readthedocs.io/en/stable/}{{emcee}}
 \citep{ForemanMackey:2013io},
@@ -1361,9 +1374,11 @@ where $\sigma_{{\rm sim},n}$ is the estimated finite-sampling uncertainty of
 the held-out calculation. This is the same type of uncertainty that is
 supplied to the GP as a training-output uncertainty when building the emulators.
 
-Let $m_n$ be the emulator mean at the held-out parameter point and
-$\sigma_{{\rm emu},n}$ its predictive uncertainty for the latent model
-prediction. Treating the GP predictive uncertainty and finite-sampling uncertainty as independent, the expected variance of the residual, $m_n - g_n$, is
+Let $m_n$ be the emulator mean at the held-out parameter point, and let
+$\sigma_{{\rm emu},n}$ be its predictive uncertainty for $f_n$, the
+infinite-sampling model prediction defined above. Treating the emulator
+predictive uncertainty and finite-sampling uncertainty as independent, the
+expected variance of the residual, $m_n - g_n$, is
 \begin{equation}
   s_n^2
   =
@@ -1399,23 +1414,28 @@ Gaussian, we expect ${\rm RMS}(z)\approx1$, $f_{1\sigma}\approx0.68$, and
 $f_{2\sigma}\approx0.95$.
 
 Table~\ref{tab:emulator-validation-summary} gives the median value of each
-diagnostic over the bins of an observable. Once the finite-sampling
-uncertainty of the held-out calculations is included, the coverage of the
-\ha{} luminosity-function emulators is reasonably close to the Gaussian
-expectation at all four redshifts. In particular, the larger raw RMSE values
-at higher redshift do not correspond to a comparable deterioration in
-${\rm RMS}(z)$.
+diagnostic over the bins of an observable. The raw RMSE values measure the
+difference between the emulator mean and the finite-volume held-out
+\galacticus{} catalogue prediction, rather than the emulator interpolation error
+alone. They therefore include noise from the direct held-out calculation itself,
+as well as uncertainty in the emulator prediction.
 
-This distinction is especially important for the \ha{} luminosity functions.
-For a survey covering a fixed area, the comoving volume probed by the
-observational samples generally increases towards higher redshift, allowing
-the observed luminosity functions to extend to lower number densities. By
-contrast, every \galacticus{} calculation used here has the same effective
-comoving volume. The higher-redshift luminosity-function bins therefore
-contain fewer simulated galaxies and have larger finite-sampling
-uncertainties. The direct held-out calculations consequently become noisier
-with increasing redshift, even if the accuracy of the emulator for the
-underlying model prediction remains similar.
+This distinction is especially important for the \ha{} luminosity functions. For
+a survey covering a fixed area, the comoving volume probed by the observational
+samples generally increases towards higher redshift, allowing the observed
+luminosity functions to extend to lower number densities. By contrast, every
+\galacticus{} calculation used here has the same effective comoving volume. The
+higher-redshift luminosity-function bins therefore contain fewer simulated
+galaxies and have larger finite-sampling uncertainties, making the direct
+held-out predictions noisier at higher redshift.
+
+After normalizing the residuals by the combination of emulator predictive
+uncertainty and held-out finite-sampling uncertainty, the \ha{}
+luminosity-function emulators have ${\rm RMS}(z)$ values and coverage fractions
+that are reasonably close to the Gaussian expectation at all four redshifts. The
+larger raw RMSE values at higher redshift should therefore not be interpreted as
+a comparable deterioration in the emulator accuracy for the underlying
+infinite-sampling model prediction.
 
 \begin{table*}
 \centering
