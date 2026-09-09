@@ -120,7 +120,7 @@ arguments, and different combinations of parameters can produce similar
 agreement with a small set of observables. Automated calibration methods have therefore become increasingly important.
 These include methods that sample the posterior distribution of model
 parameters \citep[e.g.][]{2009MNRAS.396..535H,2011MNRAS.416.1949L,
-2015MNRAS.451.2663H}, as well as optimization methods designed to search
+2015MNRAS.451.2663H}, as well as optimisation methods designed to search
 efficiently for well-fitting regions of parameter space
 \citep[e.g.][]{2015ApJ...801..139R}. Comparisons in which multiple
 semi-analytic models are calibrated against a common set of observations
@@ -182,13 +182,13 @@ the model parameters, and finally verify the resulting calibrated model with a d
 for \romanspace{}  grism mock generation and for broader applications requiring
 physically motivated, self-consistent galaxy catalogues.
 
-The paper is organized as follows.
+The paper is organised as follows.
 Section~\ref{sec:model} describes the \galacticus{} model, the varied parameters, and the training campaign.
 Section~\ref{sec:emulator} describes the emulator construction and validation.
 Section~\ref{sec:posterior-inference} describes the likelihood and MCMC inference.
 Section~\ref{sec:calibration-results} presents the calibration results, including diagnostic subset fits and the final joint calibration.
 Section~\ref{sec:discussion} discusses the interpretation and limitations of the calibration.
-We summarize in Section~\ref{sec:conclusions}.
+We summarise in Section~\ref{sec:conclusions}.
 
 
 \section{Model And Emulator Training Set}
@@ -285,7 +285,7 @@ Parameter & Description & Prior \\
 \midrule
 \noalign{\vskip 1.8\baselineskip}
 \multicolumn{3}{@{}l}{\normalfont Star formation and stellar populations} \\
-\(\nu_{\rm SF,d}/\mathrm{Gyr}^{-1}\) & Disk star-formation frequency normalization & \(\mathcal{LN}_{[0.1,10]}(1,2)\) \\
+\(\nu_{\rm SF,d}/\mathrm{Gyr}^{-1}\) & Disk star-formation frequency normalisation & \(\mathcal{LN}_{[0.1,10]}(1,2)\) \\
 \(\epsilon_{\star,{\rm sph}}\) & Spheroid star-formation efficiency per dynamical time & \(\mathcal{LN}_{[10^{-4},1]}(0.01,4)\) \\
 \(y_Z\) & Stellar metal yield & \(\mathcal{LN}_{[0.01,0.04]}(0.02,0.5)\) \\[0.8\baselineskip]
 \multicolumn{3}{@{}l}{\normalfont Stellar feedback} \\
@@ -295,7 +295,7 @@ Parameter & Description & Prior \\
 \multicolumn{3}{@{}l}{\normalfont Gas cooling and recycling} \\
 \(f_{\rm cool}\) & Gas cooling-rate multiplier & \(\mathcal{LN}_{[0.05,1.2]}(0.5,1)\) \\
 \(r_{\rm core}/R_{\rm vir}\) & Hot-gas core radius in units of virial radius & \(\mathcal{LN}_{[0.03,1]}(0.3,1)\) \\
-\(\gamma_{\rm reinc}\) & Ejected-gas reincorporation normalization & \(\mathcal{LN}_{[1,25]}(5,0.5)\) \\
+\(\gamma_{\rm reinc}\) & Ejected-gas reincorporation normalisation & \(\mathcal{LN}_{[1,25]}(5,0.5)\) \\
 \(\delta_{\rm reinc,1}\) & Redshift exponent in the \citet{2013MNRAS.431.3373H} reincorporation model & \(\mathcal{U}_{[-2,4]}\) \\
 \(\delta_{\rm reinc,2}\) & Virial-velocity exponent in the \citet{2013MNRAS.431.3373H} reincorporation model & \(\mathcal{U}_{[-1,5]}\) \\[0.8\baselineskip]
 \multicolumn{3}{@{}l}{\normalfont Mergers and disk instabilities} \\
@@ -349,7 +349,7 @@ which estimate dust attenuation from ratios of hydrogen recombination lines.
 Balmer-decrement measurements at higher redshift suggest that a mass-dependent
 attenuation prescription remains a reasonable baseline, although some redshift
 evolution is possible \citep[e.g.][]{2013ApJ...763..145D}. We therefore allow
-departures from the \gbten{} relation in its normalization and stellar-mass
+departures from the \gbten{} relation in its normalisation and stellar-mass
 dependence, together with redshift evolution and mass-dependent redshift
 evolution.
 
@@ -575,8 +575,8 @@ where
 Here $A$ is the covariance amplitude and $\ell_i$ is the length scale associated with coordinate $u_i$ of the transformed input space.
 Small values of $\ell_i$ allow the emulator prediction to vary rapidly as that input coordinate is changed, while large values correspond to smoother variation.
 For each PCA coefficient, the kernel hyperparameters are therefore the overall covariance amplitude and one length scale for each emulator input.
-We determine the kernel hyperparameters by maximizing the GP marginal
-likelihood \citep{2006gpml.book.....R} using a gradient-based optimizer, starting from multiple initial points to reduce sensitivity to local maxima.
+We determine the kernel hyperparameters by maximising the GP marginal
+likelihood \citep{2006gpml.book.....R} using a gradient-based optimiser, starting from multiple initial points to reduce sensitivity to local maxima.
 
 
 \subsubsection{Emulator Uncertainties}
@@ -716,7 +716,7 @@ The improvement from smaller training subsets to the full 1024-run training set 
 We use two kinds of MCMC fit.
 First, we run a small set of diagnostic fits to subsets of the calibration data to illustrate how different observables constrain different combinations of \galacticus{} parameters.
 The example shown in Section~\ref{sec:degeneracy-breaking} uses stellar mass functions, size--mass relations, and the star-formation-rate function, both separately and jointly.
-Second, we run the final joint calibration using the full set of calibration observables summarized in Table~\ref{tab:calibration-observable-summary}.
+Second, we run the final joint calibration using the full set of calibration observables summarised in Table~\ref{tab:calibration-observable-summary}.
 The final emulators are trained on the 1024-run training set described in Section~\ref{sec:emulator-training-set}. The final joint fit samples the 20 \galacticus{} parameters in Table~\ref{tab:parameters} together with the five dust parameters described in Appendix~\ref{app:dust-model-details}.
 
 
@@ -1224,7 +1224,7 @@ The same approach can be applied with different calibration datasets, model
 prescriptions, or target applications.
 
 
-\section*{Acknowledgments}
+\section*{Acknowledgements}
 
 AR and AB gratefully acknowledge funding from NASA Grant  \#80NSSC24M0021, ``Project Infrastructure for the Roman Galaxy Redshift Survey''. Calculations in this work were performed using the OBS HPC resource operated by Carnegie Science as well as the Resnick High Performance Computing Center, a facility supported by Resnick Sustainability Institute at the California Institute of Technology. This work made use of the following software packages: \href{https://www.astropy.org/}{{Astropy}}
 \citep{astropy1, astropy2},
@@ -1294,7 +1294,7 @@ where
   u = \ln \left( \frac{1+z}{1+z_{\rm piv}} \right),
 \end{equation}
 and we adopt $z_{\rm piv}=1$. The parameters $\delta_0$ and $\delta_M$
-therefore allow departures from the normalization and stellar-mass dependence
+therefore allow departures from the normalisation and stellar-mass dependence
 of the \gbten{} relation at the pivot redshift, while $\delta_z$ and
 $\delta_{Mz}$ allow these departures to evolve with redshift.
 
@@ -1331,10 +1331,10 @@ truncation at $A_{\Hamath}=0$. This avoids introducing Monte Carlo noise into th
 For each of the 1024 \galacticus{} training points, we independently draw one
 set of dust parameters from these priors, giving 1024 training points
 distributed over the combined 25-dimensional parameter space. Because the dust
-attenuation is applied in post-processing, additional dust realizations can be
-generated at negligible cost compared with additional \galacticus{} runs. We tested training the emulator with multiple dust realizations per
+attenuation is applied in post-processing, additional dust realisations can be
+generated at negligible cost compared with additional \galacticus{} runs. We tested training the emulator with multiple dust realisations per
 \galacticus{} run, but found only modest improvements in held-out predictive
-accuracy. We therefore use one dust realization per run for the fiducial
+accuracy. We therefore use one dust realisation per run for the fiducial
 emulator, keeping the training set smaller and reducing the computational cost
 of emulator training and evaluation. The \ha{} luminosity-function emulator consequently has 25 input
 dimensions: the 20 \galacticus{} parameters and the five dust parameters.
@@ -1386,11 +1386,11 @@ expected variance of the residual, $m_n - g_n$, is
   +
   \sigma_{{\rm sim},n}^2.
 \end{equation}
-We therefore define the standardized residual
+We therefore define the standardised residual
 \begin{equation}
   z_n = \frac{m_n-g_n}{s_n}.
 \end{equation}
-For each observable bin, we summarize these residuals using
+For each observable bin, we summarise these residuals using
 \begin{equation}
   {\rm RMS}(z)
   =
@@ -1409,7 +1409,7 @@ and the coverage fractions
   \qquad k\in\{1,2\},
 \end{equation}
 where $\mathbb{I}$ is the indicator function. If the combined uncertainties
-are correctly calibrated and the standardized residuals are approximately
+are correctly calibrated and the standardised residuals are approximately
 Gaussian, we expect ${\rm RMS}(z)\approx1$, $f_{1\sigma}\approx0.68$, and
 $f_{2\sigma}\approx0.95$.
 
@@ -1429,7 +1429,7 @@ higher-redshift luminosity-function bins therefore contain fewer simulated
 galaxies and have larger finite-sampling uncertainties, making the direct
 held-out predictions noisier at higher redshift.
 
-After normalizing the residuals by the combination of emulator predictive
+After normalising the residuals by the combination of emulator predictive
 uncertainty and held-out finite-sampling uncertainty, the \ha{}
 luminosity-function emulators have ${\rm RMS}(z)$ values and coverage fractions
 that are reasonably close to the Gaussian expectation at all four redshifts. The
@@ -1443,7 +1443,7 @@ infinite-sampling model prediction.
 Five-fold held-out validation summary for the calibration-observable
 emulators trained on the full 1024-run campaign.
 RMSE and $R^2$ are defined in Section~\ref{sec:emulator-validation}.
-For each held-out prediction, the standardized residual $z_n$ is normalized
+For each held-out prediction, the standardised residual $z_n$ is normalised
 by the combined emulator predictive uncertainty and finite-sampling uncertainty
 of the held-out \galacticus{} calculation, as defined in
 Appendix~\ref{app:emulator-validation-summary}.
@@ -1789,8 +1789,8 @@ validation tests in Section~\ref{sec:emulator-validation}.
 \section{Calibrated Model Posterior}
 \label{app:calibrated-model}
 
-Table~\ref{tab:final-calibrated-parameters} summarizes the MAP point and
-marginalized posterior distribution for the final calibration. In addition
+Table~\ref{tab:final-calibrated-parameters} summarises the MAP point and
+marginalised posterior distribution for the final calibration. In addition
 to the parameter values themselves, we report their locations within the
 adopted priors, making it easier to identify parameters for which the
 calibration favours values in the tails of their prior distributions. As
@@ -1817,7 +1817,7 @@ constraints on the underlying physical parameters.
 \caption{
 Posterior summary for the final calibrated model.
 The columns \(p_{16}\), \(p_{50}\), and \(p_{84}\) give the 16th, 50th, and
-84th percentiles of the marginalized posterior.
+84th percentiles of the marginalised posterior.
 The \(q\) columns give the corresponding locations in the adopted prior,
 expressed as percentiles on a 0--100 scale.
 Units for dimensional parameters are shown in the parameter column.
