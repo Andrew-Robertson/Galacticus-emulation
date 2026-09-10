@@ -1,0 +1,11 @@
+mass_low_log10_msun,mass_high_log10_msun,population,log10_fraction_lower,log10_fraction_upper
+10.0,10.4,star_forming,-0.924,-0.670
+10.4,10.8,star_forming,-0.840,-0.710
+10.8,11.2,star_forming,-0.870,-0.760
+11.2,11.6,star_forming,-1.000,-0.840
+11.6,12.0,star_forming,-0.570,-0.300
+10.0,10.4,quiescent,-1.280,-1.090
+10.4,10.8,quiescent,-1.780,-1.560
+10.8,11.2,quiescent,-1.810,-1.620
+11.2,11.6,quiescent,-2.780,-2.340
+11.6,12.0,quiescent,-3.500,-2.440

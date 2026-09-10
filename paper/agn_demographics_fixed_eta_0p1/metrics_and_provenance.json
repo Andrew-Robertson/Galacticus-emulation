@@ -1,0 +1,342 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-09-10T16:05:23.609675+00:00",
+  "input": {
+    "hdf5": "/Users/arobertson/Documents/Projects/GalacticusEmu/Galacticus-emulation/runs/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced/automatedPipeline_transformedParams_finalPaper_definitive/MCMCs_production_from_exploratory_MAP/standard_observables_plus_emission_line_lfs/all_standard_observables_plus_halpha_sobral_1dustdraw_pca99_sobralLogErr/bestFitModel_GalacticusRun/romanEPS_massFunction.hdf5",
+    "hdf5_size_bytes": 1906232882,
+    "hdf5_attributes": {
+      "UUID": "1b22bf53-ac62-4fcf-7ded-9e2debffdfea",
+      "statusCompletion": 0
+    },
+    "params_xml": "/Users/arobertson/Documents/Projects/GalacticusEmu/Galacticus-emulation/runs/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced/automatedPipeline_transformedParams_finalPaper_definitive/MCMCs_production_from_exploratory_MAP/standard_observables_plus_emission_line_lfs/all_standard_observables_plus_halpha_sobral_1dustdraw_pca99_sobralLogErr/bestFitModel_GalacticusRun/params.xml",
+    "observational_bounds_csv": "/Users/arobertson/Documents/Projects/GalacticusEmu/Galacticus-emulation/data/observations/suresh_blanton_2026/table1_radiative_agn_fraction_bands.csv",
+    "observational_source": "Suresh & Blanton 2026, arXiv:2607.19603v1, Table 1"
+  },
+  "definitions": {
+    "target_redshifts": [
+      0.0,
+      0.1
+    ],
+    "redshift_tolerance": 0.02,
+    "mass_edges_log10_msun": [
+      10.0,
+      10.4,
+      10.8,
+      11.2,
+      11.6,
+      12.0
+    ],
+    "ssfr_split_log10_per_year": -11.5,
+    "lambda_thresholds": [
+      0.1,
+      0.01,
+      0.001
+    ],
+    "mode_criteria": [
+      "inclusive",
+      "thin_disk_dominated: valid accreting BH and f_ADAF < 0.5"
+    ],
+    "centrals_only": false,
+    "ledd_coefficient_erg_s_per_msun": 1.26e+38,
+    "fixed_radiative_efficiency": 0.1,
+    "galacticus_mdot_edd_per_mbh_gyr_inverse": 2.2206176144141274,
+    "switched_disk": {
+      "thin_disk_minimum": 0.01,
+      "thin_disk_maximum": 21.7844347257124,
+      "transition_width": 0.1
+    },
+    "switched_disk_parameter_source": "params.xml",
+    "confidence": 0.682689492137,
+    "interval": "indicative central Jeffreys beta interval with Kish effective n; zero numerator rendered at its upper edge",
+    "weights": "mergerTreeWeight * nodeSubsamplingWeight",
+    "vlen_selection": "element 0 (central black hole) from Mdot/eta/jet-power rows",
+    "sfr": "disk+spheroid Msun/Gyr, negative totals clipped to zero, then divided by 1e9",
+    "formulas": {
+      "lbol": "eta_used * Mdot_rest * c^2",
+      "lambda": "Lbol / (ledd_coefficient * M_BH/Msun)",
+      "x_paper": "Mdot_rest*c^2 / (ledd_coefficient * M_BH/Msun)",
+      "x_galacticus": "Mdot_rest / (galacticus_mdot_edd_per_mbh * M_BH)",
+      "fraction_adaf": "[1+exp(ln(x/xmin)/width)]^-1 + [1+exp(-ln(x/xmax)/width)]^-1"
+    }
+  },
+  "selected_outputs": [
+    {
+      "target_redshift": 0.0,
+      "output_name": "Output19",
+      "redshift": 0.0,
+      "diagnostics": {
+        "nodes_in_output": 77846,
+        "nodes_retained": 77846,
+        "negative_total_sfr_count_all_nodes": 2391,
+        "nonpositive_total_sfr_count_all_nodes": 2391,
+        "negative_total_sfr_count_retained": 2391,
+        "nonpositive_total_sfr_count_retained": 2391,
+        "massAccretionRateBlackHoles_unitsInSI_kg_s": 63023973677236.97,
+        "powerJetBlackHoles_unitsInSI_watt": 6.302397367723697e+19,
+        "massAccretionRateBlackHoles_empty_rows": 0,
+        "massAccretionRateBlackHoles_multiple_rows": 0,
+        "radiativeEfficiencyBlackHoles_empty_rows": 0,
+        "radiativeEfficiencyBlackHoles_multiple_rows": 0,
+        "powerJetBlackHoles_empty_rows": 0,
+        "powerJetBlackHoles_multiple_rows": 0
+      }
+    },
+    {
+      "target_redshift": 0.1,
+      "output_name": "Output18",
+      "redshift": 0.10000000000000009,
+      "diagnostics": {
+        "nodes_in_output": 79630,
+        "nodes_retained": 79630,
+        "negative_total_sfr_count_all_nodes": 2245,
+        "nonpositive_total_sfr_count_all_nodes": 2245,
+        "negative_total_sfr_count_retained": 2245,
+        "nonpositive_total_sfr_count_retained": 2245,
+        "massAccretionRateBlackHoles_unitsInSI_kg_s": 63023973677236.97,
+        "powerJetBlackHoles_unitsInSI_watt": 6.302397367723697e+19,
+        "massAccretionRateBlackHoles_empty_rows": 0,
+        "massAccretionRateBlackHoles_multiple_rows": 0,
+        "radiativeEfficiencyBlackHoles_empty_rows": 0,
+        "radiativeEfficiencyBlackHoles_multiple_rows": 0,
+        "powerJetBlackHoles_empty_rows": 0,
+        "powerJetBlackHoles_multiple_rows": 0
+      }
+    }
+  ],
+  "pooled_comparison": {
+    "output_name": "pooled_selected_outputs",
+    "constituent_outputs": [
+      "Output19",
+      "Output18"
+    ],
+    "redshift_range": [
+      0.0,
+      0.10000000000000009
+    ],
+    "statistical_note": "descriptive Paper-II-style pool; snapshots share merger trees and are correlated"
+  },
+  "catalog_rows": 8490,
+  "observational_reference_metrics": {
+    "star_forming_slope": 0.14,
+    "quiescent_slope": -1.11,
+    "separation_at_log10_mass_11": 1.27
+  },
+  "metrics": [
+    {
+      "target_redshift": 0.0,
+      "redshift": 0.0,
+      "output_name": "Output19",
+      "mode_criterion": "inclusive",
+      "lambda_threshold": 0.1,
+      "star_forming_slope": -0.41167427092543873,
+      "quiescent_slope": null,
+      "separation_at_log10_mass_11": null,
+      "star_forming_bins_used": 2,
+      "quiescent_bins_used": 0
+    },
+    {
+      "target_redshift": 0.0,
+      "redshift": 0.0,
+      "output_name": "Output19",
+      "mode_criterion": "inclusive",
+      "lambda_threshold": 0.01,
+      "star_forming_slope": 0.3669978329834037,
+      "quiescent_slope": null,
+      "separation_at_log10_mass_11": null,
+      "star_forming_bins_used": 4,
+      "quiescent_bins_used": 0
+    },
+    {
+      "target_redshift": 0.0,
+      "redshift": 0.0,
+      "output_name": "Output19",
+      "mode_criterion": "inclusive",
+      "lambda_threshold": 0.001,
+      "star_forming_slope": 0.6145111461976493,
+      "quiescent_slope": null,
+      "separation_at_log10_mass_11": null,
+      "star_forming_bins_used": 4,
+      "quiescent_bins_used": 0
+    },
+    {
+      "target_redshift": 0.0,
+      "redshift": 0.0,
+      "output_name": "Output19",
+      "mode_criterion": "thin_disk_dominated",
+      "lambda_threshold": 0.1,
+      "star_forming_slope": -0.41167427092543873,
+      "quiescent_slope": null,
+      "separation_at_log10_mass_11": null,
+      "star_forming_bins_used": 2,
+      "quiescent_bins_used": 0
+    },
+    {
+      "target_redshift": 0.0,
+      "redshift": 0.0,
+      "output_name": "Output19",
+      "mode_criterion": "thin_disk_dominated",
+      "lambda_threshold": 0.01,
+      "star_forming_slope": 0.3669978329834037,
+      "quiescent_slope": null,
+      "separation_at_log10_mass_11": null,
+      "star_forming_bins_used": 4,
+      "quiescent_bins_used": 0
+    },
+    {
+      "target_redshift": 0.0,
+      "redshift": 0.0,
+      "output_name": "Output19",
+      "mode_criterion": "thin_disk_dominated",
+      "lambda_threshold": 0.001,
+      "star_forming_slope": 0.6145111461976493,
+      "quiescent_slope": null,
+      "separation_at_log10_mass_11": null,
+      "star_forming_bins_used": 4,
+      "quiescent_bins_used": 0
+    },
+    {
+      "target_redshift": 0.1,
+      "redshift": 0.10000000000000009,
+      "output_name": "Output18",
+      "mode_criterion": "inclusive",
+      "lambda_threshold": 0.1,
+      "star_forming_slope": 1.180193950128196,
+      "quiescent_slope": null,
+      "separation_at_log10_mass_11": null,
+      "star_forming_bins_used": 3,
+      "quiescent_bins_used": 0
+    },
+    {
+      "target_redshift": 0.1,
+      "redshift": 0.10000000000000009,
+      "output_name": "Output18",
+      "mode_criterion": "inclusive",
+      "lambda_threshold": 0.01,
+      "star_forming_slope": 0.12587486924561522,
+      "quiescent_slope": null,
+      "separation_at_log10_mass_11": null,
+      "star_forming_bins_used": 4,
+      "quiescent_bins_used": 0
+    },
+    {
+      "target_redshift": 0.1,
+      "redshift": 0.10000000000000009,
+      "output_name": "Output18",
+      "mode_criterion": "inclusive",
+      "lambda_threshold": 0.001,
+      "star_forming_slope": 0.49688540147619403,
+      "quiescent_slope": null,
+      "separation_at_log10_mass_11": null,
+      "star_forming_bins_used": 4,
+      "quiescent_bins_used": 0
+    },
+    {
+      "target_redshift": 0.1,
+      "redshift": 0.10000000000000009,
+      "output_name": "Output18",
+      "mode_criterion": "thin_disk_dominated",
+      "lambda_threshold": 0.1,
+      "star_forming_slope": 1.180193950128196,
+      "quiescent_slope": null,
+      "separation_at_log10_mass_11": null,
+      "star_forming_bins_used": 3,
+      "quiescent_bins_used": 0
+    },
+    {
+      "target_redshift": 0.1,
+      "redshift": 0.10000000000000009,
+      "output_name": "Output18",
+      "mode_criterion": "thin_disk_dominated",
+      "lambda_threshold": 0.01,
+      "star_forming_slope": 0.12587486924561522,
+      "quiescent_slope": null,
+      "separation_at_log10_mass_11": null,
+      "star_forming_bins_used": 4,
+      "quiescent_bins_used": 0
+    },
+    {
+      "target_redshift": 0.1,
+      "redshift": 0.10000000000000009,
+      "output_name": "Output18",
+      "mode_criterion": "thin_disk_dominated",
+      "lambda_threshold": 0.001,
+      "star_forming_slope": 0.49688540147619403,
+      "quiescent_slope": null,
+      "separation_at_log10_mass_11": null,
+      "star_forming_bins_used": 4,
+      "quiescent_bins_used": 0
+    },
+    {
+      "target_redshift": 0.05,
+      "redshift": 0.050000000000000044,
+      "output_name": "pooled_selected_outputs",
+      "mode_criterion": "inclusive",
+      "lambda_threshold": 0.1,
+      "star_forming_slope": -0.12309631722168245,
+      "quiescent_slope": null,
+      "separation_at_log10_mass_11": null,
+      "star_forming_bins_used": 3,
+      "quiescent_bins_used": 0
+    },
+    {
+      "target_redshift": 0.05,
+      "redshift": 0.050000000000000044,
+      "output_name": "pooled_selected_outputs",
+      "mode_criterion": "inclusive",
+      "lambda_threshold": 0.01,
+      "star_forming_slope": 0.2425251390620047,
+      "quiescent_slope": null,
+      "separation_at_log10_mass_11": null,
+      "star_forming_bins_used": 4,
+      "quiescent_bins_used": 0
+    },
+    {
+      "target_redshift": 0.05,
+      "redshift": 0.050000000000000044,
+      "output_name": "pooled_selected_outputs",
+      "mode_criterion": "inclusive",
+      "lambda_threshold": 0.001,
+      "star_forming_slope": 0.5601710918432401,
+      "quiescent_slope": null,
+      "separation_at_log10_mass_11": null,
+      "star_forming_bins_used": 4,
+      "quiescent_bins_used": 0
+    },
+    {
+      "target_redshift": 0.05,
+      "redshift": 0.050000000000000044,
+      "output_name": "pooled_selected_outputs",
+      "mode_criterion": "thin_disk_dominated",
+      "lambda_threshold": 0.1,
+      "star_forming_slope": -0.12309631722168245,
+      "quiescent_slope": null,
+      "separation_at_log10_mass_11": null,
+      "star_forming_bins_used": 3,
+      "quiescent_bins_used": 0
+    },
+    {
+      "target_redshift": 0.05,
+      "redshift": 0.050000000000000044,
+      "output_name": "pooled_selected_outputs",
+      "mode_criterion": "thin_disk_dominated",
+      "lambda_threshold": 0.01,
+      "star_forming_slope": 0.2425251390620047,
+      "quiescent_slope": null,
+      "separation_at_log10_mass_11": null,
+      "star_forming_bins_used": 4,
+      "quiescent_bins_used": 0
+    },
+    {
+      "target_redshift": 0.05,
+      "redshift": 0.050000000000000044,
+      "output_name": "pooled_selected_outputs",
+      "mode_criterion": "thin_disk_dominated",
+      "lambda_threshold": 0.001,
+      "star_forming_slope": 0.5601710918432401,
+      "quiescent_slope": null,
+      "separation_at_log10_mass_11": null,
+      "star_forming_bins_used": 4,
+      "quiescent_bins_used": 0
+    }
+  ]
+}
