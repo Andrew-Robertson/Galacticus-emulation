@@ -38,6 +38,7 @@ from galacticus_emu.agn_demographics import (
     select_outputs,
     summarize_fractions,
     switched_disk_parameters_from_xml,
+    weighted_jeffreys_fraction,
 )
 
 
@@ -110,6 +111,21 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         type=float,
         default=PAPER_II_SSFR_SPLIT,
         help="Star-forming if log10(sSFR/yr^-1) is above this value",
+    )
+    parser.add_argument(
+        "--ssfr-panel-splits",
+        type=float,
+        nargs="+",
+        default=[-11.5, -11.0, -10.5],
+        metavar="LOGSSFR",
+        help="Three SF/quiescent boundaries shown in the fixed-lambda companion figure",
+    )
+    parser.add_argument(
+        "--ssfr-panel-lambda-threshold",
+        type=float,
+        default=1.0e-3,
+        metavar="LAMBDA",
+        help="Fixed Eddington-ratio threshold in the sSFR-split companion figure",
     )
     parser.add_argument(
         "--lambda-thresholds",
@@ -186,6 +202,11 @@ def _validate_args(args: argparse.Namespace) -> None:
         raise ValueError("The Fig. 2-style output requires exactly three --lambda-thresholds")
     if np.any(~np.isfinite(thresholds)) or np.any(thresholds < 0.0):
         raise ValueError("--lambda-thresholds must be finite and non-negative")
+    ssfr_panel_splits = np.asarray(args.ssfr_panel_splits, dtype=float)
+    if ssfr_panel_splits.size != 3 or np.any(~np.isfinite(ssfr_panel_splits)):
+        raise ValueError("--ssfr-panel-splits requires exactly three finite values")
+    if not np.isfinite(args.ssfr_panel_lambda_threshold) or args.ssfr_panel_lambda_threshold < 0.0:
+        raise ValueError("--ssfr-panel-lambda-threshold must be finite and non-negative")
     if args.redshift_tolerance < 0.0:
         raise ValueError("--redshift-tolerance must be non-negative")
     if args.ledd_coefficient <= 0.0 or args.galacticus_mdot_edd_per_mbh <= 0.0:
@@ -263,6 +284,47 @@ def _summary_frame(rows: Sequence[FractionBin]) -> pd.DataFrame:
         }
         record.update(asdict(row.estimate))
         records.append(record)
+    return pd.DataFrame.from_records(records)
+
+
+def _quiescent_fraction_frame(
+    snapshot: SnapshotCatalog,
+    *,
+    mass_edges: Sequence[float],
+    ssfr_splits: Sequence[float],
+    confidence: float,
+) -> pd.DataFrame:
+    """Measure the weighted quiescent share of the parent sample in each bin."""
+
+    edges = np.asarray(mass_edges, dtype=float)
+    log_mass = np.asarray(snapshot.columns["log10_stellar_mass_msun"], dtype=float)
+    log_ssfr = np.asarray(snapshot.columns["log10_ssfr_per_year"], dtype=float)
+    weights = np.asarray(snapshot.columns["weight"], dtype=float)
+    records: list[dict[str, Any]] = []
+    for ssfr_split in ssfr_splits:
+        for index, (low, high) in enumerate(zip(edges[:-1], edges[1:], strict=True)):
+            upper_test = log_mass <= high if index == edges.size - 2 else log_mass < high
+            denominator = (
+                np.isfinite(log_mass)
+                & (log_mass >= low)
+                & upper_test
+                & ~np.isnan(log_ssfr)
+                & np.isfinite(weights)
+                & (weights > 0.0)
+            )
+            estimate = weighted_jeffreys_fraction(
+                log_ssfr[denominator] <= float(ssfr_split),
+                weights[denominator],
+                confidence=confidence,
+            )
+            record = {
+                "ssfr_split_log10_per_year": float(ssfr_split),
+                "mass_low_log10_msun": float(low),
+                "mass_high_log10_msun": float(high),
+                "mass_center_log10_msun": float(0.5 * (low + high)),
+            }
+            record.update(asdict(estimate))
+            records.append(record)
     return pd.DataFrame.from_records(records)
 
 
@@ -482,6 +544,150 @@ def _plot_fig2_style(
     return _save_figure(fig, output_stem, dpi=dpi, write_pdf=write_pdf)
 
 
+def _plot_ssfr_split_style(
+    output_stem: Path,
+    *,
+    snapshot: SnapshotCatalog,
+    rows_by_split: dict[float, Sequence[FractionBin]],
+    quiescent_fractions: pd.DataFrame,
+    observations: pd.DataFrame,
+    ssfr_splits: Sequence[float],
+    lambda_threshold: float,
+    mass_edges: Sequence[float],
+    fixed_efficiency: float | None,
+    dpi: int,
+    write_pdf: bool,
+) -> list[Path]:
+    """Plot a Fig. 2-style comparison at fixed lambda for three sSFR cuts."""
+
+    fig, axes = plt.subplots(
+        2,
+        3,
+        figsize=(14.4, 6.4),
+        sharex="col",
+        sharey="row",
+        gridspec_kw={"height_ratios": [3.0, 1.05]},
+    )
+    fagn_axes = axes[0]
+    fq_axes = axes[1]
+    redshift_min = float(snapshot.diagnostics.get("redshift_min", snapshot.redshift))
+    redshift_max = float(snapshot.diagnostics.get("redshift_max", snapshot.redshift))
+    snapshot_label = f"pooled z={redshift_min:.3g}–{redshift_max:.3g}"
+    for fagn_axis, fq_axis, ssfr_split in zip(
+        fagn_axes,
+        fq_axes,
+        ssfr_splits,
+        strict=True,
+    ):
+        _add_observation_rectangles(fagn_axis, observations)
+        rows = rows_by_split[float(ssfr_split)]
+        for population, population_offset in (("star_forming", -0.008), ("quiescent", 0.008)):
+            series = _rows_for(
+                rows,
+                snapshot,
+                "inclusive",
+                float(lambda_threshold),
+                population,
+            )
+            _plot_fraction_series(
+                fagn_axis,
+                series,
+                color=POPULATION_COLORS[population],
+                marker="o",
+                linestyle="-",
+                label=f"{POPULATION_LABELS[population]}, {snapshot_label}",
+                x_offset=population_offset,
+            )
+        fagn_axis.set_yscale("log")
+        fagn_axis.set_xlim(float(mass_edges[0]), float(mass_edges[-1]))
+        fagn_axis.set_ylim(1.0e-4, 1.0)
+        fagn_axis.set_title(
+            rf"SF if $\log_{{10}}({{\rm sSFR}}/{{\rm yr}}^{{-1}})>{ssfr_split:g}$"
+        )
+        _style_axis(fagn_axis)
+
+        selected_fq = quiescent_fractions[
+            np.isclose(
+                quiescent_fractions["ssfr_split_log10_per_year"],
+                float(ssfr_split),
+                rtol=0.0,
+                atol=1.0e-12,
+            )
+        ].sort_values("mass_center_log10_msun")
+        x = selected_fq["mass_center_log10_msun"].to_numpy()
+        y = selected_fq["fraction"].to_numpy()
+        lower = selected_fq["lower"].to_numpy()
+        upper = selected_fq["upper"].to_numpy()
+        fq_axis.errorbar(
+            x,
+            y,
+            yerr=np.vstack((np.maximum(y - lower, 0.0), np.maximum(upper - y, 0.0))),
+            color="#5e3c99",
+            marker="o",
+            linestyle="-",
+            linewidth=1.35,
+            markersize=4.8,
+            capsize=2,
+        )
+        fq_axis.set_xlim(float(mass_edges[0]), float(mass_edges[-1]))
+        fq_axis.set_ylim(0.0, 1.0)
+        fq_axis.set_yticks([0.0, 0.5, 1.0])
+        fq_axis.set_xlabel(r"$\log_{10}(M_\star/M_\odot)$")
+        _style_axis(fq_axis)
+    fagn_axes[0].set_ylabel(r"$F_{\rm AGN}$")
+    fq_axes[0].set_ylabel(r"$f_{\rm quiescent}$")
+    eta_text = "catalog eta" if fixed_efficiency is None else f"fixed eta={fixed_efficiency:g}"
+    fig.suptitle(
+        "Suresh & Blanton (2026) radiative-AGN comparison — "
+        rf"inclusive; {eta_text}; fixed $\lambda>{lambda_threshold:g}$",
+        fontsize=11,
+    )
+    handles, labels = fagn_axes[-1].get_legend_handles_labels()
+    handles.extend(
+        [
+            Patch(
+                facecolor=POPULATION_COLORS["star_forming"],
+                alpha=0.17,
+                label="Observed SF 1 sigma bounds",
+            ),
+            Patch(
+                facecolor=POPULATION_COLORS["quiescent"],
+                alpha=0.17,
+                label="Observed Q 1 sigma bounds",
+            ),
+        ]
+    )
+    labels.extend(["Observed SF 1 sigma bounds", "Observed Q 1 sigma bounds"])
+    unique: dict[str, Any] = {}
+    for handle, label in zip(handles, labels, strict=True):
+        unique[label] = handle
+    fig.legend(
+        unique.values(),
+        unique.keys(),
+        loc="lower center",
+        bbox_to_anchor=(0.5, 0.055),
+        ncol=min(4, len(unique)),
+        fontsize=8,
+        frameon=False,
+    )
+    fig.text(
+        0.5,
+        0.012,
+        "Downward arrows: zero weighted numerator, plotted at the upper edge of the central 68% effective-weight Jeffreys interval.",
+        ha="center",
+        fontsize=8,
+    )
+    fig.subplots_adjust(
+        left=0.065,
+        right=0.99,
+        top=0.86,
+        bottom=0.19,
+        hspace=0.08,
+        wspace=0.12,
+    )
+    return _save_figure(fig, output_stem, dpi=dpi, write_pdf=write_pdf)
+
+
 def _plot_accretion_states(
     output_stem: Path,
     *,
@@ -555,6 +761,79 @@ def _plot_accretion_states(
     return _save_figure(fig, output_stem, dpi=dpi, write_pdf=write_pdf)
 
 
+def _plot_mstar_ssfr(
+    output_stem: Path,
+    *,
+    snapshot: SnapshotCatalog,
+    mass_edges: Sequence[float],
+    ssfr_splits: Sequence[float],
+    dpi: int,
+    write_pdf: bool,
+) -> list[Path]:
+    """Plot the pooled stellar-mass–sSFR distribution and classification cuts."""
+
+    log_mass = np.asarray(snapshot.columns["log10_stellar_mass_msun"], dtype=float)
+    log_ssfr = np.asarray(snapshot.columns["log10_ssfr_per_year"], dtype=float)
+    selected = (
+        np.isfinite(log_mass)
+        & (log_mass >= float(mass_edges[0]))
+        & (log_mass <= float(mass_edges[-1]))
+        & ~np.isnan(log_ssfr)
+    )
+    x = log_mass[selected]
+    y = log_ssfr[selected]
+    plotting_floor = -15.0
+    finite = np.isfinite(y)
+    below_floor = finite & (y < plotting_floor)
+    visible = finite & ~below_floor
+
+    fig, axis = plt.subplots(figsize=(7.8, 5.7))
+    axis.scatter(
+        x[visible],
+        y[visible],
+        s=9,
+        color="#343a40",
+        alpha=0.28,
+        linewidths=0,
+        rasterized=True,
+        label="Galacticus galaxies",
+    )
+    if np.any(below_floor):
+        axis.scatter(
+            x[below_floor],
+            np.full(np.count_nonzero(below_floor), plotting_floor),
+            s=14,
+            marker="v",
+            color="#343a40",
+            alpha=0.5,
+            linewidths=0,
+            rasterized=True,
+            label=rf"$\log_{{10}}({{\rm sSFR}}/{{\rm yr}}^{{-1}})<{plotting_floor:g}$",
+        )
+    cut_colors = ("#2166ac", "#d95f02", "#5e3c99")
+    for ssfr_split, color in zip(ssfr_splits, cut_colors, strict=True):
+        axis.axhline(
+            float(ssfr_split),
+            color=color,
+            linestyle="--",
+            linewidth=1.8,
+            label=rf"SF/Q cut: ${float(ssfr_split):g}$",
+        )
+    redshift_min = float(snapshot.diagnostics.get("redshift_min", snapshot.redshift))
+    redshift_max = float(snapshot.diagnostics.get("redshift_max", snapshot.redshift))
+    axis.set_title(
+        rf"Galacticus stellar mass–sSFR distribution; pooled $z={redshift_min:.3g}$–${redshift_max:.3g}$"
+    )
+    axis.set_xlabel(r"$\log_{10}(M_\star/M_\odot)$")
+    axis.set_ylabel(r"$\log_{10}({\rm sSFR}/{\rm yr}^{-1})$")
+    axis.set_xlim(float(mass_edges[0]), float(mass_edges[-1]))
+    axis.set_ylim(plotting_floor - 0.15, -8.0)
+    _style_axis(axis)
+    axis.legend(loc="lower left", fontsize=8, frameon=True)
+    fig.tight_layout()
+    return _save_figure(fig, output_stem, dpi=dpi, write_pdf=write_pdf)
+
+
 def _metrics_records(
     rows: Sequence[FractionBin], snapshots: Sequence[SnapshotCatalog], thresholds: Sequence[float]
 ) -> list[dict[str, Any]]:
@@ -620,10 +899,14 @@ def _write_readme(
     descriptions = {
         "catalog.csv": "Per-galaxy derived catalogue within the requested stellar-mass range.",
         "fraction_summary.csv": "All weighted fractions, effective counts, intervals, and upper-limit flags.",
+        "fraction_summary_ssfr_splits.csv": "Fixed-lambda fractions for each sSFR boundary in the companion figure.",
+        "quiescent_fraction_ssfr_splits.csv": "Weighted quiescent share of the parent sample shown in the lower companion panels.",
         "metrics_and_provenance.json": "Run definitions, diagnostics, provenance, and Paper-II trend metrics.",
         "fig2_inclusive": "Three lambda panels with no accretion-mode cut.",
         "fig2_thin_disk_dominated": "Same panels additionally requiring a valid accreting BH and f_ADAF < 0.5.",
+        "fig2_ssfr_splits_inclusive": "Three sSFR boundaries at fixed lambda with no accretion-mode cut.",
         "fig5_accretion_states": "Mdot-MBH view with both Galacticus ADAF transition branches.",
+        "mstar_ssfr_ssfr_cuts": "Pooled stellar-mass–sSFR distribution with the three classification boundaries.",
     }
     for file_path in sorted(set(files)):
         key = file_path.stem if file_path.suffix in {".png", ".pdf"} else file_path.name
@@ -637,6 +920,7 @@ def _write_readme(
             f"- Primary Fig. 2-style curves pool those outputs as `{pooled_snapshot.output_name}`; the pool is descriptive because the snapshots share merger trees.",
             f"- Stellar-mass edges: {', '.join(f'{value:g}' for value in args.mass_edges)}.",
             f"- Star-forming split: log10(sSFR/yr^-1) > {args.ssfr_split:g}; finite values at/below the cut plus zero/clipped rates are quiescent.",
+            f"- sSFR companion panels: {', '.join(f'{value:g}' for value in args.ssfr_panel_splits)}, all at lambda > {args.ssfr_panel_lambda_threshold:g}.",
             "- Total stellar mass and SFR are disk+spheroid. Saved SFR is converted from Msun/Gyr to Msun/yr; negative totals are clipped to zero and counted in the JSON.",
             "- The element at index 0 is used from each VLEN Mdot, radiative-efficiency, and jet-power row.",
             f"- L_Edd = {args.ledd_coefficient:.8g} (M_BH/Msun) erg/s.",
@@ -742,6 +1026,40 @@ def main(argv: Sequence[str] | None = None) -> int:
     catalog.to_csv(catalog_path, index=False, float_format="%.12g")
     summary.to_csv(summary_path, index=False, float_format="%.12g")
 
+    ssfr_panel_rows: dict[float, list[FractionBin]] = {}
+    ssfr_summary_frames: list[pd.DataFrame] = []
+    for ssfr_split in args.ssfr_panel_splits:
+        split = float(ssfr_split)
+        rows = summarize_fractions(
+            pooled_snapshot,
+            mass_edges=args.mass_edges,
+            ssfr_split=split,
+            thresholds=[args.ssfr_panel_lambda_threshold],
+            confidence=args.confidence,
+        )
+        ssfr_panel_rows[split] = rows
+        frame = _summary_frame(rows)
+        frame.insert(0, "ssfr_split_log10_per_year", split)
+        ssfr_summary_frames.append(frame)
+    ssfr_summary_path = args.output_dir / "fraction_summary_ssfr_splits.csv"
+    pd.concat(ssfr_summary_frames, ignore_index=True).to_csv(
+        ssfr_summary_path,
+        index=False,
+        float_format="%.12g",
+    )
+    quiescent_fraction_summary = _quiescent_fraction_frame(
+        pooled_snapshot,
+        mass_edges=args.mass_edges,
+        ssfr_splits=args.ssfr_panel_splits,
+        confidence=args.confidence,
+    )
+    quiescent_fraction_path = args.output_dir / "quiescent_fraction_ssfr_splits.csv"
+    quiescent_fraction_summary.to_csv(
+        quiescent_fraction_path,
+        index=False,
+        float_format="%.12g",
+    )
+
     figure_paths: list[Path] = []
     figure_paths.extend(
         _plot_fig2_style(
@@ -753,6 +1071,21 @@ def main(argv: Sequence[str] | None = None) -> int:
             mass_edges=args.mass_edges,
             mode="inclusive",
             ssfr_split=args.ssfr_split,
+            fixed_efficiency=args.fixed_radiative_efficiency,
+            dpi=args.dpi,
+            write_pdf=not args.no_pdf,
+        )
+    )
+    figure_paths.extend(
+        _plot_ssfr_split_style(
+            args.output_dir / "fig2_ssfr_splits_inclusive",
+            snapshot=pooled_snapshot,
+            rows_by_split=ssfr_panel_rows,
+            quiescent_fractions=quiescent_fraction_summary,
+            observations=observations,
+            ssfr_splits=args.ssfr_panel_splits,
+            lambda_threshold=args.ssfr_panel_lambda_threshold,
+            mass_edges=args.mass_edges,
             fixed_efficiency=args.fixed_radiative_efficiency,
             dpi=args.dpi,
             write_pdf=not args.no_pdf,
@@ -785,6 +1118,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             write_pdf=not args.no_pdf,
         )
     )
+    figure_paths.extend(
+        _plot_mstar_ssfr(
+            args.output_dir / "mstar_ssfr_ssfr_cuts",
+            snapshot=pooled_snapshot,
+            mass_edges=args.mass_edges,
+            ssfr_splits=args.ssfr_panel_splits,
+            dpi=args.dpi,
+            write_pdf=not args.no_pdf,
+        )
+    )
 
     metrics = _metrics_records(fraction_rows, [*snapshots, pooled_snapshot], args.lambda_thresholds)
     provenance = {
@@ -803,6 +1146,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             "redshift_tolerance": args.redshift_tolerance,
             "mass_edges_log10_msun": list(map(float, args.mass_edges)),
             "ssfr_split_log10_per_year": args.ssfr_split,
+            "ssfr_panel_splits_log10_per_year": list(map(float, args.ssfr_panel_splits)),
+            "ssfr_panel_lambda_threshold": args.ssfr_panel_lambda_threshold,
             "lambda_thresholds": list(map(float, args.lambda_thresholds)),
             "mode_criteria": ["inclusive", "thin_disk_dominated: valid accreting BH and f_ADAF < 0.5"],
             "centrals_only": args.centrals_only,
@@ -853,7 +1198,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     metrics_path = args.output_dir / "metrics_and_provenance.json"
     metrics_path.write_text(json.dumps(provenance, indent=2, allow_nan=False) + "\n")
     readme_path = args.output_dir / "README.md"
-    output_files = [catalog_path, summary_path, metrics_path, readme_path, *figure_paths]
+    output_files = [
+        catalog_path,
+        summary_path,
+        ssfr_summary_path,
+        quiescent_fraction_path,
+        metrics_path,
+        readme_path,
+        *figure_paths,
+    ]
     _write_readme(
         readme_path,
         args=args,

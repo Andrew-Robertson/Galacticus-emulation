@@ -7,6 +7,7 @@ import numpy as np
 from scipy.stats import beta
 
 from galacticus_emu.agn_demographics import (
+    BLANTON_LEDD_COEFFICIENT,
     DEFAULT_LEDD_COEFFICIENT,
     FractionBin,
     SnapshotCatalog,
@@ -14,11 +15,14 @@ from galacticus_emu.agn_demographics import (
     WeightedFraction,
     accretion_quantities,
     activity_mask,
+    blanton_black_hole_mass_from_sigma,
+    blanton_bolometric_luminosity_from_hbeta,
     combine_host_properties,
     expand_tree_values,
     first_vlen_element,
     fit_trend_metrics,
     load_snapshot_catalog,
+    mock_observed_agn_quantities,
     pool_snapshot_catalogs,
     select_outputs,
     summarize_fractions,
@@ -26,6 +30,51 @@ from galacticus_emu.agn_demographics import (
     switched_disk_parameters_from_xml,
     weighted_jeffreys_fraction,
 )
+
+
+def test_blanton_nominal_hbeta_and_sigma_conversions() -> None:
+    np.testing.assert_allclose(
+        np.log10(blanton_bolometric_luminosity_from_hbeta([1.0e42])),
+        [45.661],
+    )
+    np.testing.assert_allclose(
+        np.log10(blanton_black_hole_mass_from_sigma([200.0])),
+        [8.50],
+    )
+    converted = blanton_bolometric_luminosity_from_hbeta([0.0, -1.0, np.nan])
+    np.testing.assert_allclose(converted[:2], 0.0)
+    assert np.isnan(converted[2])
+
+
+def test_mock_observed_quantities_decompose_luminosity_and_mass_inference() -> None:
+    hbeta = 1.0e42
+    inferred_lbol = 10.0**45.661
+    true_mass = 1.0e8
+    raw_lbol = 2.0e45
+    result = mock_observed_agn_quantities(
+        hbeta_agn_intrinsic_erg_s=[hbeta, hbeta],
+        velocity_dispersion_km_s=[200.0, 50.0],
+        black_hole_mass_true_msun=[true_mass, true_mass],
+        bolometric_luminosity_raw_erg_s=[raw_lbol, raw_lbol],
+    )
+    inferred_mass = 10.0**8.5
+    np.testing.assert_allclose(
+        result.eddington_ratio_raw_true_bh[0],
+        raw_lbol / (BLANTON_LEDD_COEFFICIENT * true_mass),
+    )
+    np.testing.assert_allclose(
+        result.eddington_ratio_hbeta_true_bh[0],
+        inferred_lbol / (BLANTON_LEDD_COEFFICIENT * true_mass),
+    )
+    np.testing.assert_allclose(
+        result.eddington_ratio_raw_sigma_bh[0],
+        raw_lbol / (BLANTON_LEDD_COEFFICIENT * inferred_mass),
+    )
+    np.testing.assert_allclose(
+        result.eddington_ratio_hbeta_sigma_bh[0],
+        inferred_lbol / (BLANTON_LEDD_COEFFICIENT * inferred_mass),
+    )
+    np.testing.assert_array_equal(result.valid_sigma_sample, [True, False])
 
 
 def test_combine_host_properties_clips_negative_sfr_and_maps_zero_to_minus_infinity() -> None:
@@ -257,6 +306,12 @@ def test_loader_uses_tree_times_node_weights_vlen_zero_and_catalog_units(tmp_pat
         data.create_dataset("diskStarFormationRate", data=[1.0e9, 0.0, 0.0])
         data.create_dataset("spheroidStarFormationRate", data=[0.0, -1.0, 0.0])
         data.create_dataset("blackHoleMass", data=[1.0e7, 2.0e7, 3.0e7])
+        hbeta = data.create_dataset(
+            "luminosityEmissionLineAGN:balmerBeta4863", data=[1.0e40, 2.0e40, 3.0e40]
+        )
+        hbeta.attrs["unitsInSI"] = 1.0e-7
+        sigma = data.create_dataset("velocityDispersion", data=[[100.0], [200.0], [300.0]])
+        sigma.attrs["unitsInSI"] = 1.0e3
         for name, rows in (
             ("massAccretionRateBlackHoles", [[2.0, 99.0], [0.0], [3.0]]),
             ("radiativeEfficiencyBlackHoles", [[0.1, 0.9], [0.2], [0.3]]),
@@ -278,6 +333,8 @@ def test_loader_uses_tree_times_node_weights_vlen_zero_and_catalog_units(tmp_pat
     np.testing.assert_allclose(catalog.columns["mdot_rest_msun_per_gyr"], [2.0, 0.0, 3.0])
     np.testing.assert_allclose(catalog.columns["radiative_efficiency_catalog"], [0.1, 0.2, 0.3])
     np.testing.assert_allclose(catalog.columns["power_jet_erg_s"][0], 4.0 * 6.302397367723697e26)
+    np.testing.assert_allclose(catalog.columns["hbeta_agn_intrinsic_erg_s"], [1.0e40, 2.0e40, 3.0e40])
+    np.testing.assert_allclose(catalog.columns["velocity_dispersion_km_s"], [100.0, 200.0, 300.0])
     assert catalog.diagnostics["negative_total_sfr_count_retained"] == 1
     assert catalog.diagnostics["nonpositive_total_sfr_count_retained"] == 2
     assert catalog.diagnostics["massAccretionRateBlackHoles_multiple_rows"] == 1

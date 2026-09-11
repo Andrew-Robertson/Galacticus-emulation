@@ -32,6 +32,14 @@ DEFAULT_MDOT_UNITS_IN_SI = 6.302397367723697e13
 GALACTICUS_MDOT_EDD_PER_MBH_MSUN_GYR = 2.2206176144141274
 
 DEFAULT_LEDD_COEFFICIENT = 1.26e38
+BLANTON_LEDD_COEFFICIENT = 1.38e38
+BLANTON_NETZER_HBETA_INTERCEPT = 45.661
+BLANTON_NETZER_HBETA_SLOPE = 1.18
+BLANTON_NETZER_HBETA_PIVOT = 42.0
+BLANTON_KH13_ALPHA = 8.50
+BLANTON_KH13_BETA = 4.4
+BLANTON_SIGMA_REFERENCE_KM_S = 200.0
+BLANTON_SIGMA_MINIMUM_KM_S = 60.0
 PAPER_II_MASS_EDGES = np.asarray([10.0, 10.4, 10.8, 11.2, 11.6, 12.0])
 PAPER_II_SSFR_SPLIT = -11.5
 PAPER_II_THRESHOLDS = np.asarray([1.0e-1, 1.0e-2, 1.0e-3])
@@ -82,6 +90,21 @@ class AccretionQuantities:
     accretion_rate_eddington_paper: np.ndarray
     accretion_rate_eddington_galacticus: np.ndarray
     valid_accreting_black_hole: np.ndarray
+
+
+@dataclass(frozen=True)
+class MockObservedAGNQuantities:
+    """Blanton-like quantities inferred from Galacticus H-beta and sigma."""
+
+    hbeta_agn_intrinsic_erg_s: np.ndarray
+    velocity_dispersion_km_s: np.ndarray
+    bolometric_luminosity_hbeta_erg_s: np.ndarray
+    black_hole_mass_sigma_msun: np.ndarray
+    eddington_ratio_raw_true_bh: np.ndarray
+    eddington_ratio_hbeta_true_bh: np.ndarray
+    eddington_ratio_raw_sigma_bh: np.ndarray
+    eddington_ratio_hbeta_sigma_bh: np.ndarray
+    valid_sigma_sample: np.ndarray
 
 
 @dataclass(frozen=True)
@@ -446,6 +469,102 @@ def accretion_quantities(
     )
 
 
+def blanton_bolometric_luminosity_from_hbeta(
+    hbeta_luminosity_erg_s: Sequence[float],
+) -> np.ndarray:
+    """Apply the nominal Netzer (2019) conversion used by Blanton et al.
+
+    Non-positive luminosities map to zero. Non-finite inputs remain NaN.
+    Galacticus' intrinsic AGN H-beta luminosity is treated as the luminosity
+    that would be recovered after a perfect Balmer-decrement dust correction.
+    """
+
+    hbeta = np.asarray(hbeta_luminosity_erg_s, dtype=float)
+    luminosity = np.full(hbeta.shape, np.nan, dtype=float)
+    luminosity[np.isfinite(hbeta) & (hbeta <= 0.0)] = 0.0
+    positive = np.isfinite(hbeta) & (hbeta > 0.0)
+    luminosity[positive] = 10.0 ** (
+        BLANTON_NETZER_HBETA_INTERCEPT
+        + BLANTON_NETZER_HBETA_SLOPE
+        * (np.log10(hbeta[positive]) - BLANTON_NETZER_HBETA_PIVOT)
+    )
+    return luminosity
+
+
+def blanton_black_hole_mass_from_sigma(
+    velocity_dispersion_km_s: Sequence[float],
+) -> np.ndarray:
+    """Apply the nominal Kormendy & Ho (2013) M_BH-sigma relation."""
+
+    sigma = np.asarray(velocity_dispersion_km_s, dtype=float)
+    mass = np.full(sigma.shape, np.nan, dtype=float)
+    positive = np.isfinite(sigma) & (sigma > 0.0)
+    mass[positive] = 10.0 ** (
+        BLANTON_KH13_ALPHA
+        + BLANTON_KH13_BETA
+        * np.log10(sigma[positive] / BLANTON_SIGMA_REFERENCE_KM_S)
+    )
+    return mass
+
+
+def mock_observed_agn_quantities(
+    *,
+    hbeta_agn_intrinsic_erg_s: Sequence[float],
+    velocity_dispersion_km_s: Sequence[float],
+    black_hole_mass_true_msun: Sequence[float],
+    bolometric_luminosity_raw_erg_s: Sequence[float],
+    ledd_coefficient: float = BLANTON_LEDD_COEFFICIENT,
+    sigma_minimum_km_s: float = BLANTON_SIGMA_MINIMUM_KM_S,
+) -> MockObservedAGNQuantities:
+    """Construct raw, crossed, and fully mock-observed Eddington ratios.
+
+    The four ratios form a two-by-two decomposition: direct Galacticus versus
+    H-beta-inferred bolometric luminosity, crossed with true versus
+    sigma-inferred black-hole mass. The sigma sample mask is returned
+    separately so callers can apply an identical denominator to every ratio.
+    """
+
+    if ledd_coefficient <= 0.0:
+        raise ValueError("ledd_coefficient must be positive")
+    if sigma_minimum_km_s <= 0.0:
+        raise ValueError("sigma_minimum_km_s must be positive")
+    hbeta = np.asarray(hbeta_agn_intrinsic_erg_s, dtype=float)
+    sigma = np.asarray(velocity_dispersion_km_s, dtype=float)
+    true_mass = np.asarray(black_hole_mass_true_msun, dtype=float)
+    raw_luminosity = np.asarray(bolometric_luminosity_raw_erg_s, dtype=float)
+    if not (hbeta.shape == sigma.shape == true_mass.shape == raw_luminosity.shape):
+        raise ValueError("All mock-observation inputs must have matching shapes")
+
+    inferred_luminosity = blanton_bolometric_luminosity_from_hbeta(hbeta)
+    inferred_mass = blanton_black_hole_mass_from_sigma(sigma)
+    true_eddington = ledd_coefficient * true_mass
+    inferred_eddington = ledd_coefficient * inferred_mass
+
+    def ratio(numerator: np.ndarray, denominator: np.ndarray) -> np.ndarray:
+        result = np.full(numerator.shape, np.nan, dtype=float)
+        valid = (
+            np.isfinite(numerator)
+            & (numerator >= 0.0)
+            & np.isfinite(denominator)
+            & (denominator > 0.0)
+        )
+        result[valid] = numerator[valid] / denominator[valid]
+        return result
+
+    valid_sigma = np.isfinite(sigma) & (sigma > sigma_minimum_km_s)
+    return MockObservedAGNQuantities(
+        hbeta_agn_intrinsic_erg_s=hbeta,
+        velocity_dispersion_km_s=sigma,
+        bolometric_luminosity_hbeta_erg_s=inferred_luminosity,
+        black_hole_mass_sigma_msun=inferred_mass,
+        eddington_ratio_raw_true_bh=ratio(raw_luminosity, true_eddington),
+        eddington_ratio_hbeta_true_bh=ratio(inferred_luminosity, true_eddington),
+        eddington_ratio_raw_sigma_bh=ratio(raw_luminosity, inferred_eddington),
+        eddington_ratio_hbeta_sigma_bh=ratio(inferred_luminosity, inferred_eddington),
+        valid_sigma_sample=valid_sigma,
+    )
+
+
 def switched_disk_adaf_fraction(
     accretion_rate_eddington_galacticus: Sequence[float],
     *,
@@ -756,6 +875,18 @@ def load_snapshot_catalog(
     weights = node_weights(output_group)
     power_jet = vlen_values["power_jet_galacticus"]
 
+    optional_columns: dict[str, np.ndarray] = {}
+    if "luminosityEmissionLineAGN:balmerBeta4863" in node_data:
+        hbeta_dataset = node_data["luminosityEmissionLineAGN:balmerBeta4863"]
+        hbeta = first_vlen_element(hbeta_dataset[:])
+        hbeta_units_in_si = float(hbeta_dataset.attrs.get("unitsInSI", 1.0e-7))
+        optional_columns["hbeta_agn_intrinsic_erg_s"] = hbeta * hbeta_units_in_si * 1.0e7
+    if "velocityDispersion" in node_data:
+        sigma_dataset = node_data["velocityDispersion"]
+        sigma = first_vlen_element(sigma_dataset[:])
+        sigma_units_in_si = float(sigma_dataset.attrs.get("unitsInSI", 1.0e3))
+        optional_columns["velocity_dispersion_km_s"] = sigma * sigma_units_in_si / 1.0e3
+
     columns = {
         "node_index": np.asarray(node_data["nodeIndex"], dtype=np.int64)[keep],
         "merger_tree_index": node_tree_indices(output_group)[keep],
@@ -783,6 +914,7 @@ def load_snapshot_catalog(
         "valid_accreting_black_hole": accretion.valid_accreting_black_hole[keep],
         "power_jet_galacticus": power_jet[keep],
         "power_jet_erg_s": power_jet[keep] * jet_power_units_in_si * 1.0e7,
+        **{name: values[keep] for name, values in optional_columns.items()},
     }
     diagnostics = {
         "nodes_in_output": int(central.size),
