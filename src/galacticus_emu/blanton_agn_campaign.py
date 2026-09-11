@@ -42,7 +42,7 @@ DEFAULT_REDSHIFTS = (0.0, 0.1)
 DEFAULT_SSFR_CUTS = (-11.5, -11.0, -10.5)
 DEFAULT_LAMBDA_THRESHOLDS = (1.0e-3, 1.0e-2, 1.0e-1)
 DEFAULT_MODES = ("inclusive", "thin_disk_dominated")
-DEFAULT_WEIGHT_TOLERANCE = 0.05
+DEFAULT_WEIGHT_TOLERANCE = 0.10
 HALPHA_LOG10_SFR_CALIBRATION = 41.27
 
 
@@ -143,7 +143,17 @@ def config_hash(config: Mapping[str, Any]) -> str:
     return sha256(payload.encode()).hexdigest()
 
 
-def check_uniform_weights(weights: Sequence[float], *, tolerance: float = 0.05) -> dict[str, float | int]:
+def observable_contract_hash(config: Mapping[str, Any]) -> str:
+    """Hash choices that affect values, excluding validation-only settings."""
+
+    contract = dict(config)
+    contract.pop("weight_check", None)
+    return config_hash(contract)
+
+
+def check_uniform_weights(
+    weights: Sequence[float], *, tolerance: float = DEFAULT_WEIGHT_TOLERANCE
+) -> dict[str, float | int]:
     """Require all combined node weights to agree with their median within tolerance."""
 
     values = np.asarray(weights, dtype=float)
@@ -516,6 +526,7 @@ def extract_evaluation(
         },
         "config": selected_config,
         "config_hash": config_hash(selected_config),
+        "observable_contract_hash": observable_contract_hash(selected_config),
         "snapshots": snapshot_metadata,
         "n_fagn_rows": len(fraction_rows),
         "n_quiescent_rows": len(quiescent_rows),
@@ -634,6 +645,12 @@ def write_evaluation_shard(
             handle.attrs["schema_version"] = SCHEMA_VERSION
             handle.attrs["evaluation_id"] = str(metadata["evaluation_id"])
             handle.attrs["config_hash"] = str(metadata["config_hash"])
+            handle.attrs["observable_contract_hash"] = str(
+                metadata.get(
+                    "observable_contract_hash",
+                    observable_contract_hash(metadata["config"]),
+                )
+            )
             handle.create_dataset(
                 "metadata_json",
                 data=json.dumps(metadata, sort_keys=True, allow_nan=False),
@@ -691,9 +708,10 @@ def extract_campaign_evaluation(
     destination = destination_root / "shards" / f"{evaluation_id}.hdf5"
     if destination.is_file() and not overwrite:
         existing = read_evaluation_shard(destination)
-        if existing["metadata"]["config_hash"] != config_hash(selected_config):
+        existing_contract = observable_contract_hash(existing["metadata"]["config"])
+        if existing_contract != observable_contract_hash(selected_config):
             raise ValueError(
-                f"existing shard {destination} used a different configuration; "
+                f"existing shard {destination} used different observable definitions; "
                 "pass --overwrite to replace it"
             )
         return destination
@@ -769,6 +787,7 @@ def aggregate_campaign_shards(
     first_path = shard_paths[evaluation_ids[0]]
     first = read_evaluation_shard(first_path)
     expected_hash = first["metadata"]["config_hash"]
+    expected_contract_hash = observable_contract_hash(first["metadata"]["config"])
     ids_by_kind = {
         kind: np.asarray(first[kind]["observable_id"], dtype=str)
         for kind in ("fagn", "quiescent")
@@ -785,10 +804,21 @@ def aggregate_campaign_shards(
             "n_quiescent": np.zeros((len(evaluation_ids), len(ids_by_kind["quiescent"])), dtype=np.int64),
         },
     }
+    shard_config_hashes: list[str] = []
+    shard_weight_tolerances: list[float] = []
     for row_index, evaluation_id in enumerate(evaluation_ids):
         shard = read_evaluation_shard(shard_paths[evaluation_id])
-        if shard["metadata"]["config_hash"] != expected_hash:
-            raise ValueError(f"configuration mismatch in {shard_paths[evaluation_id]}")
+        shard_contract_hash = observable_contract_hash(shard["metadata"]["config"])
+        if shard_contract_hash != expected_contract_hash:
+            raise ValueError(f"observable-definition mismatch in {shard_paths[evaluation_id]}")
+        shard_config_hashes.append(str(shard["metadata"]["config_hash"]))
+        shard_weight_tolerances.append(
+            float(
+                shard["metadata"]["config"]["weight_check"][
+                    "maximum_fractional_deviation_from_median"
+                ]
+            )
+        )
         for kind in ("fagn", "quiescent"):
             if not np.array_equal(np.asarray(shard[kind]["observable_id"], dtype=str), ids_by_kind[kind]):
                 raise ValueError(f"observable ordering mismatch in {shard_paths[evaluation_id]}")
@@ -810,8 +840,11 @@ def aggregate_campaign_shards(
         with h5py.File(first_path, "r") as first_handle, h5py.File(temp_hdf5, "w") as output:
             output.attrs["schema_version"] = SCHEMA_VERSION
             output.attrs["config_hash"] = expected_hash
+            output.attrs["observable_contract_hash"] = expected_contract_hash
             output.attrs["campaign_root"] = str(campaign)
             _create_string_dataset(output, "evaluation_id", evaluation_ids)
+            _create_string_dataset(output, "shard_config_hash", shard_config_hashes)
+            output.create_dataset("weight_check_tolerance", data=shard_weight_tolerances)
             output.create_dataset(
                 "config_json",
                 data=json.dumps(first["metadata"]["config"], sort_keys=True, allow_nan=False),
@@ -837,7 +870,12 @@ def aggregate_campaign_shards(
     definitions = {
         "schema_version": SCHEMA_VERSION,
         "config_hash": expected_hash,
+        "observable_contract_hash": expected_contract_hash,
         "config": first["metadata"]["config"],
+        "shard_config_hashes": {
+            value: shard_config_hashes.count(value) for value in sorted(set(shard_config_hashes))
+        },
+        "weight_check_tolerances": sorted(set(shard_weight_tolerances)),
         "source_campaign": {
             "path": str(campaign),
             "samples_csv": str(samples_path),

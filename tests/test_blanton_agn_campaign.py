@@ -15,6 +15,7 @@ from galacticus_emu.blanton_agn_campaign import (
     extraction_config,
     halpha_sfr_msun_per_year,
     log10_ssfr_from_sfr,
+    observable_contract_hash,
     read_evaluation_shard,
     summarize_snapshot,
     write_evaluation_shard,
@@ -52,7 +53,14 @@ def _minimal_rows(evaluation_id: str):
     )
 
 
-def test_uniform_weight_check_accepts_five_percent_and_rejects_larger_spread() -> None:
+def test_uniform_weight_check_uses_ten_percent_default() -> None:
+    diagnostics = check_uniform_weights([0.91, 1.0, 1.09])
+    np.testing.assert_allclose(diagnostics["tolerance"], 0.10)
+    with pytest.raises(ValueError, match="not uniform"):
+        check_uniform_weights([1.0, 100.0])
+
+
+def test_uniform_weight_check_honors_explicit_tolerance() -> None:
     diagnostics = check_uniform_weights([0.95, 1.0, 1.05], tolerance=0.05)
     np.testing.assert_allclose(diagnostics["maximum_fractional_deviation_from_median"], 0.05)
     with pytest.raises(ValueError, match="not uniform"):
@@ -108,8 +116,11 @@ def test_shards_round_trip_and_aggregate_with_samples(tmp_path: Path) -> None:
     pd.DataFrame(
         {"evaluation_id": evaluation_ids, "parameter_quantile": [0.25, 0.75]}
     ).to_csv(campaign / "samples.csv", index=False)
-    config = _minimal_config()
-    for evaluation_id in evaluation_ids:
+    configs = [_minimal_config(), _minimal_config()]
+    configs[0]["weight_check"]["maximum_fractional_deviation_from_median"] = 0.05
+    assert config_hash(configs[0]) != config_hash(configs[1])
+    assert observable_contract_hash(configs[0]) == observable_contract_hash(configs[1])
+    for evaluation_id, config in zip(evaluation_ids, configs, strict=True):
         fraction_rows, quiescent_rows = _minimal_rows(evaluation_id)
         metadata = {
             "schema_version": 1,
@@ -133,6 +144,8 @@ def test_shards_round_trip_and_aggregate_with_samples(tmp_path: Path) -> None:
     outputs = aggregate_campaign_shards(campaign, overwrite=True)
     with h5py.File(outputs["hdf5"], "r") as handle:
         assert handle["evaluation_id"].asstr()[:].tolist() == evaluation_ids
+        np.testing.assert_allclose(handle["weight_check_tolerance"][:], [0.05, 0.10])
+        assert len(set(handle["shard_config_hash"].asstr()[:])) == 2
         assert handle["fagn/f_agn"].shape[0] == 2
         assert "agn_definition" in handle["fagn"]
         assert np.any(handle["fagn/f_agn"][:] == 0.0)

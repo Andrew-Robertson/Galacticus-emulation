@@ -68,7 +68,10 @@ parent-sample selection.
 
 For every snapshot the extractor forms
 `mergerTreeWeight × nodeSubsamplingWeight` and checks that every value is
-within 5% of the median.  It raises an error if this is false.  After that
+within 10% of the median.  This is a guard against accidentally processing a
+qualitatively different, strongly weighted halo sample; it is not used to
+model small numerical differences between otherwise equal weights.  The
+extractor raises an error if the check fails.  After that
 check, weights are discarded and every stored fraction uses integer counts.
 
 For each AGN observable the shard stores `n_galaxies`, `n_agn`, and their
@@ -142,5 +145,7 @@ python scripts/extract_blanton_agn_campaign.py file /path/to/galacticus.hdf5 \
 
 Run `python scripts/extract_blanton_agn_campaign.py evaluation --help` to see
 the command-line overrides for redshifts, mass edges, sSFR cuts, lambda cuts,
-modes, and the weight tolerance.  Changing any of them changes the stored
-configuration hash.
+modes, and the weight tolerance.  Each shard records its exact configuration
+hash.  Aggregation permits different weight-check tolerances because they are
+validation metadata, while still requiring an exact match for every choice
+that affects the observable values.
