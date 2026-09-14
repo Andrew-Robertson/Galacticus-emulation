@@ -1,0 +1,1520 @@
+# Reusable GP/MCMC pipeline for standard observables plus Moffett et al. (2016)
+# GAMA morphologies plus H-alpha Sobral LFs.
+# Override ROOT and PIPELINE_OUTPUT_ROOT for a different reduced campaign.
+#
+#default_profiles:
+  # - mcmc_transformed_parameters
+  # - mcmc_de_rescue # use a mix of different emcee move types (defined below)
+
+variables:
+  # Input campaign data root. This must point at the reduced campaign containing
+  # samples.csv, evaluations/, and sidecar files.
+  ROOT: runs/campaigns/sobol_1024_20p_simpleSizes_moreHalos_reduced
+  HDF5_FILENAME: galacticus.hdf5
+
+  # Outputs created by this config-driven pipeline. Keeping this separate from
+  # ROOT lets the pipeline recreate the existing workflow without overwriting
+  # historical emulators/MCMCs at the top level of the campaign.
+  PIPELINE_OUTPUT_ROOT: ${ROOT}/pipeline
+
+  # Standard-observable emulator choice. Keep the numerical setting and the
+  # output-name tag together so that changing one prompts changing the other.
+  STANDARD_PCA_VARIANCE_THRESHOLD: "0.99"
+  STANDARD_EMULATOR_TAG: pca_99
+  STANDARD_BUNDLE: ${PIPELINE_OUTPUT_ROOT}/emulators/standard_observables/${STANDARD_EMULATOR_TAG}/standard_observables_bundle.joblib
+  STANDARD_META: ${PIPELINE_OUTPUT_ROOT}/emulators/standard_observables/${STANDARD_EMULATOR_TAG}/standard_observables_bundle.meta.json
+
+  # Sidecar LF emulator choice. The directory tag keeps the existing pca_99
+  # directory convention, while the name tag keeps existing pca99 filenames.
+  SIDECAR_LF_PCA_VARIANCE_THRESHOLD: "0.99"
+  SIDECAR_LF_EMULATOR_DIR_TAG: pca_99
+  SIDECAR_LF_EMULATOR_NAME_TAG: pca99
+
+  # H-alpha sidecar LF training choice. The label controls output names; the
+  # argument list controls which rows are used.
+  HALPHA_OBSERVABLE: halpha_sobral
+  HALPHA_DUST_DRAW_LABEL: 1dustdraw
+  HALPHA_DUST_DRAW_ARGS:
+    - --dust-draw-index
+    - "0"
+  HALPHA_TAG: ${HALPHA_OBSERVABLE}_${HALPHA_DUST_DRAW_LABEL}_${SIDECAR_LF_EMULATOR_NAME_TAG}
+  HALPHA_BUNDLE: ${PIPELINE_OUTPUT_ROOT}/emulators/emission_line_lfs/${SIDECAR_LF_EMULATOR_DIR_TAG}/${HALPHA_TAG}.joblib
+
+  # Two-pass MCMC workflow for the science-critical joint fits:
+  #   1. exploratory: broad initialization from the prior quantile centre,
+  #      used to find a high-posterior MAP point;
+  #   2. production: initialized around the exploratory MAP point.
+  #
+  # Downstream plotting and best-fit stages use MCMC_ROOT, so production is the
+  # default "science" result.
+  MCMC_EXPLORATORY_ROOT: ${PIPELINE_OUTPUT_ROOT}/MCMCs_exploratory
+  MCMC_PRODUCTION_ROOT: ${PIPELINE_OUTPUT_ROOT}/MCMCs_production_from_exploratory_MAP
+  MCMC_ROOT: ${MCMC_PRODUCTION_ROOT}
+  STANDARD_MCMC_ROOT: ${MCMC_ROOT}/standard_observables
+  HALPHA_MCMC_ROOT: ${MCMC_ROOT}/emission_line_lfs/${HALPHA_TAG}
+  COMBINED_MCMC_ROOT: ${MCMC_ROOT}/standard_observables_plus_emission_line_lfs/all_standard_observables_plus_moffett2016_plus_${HALPHA_TAG}
+
+  EXPLORATORY_STANDARD_MCMC_ROOT: ${MCMC_EXPLORATORY_ROOT}/standard_observables
+  EXPLORATORY_ALL_STANDARD_MCMC_DIR: ${EXPLORATORY_STANDARD_MCMC_ROOT}/all_standard_observables_plus_moffett2016
+  EXPLORATORY_COMBINED_MCMC_ROOT: ${MCMC_EXPLORATORY_ROOT}/standard_observables_plus_emission_line_lfs/all_standard_observables_plus_moffett2016_plus_${HALPHA_TAG}
+
+  SMF_MCMC_DIR: ${STANDARD_MCMC_ROOT}/smf_z0_z3
+  SFRF_MCMC_DIR: ${STANDARD_MCMC_ROOT}/sfr_function_robotham2011
+  SIZE_MCMC_DIR: ${STANDARD_MCMC_ROOT}/size_mass_vdw2014_sf_q
+  MOFFETT_MCMC_DIR: ${STANDARD_MCMC_ROOT}/morphological_fraction_gama_moffett2016
+  BH_MSIGMA_MCMC_DIR: ${STANDARD_MCMC_ROOT}/bh_velocity_dispersion
+  MZR_MCMC_DIR: ${STANDARD_MCMC_ROOT}/mzr_blanc2019
+  STANDARD_SUBSET_MCMC_DIR: ${STANDARD_MCMC_ROOT}/smf_sfrf_sizes_moffett2016
+  ALL_STANDARD_MCMC_DIR: ${STANDARD_MCMC_ROOT}/all_standard_observables_plus_moffett2016
+
+  SMF_PREFIX: mcmc_smf_z0_z3
+  SFRF_PREFIX: mcmc_sfr_function_robotham2011
+  SIZE_PREFIX: mcmc_size_mass_vdw2014_sf_q
+  MOFFETT_PREFIX: mcmc_morphological_fraction_gama_moffett2016
+  BH_MSIGMA_PREFIX: mcmc_bh_velocity_dispersion
+  MZR_PREFIX: mcmc_mzr_blanc2019
+  STANDARD_SUBSET_PREFIX: mcmc_smf_sfrf_sizes_moffett2016
+  ALL_STANDARD_PREFIX: mcmc_all_standard_observables_plus_moffett2016
+  HALPHA_PREFIX: mcmc_${HALPHA_TAG}
+  COMBINED_PREFIX: mcmc_all_standard_observables_plus_moffett2016_plus_${HALPHA_TAG}
+
+  BEST_FIT_GALACTICUS_EXECUTABLE: $GALACTICUS_EXEC_PATH/Galacticus.exe
+  BEST_FIT_GALACTICUS_OUTPUT: romanEPS_massFunction.hdf5
+  BEST_FIT_PARAMETER_FILES:
+    - $GALACTICUS_PARAMETER_FILES/hierarchicalParameters/romanEPS.xml
+    - $GALACTICUS_PARAMETER_FILES/hierarchicalParameters/massFunction.xml
+    - $GALACTICUS_PARAMETER_FILES/hierarchicalParameters/fineTuningFiles/handCalibratedChanges.xml
+    - $GALACTICUS_PARAMETER_FILES/hierarchicalParameters/fineTuningFiles/odeAcc1e-4.xml
+    - $GALACTICUS_PARAMETER_FILES/hierarchicalParameters/fineTuningFiles/seeds/seed1234.xml
+    - $GALACTICUS_PARAMETER_FILES/hierarchicalParameters/fineTuningFiles/additionalQuantities.xml
+    - $GALACTICUS_PARAMETER_FILES/hierarchicalParameters/universeMachine/Trinity/universeMachine_Trinity_z012_outputs.xml
+    - $GALACTICUS_PARAMS_PATH/starFormationHistory/adaptiveSFH-noSave.xml
+    - $GALACTICUS_PARAMS_PATH/fineTuningFiles/emissionLineLuminosityFunctions.xml
+    - $GALACTICUS_PARAMS_PATH/emissionLines/emissionLines.xml
+    - $GALACTICUS_PARAMETER_FILES/hierarchicalParameters/fineTuningFiles/sizes/galacticStructureSolver-simple.xml
+    - $GALACTICUS_PARAMETER_FILES/hierarchicalParameters/fineTuningFiles/moreHalos.xml
+  STANDARD_BEST_FIT_RUN_DIR: ${ALL_STANDARD_MCMC_DIR}/bestFitModel_GalacticusRun
+  STANDARD_SUBSET_BEST_FIT_RUN_DIR: ${STANDARD_SUBSET_MCMC_DIR}/bestFitModel_GalacticusRun
+  COMBINED_BEST_FIT_RUN_DIR: ${COMBINED_MCMC_ROOT}/bestFitModel_GalacticusRun
+
+  # Optional emcee proposal moves. Leave empty to use emcee's default
+  # StretchMove, or set via a profile / override list as repeated --move args.
+  MCMC_MOVE_ARGS: []
+  MCMC_SAMPLER_COORDINATE_ARGS: []
+  MAP_INIT_QUANTILE_SIGMA: "0.01"
+  ALL_STANDARD_EXPLORATORY_MCMC_RESULTS: ${EXPLORATORY_ALL_STANDARD_MCMC_DIR}/${ALL_STANDARD_PREFIX}_mcmc_results.hdf5
+  EXPLORATORY_STANDARD_SUBSET_MCMC_DIR: ${EXPLORATORY_STANDARD_MCMC_ROOT}/smf_sfrf_sizes_moffett2016
+  STANDARD_SUBSET_EXPLORATORY_MCMC_RESULTS: ${EXPLORATORY_STANDARD_SUBSET_MCMC_DIR}/${STANDARD_SUBSET_PREFIX}_mcmc_results.hdf5
+  COMBINED_EXPLORATORY_MCMC_RESULTS: ${EXPLORATORY_COMBINED_MCMC_ROOT}/${COMBINED_PREFIX}_mcmc_results.hdf5
+  STANDARD_SUBSET_PRODUCTION_INIT_ARGS:
+    - --init-from-results
+    - ${STANDARD_SUBSET_EXPLORATORY_MCMC_RESULTS}
+    - --init-source
+    - map
+    - --init-quantile-sigma
+    - ${MAP_INIT_QUANTILE_SIGMA}
+  ALL_STANDARD_PRODUCTION_INIT_ARGS:
+    - --init-from-results
+    - ${ALL_STANDARD_EXPLORATORY_MCMC_RESULTS}
+    - --init-source
+    - map
+    - --init-quantile-sigma
+    - ${MAP_INIT_QUANTILE_SIGMA}
+  COMBINED_PRODUCTION_INIT_ARGS:
+    - --init-from-results
+    - ${COMBINED_EXPLORATORY_MCMC_RESULTS}
+    - --init-source
+    - map
+    - --init-quantile-sigma
+    - ${MAP_INIT_QUANTILE_SIGMA}
+
+  ACTUAL_STANDARD_HDF5: ${STANDARD_BEST_FIT_RUN_DIR}/${BEST_FIT_GALACTICUS_OUTPUT}
+  ACTUAL_STANDARD_SUBSET_HDF5: ${STANDARD_SUBSET_BEST_FIT_RUN_DIR}/${BEST_FIT_GALACTICUS_OUTPUT}
+  ACTUAL_COMBINED_HDF5: ${COMBINED_BEST_FIT_RUN_DIR}/${BEST_FIT_GALACTICUS_OUTPUT}
+  ACTUAL_COMBINED_SIDECAR_DIR: ${COMBINED_BEST_FIT_RUN_DIR}/emission_line_dust
+  ACTUAL_COMBINED_UNIT_HDF5: ${COMBINED_MCMC_ROOT}/bestFitModel-UNIT/${HALPHA_TAG}_romanUNIT_massFunction.hdf5
+  ACTUAL_COMBINED_UNIT_SIDECAR_DIR: ${COMBINED_MCMC_ROOT}/bestFitModel-UNIT/emission_line_dust
+  ACTUAL_EMISSION_LINE_FIGURE_DIR: ${COMBINED_MCMC_ROOT}/figures/emission_line_lfs_actual_eps_vs_unit
+  POSTERIOR_DRAW_XML_DIR: ${COMBINED_MCMC_ROOT}/posterior_draws
+  POSTERIOR_DRAW_COUNT: "25"
+  POSTERIOR_DRAW_SEED: "20260528"
+
+  STANDARD_OBSERVABLE_ARGS:
+    - --observable
+    - bh_velocity_dispersion
+    - --observable
+    - smf_liwhite2009_sdss
+    - --observable
+    - smf_z0
+    - --observable
+    - smf_z3
+    - --observable
+    - mzr_blanc2019
+    - --observable
+    - sfr_function_robotham2011
+    - --observable
+    - size_mass_vdw2014_star_forming_z0
+    - --observable
+    - size_mass_vdw2014_quiescent_z0
+    - --observable
+    - morphological_fraction_gama_moffett2016
+
+  ALL_STANDARD_MCMC_OBSERVABLE_ARGS:
+    - --observable
+    - smf_z0
+    - --observable
+    - smf_z3
+    - --observable
+    - sfr_function_robotham2011
+    - --observable
+    - size_mass_vdw2014_star_forming_z0
+    - --observable
+    - size_mass_vdw2014_quiescent_z0
+    - --observable
+    - bh_velocity_dispersion
+    - --observable
+    - mzr_blanc2019
+    - --observable
+    - morphological_fraction_gama_moffett2016
+
+  STANDARD_SUBSET_MCMC_OBSERVABLE_ARGS:
+    - --observable
+    - smf_z0
+    - --observable
+    - smf_z3
+    - --observable
+    - sfr_function_robotham2011
+    - --observable
+    - size_mass_vdw2014_star_forming_z0
+    - --observable
+    - size_mass_vdw2014_quiescent_z0
+    - --observable
+    - morphological_fraction_gama_moffett2016
+
+  MCMC_COMMON:
+    - --n-walkers
+    - "128"
+    - --n-steps
+    - "50000"
+    - --burn-in
+    - "5000"
+    - --thin
+    - "100"
+    - --seed
+    - "12345"
+    - --progress
+
+  MCMC_LONG:
+    - --n-walkers
+    - "128"
+    - --n-steps
+    - "250000"
+    - --burn-in
+    - "25000"
+    - --thin
+    - "250"
+    - --seed
+    - "12345"
+    - --progress
+
+  MCMC_LONG_EXPLORATORY:
+    - --n-walkers
+    - "128"
+    - --n-steps
+    - "75000"
+    - --burn-in
+    - "7500"
+    - --thin
+    - "250"
+    - --seed
+    - "12345"
+    - --progress
+
+  MCMC_LONG_PRODUCTION:
+    - --n-walkers
+    - "128"
+    - --n-steps
+    - "250000"
+    - --burn-in
+    - "25000"
+    - --thin
+    - "250"
+    - --seed
+    - "12345"
+    - --progress
+
+  MCMC_LF_COMMON:
+    - --n-walkers
+    - "128"
+    - --n-steps
+    - "250000"
+    - --burn-in
+    - "25000"
+    - --thin
+    - "250"
+    - --seed
+    - "12345"
+    - --include-emulator-variance
+    - --progress
+
+  MCMC_LF_EXPLORATORY:
+    - --n-walkers
+    - "128"
+    - --n-steps
+    - "75000"
+    - --burn-in
+    - "7500"
+    - --thin
+    - "250"
+    - --seed
+    - "12345"
+    - --include-emulator-variance
+    - --progress
+
+  MCMC_LF_PRODUCTION:
+    - --n-walkers
+    - "128"
+    - --n-steps
+    - "250000"
+    - --burn-in
+    - "25000"
+    - --thin
+    - "250"
+    - --seed
+    - "12345"
+    - --include-emulator-variance
+    - --progress
+
+profiles:
+  standard_pca99:
+    variables:
+      STANDARD_PCA_VARIANCE_THRESHOLD: "0.99"
+      STANDARD_EMULATOR_TAG: pca_99
+
+  standard_pca999:
+    variables:
+      STANDARD_PCA_VARIANCE_THRESHOLD: "0.999"
+      STANDARD_EMULATOR_TAG: pca_999
+
+  sidecar_lf_pca99:
+    variables:
+      SIDECAR_LF_PCA_VARIANCE_THRESHOLD: "0.99"
+      SIDECAR_LF_EMULATOR_DIR_TAG: pca_99
+      SIDECAR_LF_EMULATOR_NAME_TAG: pca99
+
+  sidecar_lf_pca999:
+    variables:
+      SIDECAR_LF_PCA_VARIANCE_THRESHOLD: "0.999"
+      SIDECAR_LF_EMULATOR_DIR_TAG: pca_999
+      SIDECAR_LF_EMULATOR_NAME_TAG: pca999
+
+  halpha_1dustdraw:
+    variables:
+      HALPHA_DUST_DRAW_LABEL: 1dustdraw
+      HALPHA_DUST_DRAW_ARGS:
+        - --dust-draw-index
+        - "0"
+
+  halpha_2dustdraws:
+    variables:
+      HALPHA_DUST_DRAW_LABEL: 2dustdraws
+      HALPHA_DUST_DRAW_ARGS:
+        - --dust-draw-index
+        - "0"
+        - --dust-draw-index
+        - "1"
+
+  halpha_4dustdraws:
+    variables:
+      HALPHA_DUST_DRAW_LABEL: 4dustdraws
+      HALPHA_DUST_DRAW_ARGS:
+        - --dust-draw-index
+        - "0"
+        - --dust-draw-index
+        - "1"
+        - --dust-draw-index
+        - "2"
+        - --dust-draw-index
+        - "3"
+
+  mcmc_de_mixture:
+    variables:
+      MCMC_MOVE_ARGS:
+        - --move
+        - StretchMove:0.3
+        - --move
+        - DEMove:0.6
+        - --move
+        - DESnookerMove:0.1
+
+  mcmc_de_rescue:
+    variables:
+      MCMC_MOVE_ARGS:
+        - --move
+        - StretchMove:0.65
+        - --move
+        - DEMove:0.25
+        - --move
+        - DEMove:0.05,gamma0=1.0
+        - --move
+        - DESnookerMove:0.05
+
+  mcmc_transformed_parameters:
+    variables:
+      MCMC_SAMPLER_COORDINATE_ARGS:
+        - --sample-transformed-parameters
+
+  long_single_observable_mcmcs:
+    variables:
+      # Use the same sampler length as the production joint-observable chains
+      # for the individual standard-observable fits.
+      MCMC_COMMON:
+        - --n-walkers
+        - "128"
+        - --n-steps
+        - "250000"
+        - --burn-in
+        - "25000"
+        - --thin
+        - "250"
+        - --seed
+        - "12345"
+        - --progress
+
+workflows:
+  two_phase_science_mcmcs_with_bestfits:
+    description: Two-phase all-standard and all-standard-plus-H-alpha MCMCs, followed by EPS Galacticus MAP reruns and overlay plots.
+    jobs:
+      - name: train_standard_emulators
+        stages:
+          - train_standard_emulators
+      - name: train_halpha_emulator
+        stages:
+          - train_halpha_emulator
+      - name: all_standard_exploratory
+        depends_on:
+          - train_standard_emulators
+        stages:
+          - run_mcmc_all_standard_exploratory
+      - name: all_standard_production
+        depends_on:
+          - all_standard_exploratory
+        stages:
+          - run_mcmc_all_standard
+      - name: combined_exploratory
+        depends_on:
+          - train_standard_emulators
+          - train_halpha_emulator
+        stages:
+          - run_mcmc_all_standard_plus_halpha_exploratory
+      - name: combined_production
+        depends_on:
+          - combined_exploratory
+        stages:
+          - run_mcmc_all_standard_plus_halpha
+      - name: standard_plus_halpha_corner
+        depends_on:
+          - all_standard_production
+          - combined_production
+        stages:
+          - plot_standard_plus_halpha_corner
+      - name: standard_best_fit_galacticus
+        depends_on:
+          - all_standard_production
+        stages:
+          - run_standard_best_fit_galacticus
+      - name: combined_best_fit_galacticus
+        depends_on:
+          - combined_production
+        stages:
+          - run_combined_best_fit_galacticus
+      - name: standard_best_fit_overlay
+        depends_on:
+          - standard_best_fit_galacticus
+        stages:
+          - plot_all_standard_best_fit_with_actual
+      - name: combined_best_fit_overlay
+        depends_on:
+          - combined_best_fit_galacticus
+        stages:
+          - plot_combined_best_fit_with_actual
+
+  paper_final_mcmcs_with_bestfits:
+    description: Final paper workflow with long single-observable standard MCMCs, the SMF+SFRF+sizes subset, all-standard, and all-standard-plus-H-alpha calibrations.
+    jobs:
+      - name: train_standard_emulators
+        stages:
+          - train_standard_emulators
+      - name: train_halpha_emulator
+        stages:
+          - train_halpha_emulator
+      - name: single_standard_mcmcs
+        depends_on:
+          - train_standard_emulators
+        stages:
+          - run_mcmc_smf_z0_z3
+          - run_mcmc_sfr_function
+          - run_mcmc_sizes
+          - run_mcmc_moffett2016_morphologies
+          - run_mcmc_bh_velocity_dispersion
+          - run_mcmc_mzr
+      - name: standard_subset_exploratory
+        depends_on:
+          - train_standard_emulators
+        stages:
+          - run_mcmc_standard_subset_exploratory
+      - name: standard_subset_production
+        depends_on:
+          - standard_subset_exploratory
+        stages:
+          - run_mcmc_standard_subset
+      - name: all_standard_exploratory
+        depends_on:
+          - train_standard_emulators
+        stages:
+          - run_mcmc_all_standard_exploratory
+      - name: all_standard_production
+        depends_on:
+          - all_standard_exploratory
+        stages:
+          - run_mcmc_all_standard
+      - name: combined_exploratory
+        depends_on:
+          - train_standard_emulators
+          - train_halpha_emulator
+        stages:
+          - run_mcmc_all_standard_plus_halpha_exploratory
+      - name: combined_production
+        depends_on:
+          - combined_exploratory
+        stages:
+          - run_mcmc_all_standard_plus_halpha
+      - name: standard_corner
+        depends_on:
+          - single_standard_mcmcs
+          - standard_subset_production
+          - all_standard_production
+        stages:
+          - plot_standard_corner
+      - name: standard_plus_halpha_corner
+        depends_on:
+          - all_standard_production
+          - combined_production
+        stages:
+          - plot_standard_plus_halpha_corner
+      - name: standard_subset_best_fit_galacticus
+        depends_on:
+          - standard_subset_production
+        stages:
+          - run_standard_subset_best_fit_galacticus
+      - name: standard_subset_best_fit_overlay
+        depends_on:
+          - standard_subset_best_fit_galacticus
+        stages:
+          - plot_standard_subset_best_fit_with_actual
+      - name: standard_best_fit_galacticus
+        depends_on:
+          - all_standard_production
+        stages:
+          - run_standard_best_fit_galacticus
+      - name: combined_best_fit_galacticus
+        depends_on:
+          - combined_production
+        stages:
+          - run_combined_best_fit_galacticus
+      - name: standard_best_fit_overlay
+        depends_on:
+          - standard_best_fit_galacticus
+        stages:
+          - plot_all_standard_best_fit_with_actual
+      - name: standard_best_fit_comparison_overlay
+        depends_on:
+          - single_standard_mcmcs
+          - standard_subset_production
+          - standard_best_fit_galacticus
+        stages:
+          - plot_standard_best_fit_overlay
+      - name: combined_best_fit_overlay
+        depends_on:
+          - combined_best_fit_galacticus
+        stages:
+          - plot_combined_best_fit_with_actual
+
+  standard_halpha_mcmc:
+    description: Concurrent standard-observable and H-alpha emulator/MCMC workflow.
+    stages:
+      - plot_standard_corner
+      - plot_halpha_standard_corner
+  standard_halpha_mcmc_with_bestfits:
+    description: Concurrent emulator/MCMC workflow, plus EPS Galacticus MAP reruns.
+    stages:
+      - plot_standard_corner
+      - plot_halpha_standard_corner
+      - run_standard_best_fit_galacticus
+      - run_combined_best_fit_galacticus
+  standard_halpha_mcmc_compact:
+    description: Fewer Slurm jobs; small plotting stages run inside the producing MCMC job where practical.
+    jobs:
+      - name: train_standard_emulators
+        stages:
+          - train_standard_emulators
+      - name: train_halpha_emulator
+        stages:
+          - train_halpha_emulator
+      - name: standard_mcmcs_and_corner
+        depends_on:
+          - train_standard_emulators
+        stages:
+          - run_standard_mcmcs
+          - plot_standard_corner
+      - name: halpha_and_combined_mcmcs
+        depends_on:
+          - train_standard_emulators
+          - train_halpha_emulator
+        stages:
+          - run_halpha_and_combined_mcmcs
+      - name: halpha_standard_corner
+        depends_on:
+          - standard_mcmcs_and_corner
+          - halpha_and_combined_mcmcs
+        stages:
+          - plot_halpha_standard_corner
+  standard_halpha_mcmc_compact_with_bestfits:
+    description: Compact MCMC workflow, plus EPS Galacticus MAP reruns.
+    jobs:
+      - name: train_standard_emulators
+        stages:
+          - train_standard_emulators
+      - name: train_halpha_emulator
+        stages:
+          - train_halpha_emulator
+      - name: standard_mcmcs_and_corner
+        depends_on:
+          - train_standard_emulators
+        stages:
+          - run_standard_mcmcs
+          - plot_standard_corner
+      - name: halpha_and_combined_mcmcs
+        depends_on:
+          - train_standard_emulators
+          - train_halpha_emulator
+        stages:
+          - run_halpha_and_combined_mcmcs
+      - name: halpha_standard_corner
+        depends_on:
+          - standard_mcmcs_and_corner
+          - halpha_and_combined_mcmcs
+        stages:
+          - plot_halpha_standard_corner
+      - name: standard_best_fit_galacticus
+        depends_on:
+          - standard_mcmcs_and_corner
+        stages:
+          - run_standard_best_fit_galacticus
+      - name: combined_best_fit_galacticus
+        depends_on:
+          - halpha_and_combined_mcmcs
+        stages:
+          - run_combined_best_fit_galacticus
+
+stages:
+  - name: train_standard_emulators
+    description: Build the PCA-99 standard-observable emulator bundle.
+    commands:
+      - name: train standard-observable bundle
+        argv:
+          - python
+          - scripts/train_interactive_observables_demo.py
+          - ${ROOT}
+          - --hdf5-filename
+          - ${HDF5_FILENAME}
+          - --emulator-mode
+          - pca
+          - --pca-scaling
+          - standardized
+          - --pca-variance-threshold
+          - ${STANDARD_PCA_VARIANCE_THRESHOLD}
+          - --n-restarts-optimizer
+          - "4"
+          - ${STANDARD_OBSERVABLE_ARGS}
+          - --output-path
+          - ${STANDARD_BUNDLE}
+
+  - name: run_standard_mcmcs
+    depends_on:
+      - train_standard_emulators
+    description: Run illustrative individual standard-observable MCMCs and the exploratory all-standard MCMC.
+    commands:
+      - name: smf z0+z3
+        argv:
+          - python
+          - scripts/run_interactive_observables_mcmc.py
+          - ${STANDARD_BUNDLE}
+          - --observable
+          - smf_z0
+          - --observable
+          - smf_z3
+          - --mcmc-dir
+          - ${SMF_MCMC_DIR}
+          - --output-prefix
+          - ${SMF_PREFIX}
+          - ${MCMC_COMMON}
+          - ${MCMC_MOVE_ARGS}
+          - ${MCMC_SAMPLER_COORDINATE_ARGS}
+      - name: sfr function
+        argv:
+          - python
+          - scripts/run_interactive_observables_mcmc.py
+          - ${STANDARD_BUNDLE}
+          - --observable
+          - sfr_function_robotham2011
+          - --mcmc-dir
+          - ${SFRF_MCMC_DIR}
+          - --output-prefix
+          - ${SFRF_PREFIX}
+          - ${MCMC_COMMON}
+          - ${MCMC_MOVE_ARGS}
+          - ${MCMC_SAMPLER_COORDINATE_ARGS}
+      - name: sizes
+        argv:
+          - python
+          - scripts/run_interactive_observables_mcmc.py
+          - ${STANDARD_BUNDLE}
+          - --observable
+          - size_mass_vdw2014_star_forming_z0
+          - --observable
+          - size_mass_vdw2014_quiescent_z0
+          - --mcmc-dir
+          - ${SIZE_MCMC_DIR}
+          - --output-prefix
+          - ${SIZE_PREFIX}
+          - ${MCMC_COMMON}
+          - ${MCMC_MOVE_ARGS}
+          - ${MCMC_SAMPLER_COORDINATE_ARGS}
+      - name: Moffett2016 morphologies
+        argv:
+          - python
+          - scripts/run_interactive_observables_mcmc.py
+          - ${STANDARD_BUNDLE}
+          - --observable
+          - morphological_fraction_gama_moffett2016
+          - --mcmc-dir
+          - ${MOFFETT_MCMC_DIR}
+          - --output-prefix
+          - ${MOFFETT_PREFIX}
+          - ${MCMC_COMMON}
+          - ${MCMC_MOVE_ARGS}
+          - ${MCMC_SAMPLER_COORDINATE_ARGS}
+      - name: bh velocity dispersion
+        argv:
+          - python
+          - scripts/run_interactive_observables_mcmc.py
+          - ${STANDARD_BUNDLE}
+          - --observable
+          - bh_velocity_dispersion
+          - --mcmc-dir
+          - ${BH_MSIGMA_MCMC_DIR}
+          - --output-prefix
+          - ${BH_MSIGMA_PREFIX}
+          - ${MCMC_COMMON}
+          - ${MCMC_MOVE_ARGS}
+          - ${MCMC_SAMPLER_COORDINATE_ARGS}
+      - name: mzr
+        argv:
+          - python
+          - scripts/run_interactive_observables_mcmc.py
+          - ${STANDARD_BUNDLE}
+          - --observable
+          - mzr_blanc2019
+          - --mcmc-dir
+          - ${MZR_MCMC_DIR}
+          - --output-prefix
+          - ${MZR_PREFIX}
+          - ${MCMC_COMMON}
+          - ${MCMC_MOVE_ARGS}
+          - ${MCMC_SAMPLER_COORDINATE_ARGS}
+      - name: all standard observables exploratory
+        argv:
+          - python
+          - scripts/run_interactive_observables_mcmc.py
+          - ${STANDARD_BUNDLE}
+          - ${ALL_STANDARD_MCMC_OBSERVABLE_ARGS}
+          - --mcmc-dir
+          - ${EXPLORATORY_ALL_STANDARD_MCMC_DIR}
+          - --output-prefix
+          - ${ALL_STANDARD_PREFIX}
+          - ${MCMC_LONG}
+          - ${MCMC_MOVE_ARGS}
+          - ${MCMC_SAMPLER_COORDINATE_ARGS}
+
+  - name: run_mcmc_smf_z0_z3
+    depends_on:
+      - train_standard_emulators
+    description: Run the SMF z0+z3 MCMC.
+    commands:
+      - name: smf z0+z3
+        argv:
+          - python
+          - scripts/run_interactive_observables_mcmc.py
+          - ${STANDARD_BUNDLE}
+          - --observable
+          - smf_z0
+          - --observable
+          - smf_z3
+          - --mcmc-dir
+          - ${SMF_MCMC_DIR}
+          - --output-prefix
+          - ${SMF_PREFIX}
+          - ${MCMC_COMMON}
+          - ${MCMC_MOVE_ARGS}
+          - ${MCMC_SAMPLER_COORDINATE_ARGS}
+
+  - name: run_mcmc_sfr_function
+    depends_on:
+      - train_standard_emulators
+    description: Run the Robotham SFR-function MCMC.
+    commands:
+      - name: sfr function
+        argv:
+          - python
+          - scripts/run_interactive_observables_mcmc.py
+          - ${STANDARD_BUNDLE}
+          - --observable
+          - sfr_function_robotham2011
+          - --mcmc-dir
+          - ${SFRF_MCMC_DIR}
+          - --output-prefix
+          - ${SFRF_PREFIX}
+          - ${MCMC_COMMON}
+          - ${MCMC_MOVE_ARGS}
+          - ${MCMC_SAMPLER_COORDINATE_ARGS}
+
+  - name: run_mcmc_sizes
+    depends_on:
+      - train_standard_emulators
+    description: Run the star-forming plus quiescent size-relation MCMC.
+    commands:
+      - name: sizes
+        argv:
+          - python
+          - scripts/run_interactive_observables_mcmc.py
+          - ${STANDARD_BUNDLE}
+          - --observable
+          - size_mass_vdw2014_star_forming_z0
+          - --observable
+          - size_mass_vdw2014_quiescent_z0
+          - --mcmc-dir
+          - ${SIZE_MCMC_DIR}
+          - --output-prefix
+          - ${SIZE_PREFIX}
+          - ${MCMC_COMMON}
+          - ${MCMC_MOVE_ARGS}
+          - ${MCMC_SAMPLER_COORDINATE_ARGS}
+
+  - name: run_mcmc_bh_velocity_dispersion
+    depends_on:
+      - train_standard_emulators
+    description: Run the black-hole velocity-dispersion MCMC.
+    commands:
+      - name: bh velocity dispersion
+        argv:
+          - python
+          - scripts/run_interactive_observables_mcmc.py
+          - ${STANDARD_BUNDLE}
+          - --observable
+          - bh_velocity_dispersion
+          - --mcmc-dir
+          - ${BH_MSIGMA_MCMC_DIR}
+          - --output-prefix
+          - ${BH_MSIGMA_PREFIX}
+          - ${MCMC_COMMON}
+          - ${MCMC_MOVE_ARGS}
+          - ${MCMC_SAMPLER_COORDINATE_ARGS}
+
+  - name: run_mcmc_moffett2016_morphologies
+    depends_on:
+      - train_standard_emulators
+    description: Run the Moffett et al. (2016) GAMA early-type fraction MCMC.
+    commands:
+      - name: Moffett2016 morphologies
+        argv:
+          - python
+          - scripts/run_interactive_observables_mcmc.py
+          - ${STANDARD_BUNDLE}
+          - --observable
+          - morphological_fraction_gama_moffett2016
+          - --mcmc-dir
+          - ${MOFFETT_MCMC_DIR}
+          - --output-prefix
+          - ${MOFFETT_PREFIX}
+          - ${MCMC_COMMON}
+          - ${MCMC_MOVE_ARGS}
+          - ${MCMC_SAMPLER_COORDINATE_ARGS}
+
+  - name: run_mcmc_mzr
+    depends_on:
+      - train_standard_emulators
+    description: Run the Blanc MZR MCMC.
+    commands:
+      - name: mzr
+        argv:
+          - python
+          - scripts/run_interactive_observables_mcmc.py
+          - ${STANDARD_BUNDLE}
+          - --observable
+          - mzr_blanc2019
+          - --mcmc-dir
+          - ${MZR_MCMC_DIR}
+          - --output-prefix
+          - ${MZR_PREFIX}
+          - ${MCMC_COMMON}
+          - ${MCMC_MOVE_ARGS}
+          - ${MCMC_SAMPLER_COORDINATE_ARGS}
+
+  - name: run_mcmc_all_standard_exploratory
+    depends_on:
+      - train_standard_emulators
+    slurm:
+      time: "144:00:00"
+    description: Run the exploratory all-standard-observables MCMC from a broad prior-centred initialization.
+    commands:
+      - name: all standard observables exploratory
+        argv:
+          - python
+          - scripts/run_interactive_observables_mcmc.py
+          - ${STANDARD_BUNDLE}
+          - ${ALL_STANDARD_MCMC_OBSERVABLE_ARGS}
+          - --mcmc-dir
+          - ${EXPLORATORY_ALL_STANDARD_MCMC_DIR}
+          - --output-prefix
+          - ${ALL_STANDARD_PREFIX}
+          - ${MCMC_LONG_EXPLORATORY}
+          - ${MCMC_MOVE_ARGS}
+          - ${MCMC_SAMPLER_COORDINATE_ARGS}
+
+  - name: run_mcmc_standard_subset_exploratory
+    depends_on:
+      - train_standard_emulators
+    slurm:
+      time: "144:00:00"
+    description: Run the exploratory SMF+SFRF+sizes+Moffett2016 standard-observable subset MCMC from a broad prior-centred initialization.
+    commands:
+      - name: SMF plus SFRF plus sizes plus Moffett2016 exploratory
+        argv:
+          - python
+          - scripts/run_interactive_observables_mcmc.py
+          - ${STANDARD_BUNDLE}
+          - ${STANDARD_SUBSET_MCMC_OBSERVABLE_ARGS}
+          - --mcmc-dir
+          - ${EXPLORATORY_STANDARD_SUBSET_MCMC_DIR}
+          - --output-prefix
+          - ${STANDARD_SUBSET_PREFIX}
+          - ${MCMC_LONG_EXPLORATORY}
+          - ${MCMC_MOVE_ARGS}
+          - ${MCMC_SAMPLER_COORDINATE_ARGS}
+
+  - name: run_mcmc_standard_subset
+    depends_on:
+      - train_standard_emulators
+      - run_mcmc_standard_subset_exploratory
+    slurm:
+      time: "144:00:00"
+    description: Run the production SMF+SFRF+sizes+Moffett2016 standard-observable subset MCMC initialized around the exploratory MAP.
+    commands:
+      - name: SMF plus SFRF plus sizes plus Moffett2016 production from exploratory MAP
+        argv:
+          - python
+          - scripts/run_interactive_observables_mcmc.py
+          - ${STANDARD_BUNDLE}
+          - ${STANDARD_SUBSET_MCMC_OBSERVABLE_ARGS}
+          - --mcmc-dir
+          - ${STANDARD_SUBSET_MCMC_DIR}
+          - --output-prefix
+          - ${STANDARD_SUBSET_PREFIX}
+          - ${MCMC_LONG_PRODUCTION}
+          - ${MCMC_MOVE_ARGS}
+          - ${MCMC_SAMPLER_COORDINATE_ARGS}
+          - ${STANDARD_SUBSET_PRODUCTION_INIT_ARGS}
+
+  - name: run_mcmc_all_standard
+    depends_on:
+      - train_standard_emulators
+      - run_mcmc_all_standard_exploratory
+    slurm:
+      time: "144:00:00"
+    description: Run the production all-standard-observables MCMC initialized around the exploratory MAP.
+    commands:
+      - name: all standard observables production from exploratory MAP
+        argv:
+          - python
+          - scripts/run_interactive_observables_mcmc.py
+          - ${STANDARD_BUNDLE}
+          - ${ALL_STANDARD_MCMC_OBSERVABLE_ARGS}
+          - --mcmc-dir
+          - ${ALL_STANDARD_MCMC_DIR}
+          - --output-prefix
+          - ${ALL_STANDARD_PREFIX}
+          - ${MCMC_LONG_PRODUCTION}
+          - ${MCMC_MOVE_ARGS}
+          - ${MCMC_SAMPLER_COORDINATE_ARGS}
+          - ${ALL_STANDARD_PRODUCTION_INIT_ARGS}
+
+  - name: plot_standard_corner
+    depends_on:
+      - run_mcmc_smf_z0_z3
+      - run_mcmc_sfr_function
+      - run_mcmc_sizes
+      - run_mcmc_moffett2016_morphologies
+      - run_mcmc_bh_velocity_dispersion
+      - run_mcmc_mzr
+      - run_mcmc_standard_subset
+      - run_mcmc_all_standard
+    description: Overlay standard-observable MCMC posteriors with the all-standard posterior in black.
+    commands:
+      - name: standard getDist overlay
+        argv:
+          - python
+          - scripts/plot_observable_mcmc_overlay_getdist.py
+          - --posterior
+          - SMF z0+z3=${SMF_MCMC_DIR}/${SMF_PREFIX}_mcmc_results.hdf5
+          - --posterior
+          - SFRF=${SFRF_MCMC_DIR}/${SFRF_PREFIX}_mcmc_results.hdf5
+          - --posterior
+          - Sizes=${SIZE_MCMC_DIR}/${SIZE_PREFIX}_mcmc_results.hdf5
+          - --posterior
+          - Morphologies=${MOFFETT_MCMC_DIR}/${MOFFETT_PREFIX}_mcmc_results.hdf5
+          - --posterior
+          - BH M-sigma=${BH_MSIGMA_MCMC_DIR}/${BH_MSIGMA_PREFIX}_mcmc_results.hdf5
+          - --posterior
+          - MZR=${MZR_MCMC_DIR}/${MZR_PREFIX}_mcmc_results.hdf5
+          - --posterior
+          - SMF+SFRF+Sizes+Morphologies=${STANDARD_SUBSET_MCMC_DIR}/${STANDARD_SUBSET_PREFIX}_mcmc_results.hdf5
+          - --posterior
+          - Combined=${ALL_STANDARD_MCMC_DIR}/${ALL_STANDARD_PREFIX}_mcmc_results.hdf5
+          - --output-path
+          - ${STANDARD_MCMC_ROOT}/standard_observables_mcmc_getdist_overlay.png
+          - --parameter-set
+          - auto
+          - --filled
+          - --dpi
+          - "300"
+          - --marker-summary
+          - ${ALL_STANDARD_MCMC_DIR}/${ALL_STANDARD_PREFIX}_mcmc_results.hdf5
+
+  - name: plot_standard_degeneracy_zoom
+    depends_on:
+      - run_mcmc_smf_z0_z3
+      - run_mcmc_sfr_function
+      - run_mcmc_sizes
+      - run_mcmc_moffett2016_morphologies
+      - run_mcmc_bh_velocity_dispersion
+      - run_mcmc_mzr
+      - run_mcmc_standard_subset
+      - run_mcmc_all_standard
+    description: Plot a reduced emulator-only corner showing standard-observable degeneracy breaking.
+    commands:
+      - name: standard-observable degeneracy zoom
+        argv:
+          - python
+          - scripts/plot_standard_observable_degeneracy_zoom.py
+          - ${STANDARD_MCMC_ROOT}
+          - --parameter
+          - diskVelocityCharacteristic
+          - --parameter
+          - diskExponent
+          - --parameter
+          - coolingMultiplier
+          - --parameter
+          - stellarPopulationMetalYield
+          - --max-samples
+          - "9000"
+          - --grid-size
+          - "74"
+          - --kde-bandwidth-scale
+          - "1.35"
+          - --combined-posterior
+          - ${ALL_STANDARD_MCMC_DIR}/${ALL_STANDARD_PREFIX}_mcmc_results.hdf5
+          - --output-prefix
+          - standard_observables_degeneracy_zoom_4param_smooth
+
+  - name: rerun_standard_best_fit_galacticus
+    manual: true
+    description: Manual HPC step to run Galacticus at the all-standard MAP point.
+    notes: |
+      Run Galacticus with ${ALL_STANDARD_MCMC_DIR}/maximum_a_posteriori_model_changes.xml
+      on the HPC, then copy the resulting HDF5 file back to ${ACTUAL_STANDARD_HDF5}
+      or override ACTUAL_STANDARD_HDF5 when plotting.
+
+  - name: run_standard_subset_best_fit_galacticus
+    depends_on:
+      - run_mcmc_standard_subset
+    slurm:
+      cpus_per_task: "16"
+      mem_per_cpu: 8G
+      time: "144:00:00"
+    description: Run Galacticus at the SMF+SFRF+sizes+Moffett2016 subset MAP point in bestFitModel_GalacticusRun.
+    commands:
+      - name: SMF+SFRF+sizes+Moffett2016 MAP Galacticus run
+        argv:
+          - python
+          - scripts/run_best_fit_galacticus_model.py
+          - --mcmc-dir
+          - ${STANDARD_SUBSET_MCMC_DIR}
+          - --output-dir
+          - ${STANDARD_SUBSET_BEST_FIT_RUN_DIR}
+          - --campaign-root
+          - ${ROOT}
+          - --galacticus-executable
+          - ${BEST_FIT_GALACTICUS_EXECUTABLE}
+          - --galacticus-output
+          - ${BEST_FIT_GALACTICUS_OUTPUT}
+          - --no-postprocess-emission-line-dust
+
+  - name: plot_standard_subset_best_fit_with_actual
+    depends_on:
+      - run_standard_subset_best_fit_galacticus
+    description: Plot the SMF+SFRF+sizes+Moffett2016 subset MCMC emulator best fit and the actual Galacticus MAP run.
+    commands:
+      - name: SMF+SFRF+sizes+Moffett2016 best-fit observables with actual Galacticus
+        argv:
+          - python
+          - scripts/plot_interactive_observables_mcmc_best_fit_overlay.py
+          - --bundle-meta
+          - ${STANDARD_META}
+          - --combined
+          - SMF+SFRF+Sizes+Morphologies=${STANDARD_SUBSET_MCMC_DIR}/${STANDARD_SUBSET_PREFIX}_best_fit_observables.csv
+          - --galacticus-hdf5
+          - ${ACTUAL_STANDARD_SUBSET_HDF5}
+          - --galacticus-label
+          - Galacticus MAP
+          - --output-path
+          - ${STANDARD_SUBSET_MCMC_DIR}/figures/${STANDARD_SUBSET_PREFIX}_best_fit_observables_with_actual.png
+          - --dpi
+          - "250"
+
+  - name: run_standard_best_fit_galacticus
+    depends_on:
+      - run_mcmc_all_standard
+    slurm:
+      cpus_per_task: "16"
+      mem_per_cpu: 8G
+      time: "144:00:00"
+    description: Run Galacticus at the all-standard MAP point in bestFitModel_GalacticusRun.
+    commands:
+      - name: all-standard MAP Galacticus run
+        argv:
+          - python
+          - scripts/run_best_fit_galacticus_model.py
+          - --mcmc-dir
+          - ${ALL_STANDARD_MCMC_DIR}
+          - --output-dir
+          - ${STANDARD_BEST_FIT_RUN_DIR}
+          - --campaign-root
+          - ${ROOT}
+          - --galacticus-executable
+          - ${BEST_FIT_GALACTICUS_EXECUTABLE}
+          - --galacticus-output
+          - ${BEST_FIT_GALACTICUS_OUTPUT}
+          - --no-postprocess-emission-line-dust
+
+  - name: plot_all_standard_best_fit_with_actual
+    depends_on:
+      - run_standard_best_fit_galacticus
+    description: Plot the all-standard MCMC emulator best fit and the actual Galacticus MAP run.
+    commands:
+      - name: all-standard best-fit observables with actual Galacticus
+        argv:
+          - python
+          - scripts/plot_interactive_observables_mcmc_best_fit_overlay.py
+          - --bundle-meta
+          - ${STANDARD_META}
+          - --combined
+          - Combined=${ALL_STANDARD_MCMC_DIR}/${ALL_STANDARD_PREFIX}_best_fit_observables.csv
+          - --galacticus-hdf5
+          - ${ACTUAL_STANDARD_HDF5}
+          - --galacticus-label
+          - Galacticus MAP
+          - --output-path
+          - ${ALL_STANDARD_MCMC_DIR}/figures/${ALL_STANDARD_PREFIX}_best_fit_observables_with_actual.png
+          - --dpi
+          - "250"
+
+  - name: plot_standard_best_fit_overlay
+    description: Plot subset and combined standard-observable best fits, optionally with the actual Galacticus MAP run.
+    commands:
+      - name: standard best-fit observables overlay
+        argv:
+          - python
+          - scripts/plot_interactive_observables_mcmc_best_fit_overlay.py
+          - --bundle-meta
+          - ${STANDARD_META}
+          - --combined
+          - Combined=${ALL_STANDARD_MCMC_DIR}/${ALL_STANDARD_PREFIX}_best_fit_observables.csv
+          - --subset
+          - SMF z0+z3=${SMF_MCMC_DIR}/${SMF_PREFIX}_best_fit_observables.csv
+          - --subset
+          - SFRF=${SFRF_MCMC_DIR}/${SFRF_PREFIX}_best_fit_observables.csv
+          - --subset
+          - Sizes=${SIZE_MCMC_DIR}/${SIZE_PREFIX}_best_fit_observables.csv
+          - --subset
+          - Morphologies=${MOFFETT_MCMC_DIR}/${MOFFETT_PREFIX}_best_fit_observables.csv
+          - --subset
+          - BH M-sigma=${BH_MSIGMA_MCMC_DIR}/${BH_MSIGMA_PREFIX}_best_fit_observables.csv
+          - --subset
+          - MZR=${MZR_MCMC_DIR}/${MZR_PREFIX}_best_fit_observables.csv
+          - --subset
+          - SMF+SFRF+Sizes+Morphologies=${STANDARD_SUBSET_MCMC_DIR}/${STANDARD_SUBSET_PREFIX}_best_fit_observables.csv
+          - --galacticus-hdf5
+          - ${ACTUAL_STANDARD_HDF5}
+          - --galacticus-label
+          - Galacticus MAP
+          - --output-path
+          - ${ALL_STANDARD_MCMC_DIR}/figures/mcmc_subset_best_fits_on_all_observables.png
+          - --dpi
+          - "250"
+
+  - name: train_halpha_emulator
+    description: Build the H-alpha Sobral sidecar LF emulator using HALPHA_DUST_DRAW_ARGS.
+    commands:
+      - name: train H-alpha LF bundle
+        argv:
+          - python
+          - scripts/train_sidecar_lf_observables_demo.py
+          - ${ROOT}
+          - --sidecar-dir
+          - emission_line_dust
+          - --table-filename
+          - emission_line_dust_lf_emulator_table.csv
+          - --long-filename
+          - emission_line_dust_lf_long.csv
+          - --observable
+          - ${HALPHA_OBSERVABLE}
+          - --sample-label
+          - Z1
+          - --sample-label
+          - Z2
+          - --sample-label
+          - Z3
+          - --sample-label
+          - Z4
+          - ${HALPHA_DUST_DRAW_ARGS}
+          - --pca-variance-threshold
+          - ${SIDECAR_LF_PCA_VARIANCE_THRESHOLD}
+          - --n-restarts-optimizer
+          - "4"
+          - --use-training-alpha
+          - --output-path
+          - ${HALPHA_BUNDLE}
+
+  - name: run_halpha_and_combined_mcmcs
+    depends_on:
+      - train_standard_emulators
+      - train_halpha_emulator
+    description: Run the H-alpha-only MCMC and the exploratory all-standard plus H-alpha MCMC.
+    commands:
+      - name: H-alpha only
+        argv:
+          - python
+          - scripts/run_sidecar_lf_observables_mcmc.py
+          - ${HALPHA_BUNDLE}
+          - --observable
+          - ${HALPHA_OBSERVABLE}
+          - --mcmc-dir
+          - ${HALPHA_MCMC_ROOT}
+          - --output-prefix
+          - ${HALPHA_PREFIX}
+          - ${MCMC_LF_COMMON}
+          - ${MCMC_MOVE_ARGS}
+          - ${MCMC_SAMPLER_COORDINATE_ARGS}
+      - name: all standard plus H-alpha exploratory
+        argv:
+          - python
+          - scripts/run_standard_sidecar_lf_observables_mcmc.py
+          - ${STANDARD_BUNDLE}
+          - ${HALPHA_BUNDLE}
+          - --standard-observable
+          - smf_z0
+          - --standard-observable
+          - smf_z3
+          - --standard-observable
+          - sfr_function_robotham2011
+          - --standard-observable
+          - size_mass_vdw2014_star_forming_z0
+          - --standard-observable
+          - size_mass_vdw2014_quiescent_z0
+          - --standard-observable
+          - morphological_fraction_gama_moffett2016
+          - --standard-observable
+          - bh_velocity_dispersion
+          - --standard-observable
+          - mzr_blanc2019
+          - --sidecar-observable
+          - ${HALPHA_OBSERVABLE}
+          - --mcmc-dir
+          - ${EXPLORATORY_COMBINED_MCMC_ROOT}
+          - --output-prefix
+          - ${COMBINED_PREFIX}
+          - ${MCMC_LF_COMMON}
+          - ${MCMC_MOVE_ARGS}
+          - ${MCMC_SAMPLER_COORDINATE_ARGS}
+
+  - name: run_mcmc_halpha
+    depends_on:
+      - train_halpha_emulator
+    description: Run the H-alpha-only sidecar LF MCMC.
+    commands:
+      - name: H-alpha only
+        argv:
+          - python
+          - scripts/run_sidecar_lf_observables_mcmc.py
+          - ${HALPHA_BUNDLE}
+          - --observable
+          - ${HALPHA_OBSERVABLE}
+          - --mcmc-dir
+          - ${HALPHA_MCMC_ROOT}
+          - --output-prefix
+          - ${HALPHA_PREFIX}
+          - ${MCMC_LF_EXPLORATORY}
+          - ${MCMC_MOVE_ARGS}
+          - ${MCMC_SAMPLER_COORDINATE_ARGS}
+
+  - name: run_mcmc_all_standard_plus_halpha_exploratory
+    depends_on:
+      - train_standard_emulators
+      - train_halpha_emulator
+    slurm:
+      time: "144:00:00"
+    description: Run the exploratory all-standard plus H-alpha sidecar LF MCMC from a broad prior-centred initialization.
+    commands:
+      - name: all standard plus H-alpha exploratory
+        argv:
+          - python
+          - scripts/run_standard_sidecar_lf_observables_mcmc.py
+          - ${STANDARD_BUNDLE}
+          - ${HALPHA_BUNDLE}
+          - --standard-observable
+          - smf_z0
+          - --standard-observable
+          - smf_z3
+          - --standard-observable
+          - sfr_function_robotham2011
+          - --standard-observable
+          - size_mass_vdw2014_star_forming_z0
+          - --standard-observable
+          - size_mass_vdw2014_quiescent_z0
+          - --standard-observable
+          - morphological_fraction_gama_moffett2016
+          - --standard-observable
+          - bh_velocity_dispersion
+          - --standard-observable
+          - mzr_blanc2019
+          - --sidecar-observable
+          - ${HALPHA_OBSERVABLE}
+          - --mcmc-dir
+          - ${EXPLORATORY_COMBINED_MCMC_ROOT}
+          - --output-prefix
+          - ${COMBINED_PREFIX}
+          - ${MCMC_LF_EXPLORATORY}
+          - ${MCMC_MOVE_ARGS}
+          - ${MCMC_SAMPLER_COORDINATE_ARGS}
+
+  - name: run_mcmc_all_standard_plus_halpha
+    depends_on:
+      - train_standard_emulators
+      - train_halpha_emulator
+      - run_mcmc_all_standard_plus_halpha_exploratory
+    slurm:
+      time: "144:00:00"
+    description: Run the production all-standard plus H-alpha sidecar LF MCMC initialized around the exploratory joint MAP.
+    commands:
+      - name: all standard plus H-alpha production from exploratory MAP
+        argv:
+          - python
+          - scripts/run_standard_sidecar_lf_observables_mcmc.py
+          - ${STANDARD_BUNDLE}
+          - ${HALPHA_BUNDLE}
+          - --standard-observable
+          - smf_z0
+          - --standard-observable
+          - smf_z3
+          - --standard-observable
+          - sfr_function_robotham2011
+          - --standard-observable
+          - size_mass_vdw2014_star_forming_z0
+          - --standard-observable
+          - size_mass_vdw2014_quiescent_z0
+          - --standard-observable
+          - morphological_fraction_gama_moffett2016
+          - --standard-observable
+          - bh_velocity_dispersion
+          - --standard-observable
+          - mzr_blanc2019
+          - --sidecar-observable
+          - ${HALPHA_OBSERVABLE}
+          - --mcmc-dir
+          - ${COMBINED_MCMC_ROOT}
+          - --output-prefix
+          - ${COMBINED_PREFIX}
+          - ${MCMC_LF_PRODUCTION}
+          - ${MCMC_MOVE_ARGS}
+          - ${MCMC_SAMPLER_COORDINATE_ARGS}
+          - ${COMBINED_PRODUCTION_INIT_ARGS}
+
+  - name: plot_halpha_standard_corner
+    depends_on:
+      - run_mcmc_halpha
+      - run_mcmc_all_standard
+      - run_mcmc_all_standard_plus_halpha
+    description: Overlay H-alpha-only, standard-only, and combined posterior samples.
+    commands:
+      - name: H-alpha plus standard getDist overlay
+        argv:
+          - python
+          - scripts/plot_observable_mcmc_overlay_getdist.py
+          - --posterior
+          - H-alpha=${HALPHA_MCMC_ROOT}/${HALPHA_PREFIX}_mcmc_results.hdf5
+          - --posterior
+          - Standard=${ALL_STANDARD_MCMC_DIR}/${ALL_STANDARD_PREFIX}_mcmc_results.hdf5
+          - --posterior
+          - Combined=${COMBINED_MCMC_ROOT}/${COMBINED_PREFIX}_mcmc_results.hdf5
+          - --output-path
+          - ${COMBINED_MCMC_ROOT}/mcmc_getdist_overlay.png
+          - --parameter-set
+          - auto
+          - --filled
+          - --dpi
+          - "300"
+          - --marker-summary
+          - ${COMBINED_MCMC_ROOT}/${COMBINED_PREFIX}_mcmc_results.hdf5
+
+  - name: plot_standard_plus_halpha_corner
+    depends_on:
+      - run_mcmc_all_standard
+      - run_mcmc_all_standard_plus_halpha
+    description: Overlay the all-standard and all-standard plus H-alpha posterior samples.
+    commands:
+      - name: standard plus H-alpha getDist overlay
+        argv:
+          - python
+          - scripts/plot_observable_mcmc_overlay_getdist.py
+          - --posterior
+          - Standard=${ALL_STANDARD_MCMC_DIR}/${ALL_STANDARD_PREFIX}_mcmc_results.hdf5
+          - --posterior
+          - Combined=${COMBINED_MCMC_ROOT}/${COMBINED_PREFIX}_mcmc_results.hdf5
+          - --output-path
+          - ${COMBINED_MCMC_ROOT}/mcmc_standard_plus_halpha_getdist_overlay.png
+          - --parameter-set
+          - auto
+          - --filled
+          - --dpi
+          - "300"
+          - --marker-summary
+          - ${COMBINED_MCMC_ROOT}/${COMBINED_PREFIX}_mcmc_results.hdf5
+
+  - name: rerun_combined_best_fit_galacticus
+    manual: true
+    description: Manual HPC step to run Galacticus at the all-standard plus H-alpha MAP point.
+    notes: |
+      Run Galacticus with ${COMBINED_MCMC_ROOT}/maximum_a_posteriori_model_changes.xml
+      on the HPC, reduce the resulting HDF5 file and copy it back to
+      ${ACTUAL_COMBINED_HDF5}. Also copy the HPC-generated emission_line_dust
+      sidecar directory back to ${ACTUAL_COMBINED_SIDECAR_DIR}, or override
+      ACTUAL_COMBINED_HDF5 / ACTUAL_COMBINED_SIDECAR_DIR when plotting.
+
+  - name: run_combined_best_fit_galacticus
+    depends_on:
+      - run_mcmc_all_standard_plus_halpha
+    slurm:
+      cpus_per_task: "16"
+      mem_per_cpu: 8G
+      time: "144:00:00"
+    description: Run Galacticus at the all-standard plus H-alpha MAP point in bestFitModel_GalacticusRun.
+    commands:
+      - name: all-standard plus H-alpha MAP Galacticus run
+        argv:
+          - python
+          - scripts/run_best_fit_galacticus_model.py
+          - --mcmc-dir
+          - ${COMBINED_MCMC_ROOT}
+          - --output-dir
+          - ${COMBINED_BEST_FIT_RUN_DIR}
+          - --campaign-root
+          - ${ROOT}
+          - --galacticus-executable
+          - ${BEST_FIT_GALACTICUS_EXECUTABLE}
+          - --galacticus-output
+          - ${BEST_FIT_GALACTICUS_OUTPUT}
+          - --postprocess-emission-line-dust
+
+  - name: export_combined_posterior_draw_xmls
+    description: Export changes.xml-style files for random posterior draws from the combined MCMC.
+    commands:
+      - name: posterior draw model changes
+        argv:
+          - python
+          - scripts/export_posterior_draw_model_changes.py
+          - --posterior-samples
+          - ${COMBINED_MCMC_ROOT}/${COMBINED_PREFIX}_mcmc_results.hdf5
+          - --run-summary
+          - ${COMBINED_MCMC_ROOT}/${COMBINED_PREFIX}_mcmc_results.hdf5
+          - --output-dir
+          - ${POSTERIOR_DRAW_XML_DIR}
+          - --n-draws
+          - ${POSTERIOR_DRAW_COUNT}
+          - --seed
+          - ${POSTERIOR_DRAW_SEED}
+          - --include-map
+
+  - name: plot_combined_best_fit_with_actual
+    depends_on:
+      - run_combined_best_fit_galacticus
+    description: Plot combined-MCMC emulator predictions and the actual Galacticus MAP run.
+    commands:
+      - name: standard and H-alpha actual-Galacticus overlays
+        argv:
+          - python
+          - scripts/plot_standard_sidecar_lf_mcmc_best_fit_with_actual.py
+          - --standard-bundle-meta
+          - ${STANDARD_META}
+          - --standard-predictions
+          - ${COMBINED_MCMC_ROOT}/${COMBINED_PREFIX}_best_fit_standard_observables.csv
+          - --sidecar-predictions
+          - ${COMBINED_MCMC_ROOT}/${COMBINED_PREFIX}_best_fit_sidecar_lfs.csv
+          - --run-summary
+          - ${COMBINED_MCMC_ROOT}/${COMBINED_PREFIX}_run_summary.json
+          - --actual-hdf5
+          - ${ACTUAL_COMBINED_HDF5}
+          - --actual-sidecar-dir
+          - ${ACTUAL_COMBINED_SIDECAR_DIR}
+          - --actual-sidecar-case
+          - map_dust
+          - --actual-label
+          - Galacticus MAP
+          - --standard-output-path
+          - ${COMBINED_MCMC_ROOT}/figures/${COMBINED_PREFIX}_best_fit_standard_observables_with_actual.png
+          - --sidecar-output-path
+          - ${COMBINED_MCMC_ROOT}/figures/${COMBINED_PREFIX}_best_fit_sidecar_lfs_with_actual.png
+          - --dpi
+          - "250"
+
+  - name: plot_actual_emission_line_lfs
+    description: Plot EPS and UNIT actual-Galacticus MAP emission-line LF sidecars against target data.
+    commands:
+      - name: EPS vs UNIT actual emission-line LFs
+        argv:
+          - python
+          - scripts/plot_actual_emission_line_sidecars.py
+          - --sidecar
+          - EPS Galacticus MAP=${ACTUAL_COMBINED_SIDECAR_DIR}
+          - --sidecar
+          - UNIT Galacticus MAP=${ACTUAL_COMBINED_UNIT_SIDECAR_DIR}
+          - --dust-case
+          - map_dust
+          - --halpha-target-hdf5
+          - ${ACTUAL_COMBINED_HDF5}
+          - --output-dir
+          - ${ACTUAL_EMISSION_LINE_FIGURE_DIR}
+          - --output-prefix
+          - actual_map_eps_vs_unit
+          - --dpi
+          - "250"
