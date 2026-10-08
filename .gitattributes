@@ -1,0 +1,2 @@
+# Preserve the frozen CSV bytes used by the campaign's SHA-256 provenance check.
+runs/campaigns/equilibriumSizesEnergy/design_1024.csv -text whitespace=cr-at-eol

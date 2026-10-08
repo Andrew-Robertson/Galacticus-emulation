@@ -23,6 +23,14 @@ data/manifests/*.json
 data/summaries/*.json
 runs/*
 !runs/.gitkeep
+# Track only the frozen definition, master design, and documentation of this family.
+!runs/campaigns/
+runs/campaigns/*
+!runs/campaigns/equilibriumSizesEnergy/
+runs/campaigns/equilibriumSizesEnergy/*
+!runs/campaigns/equilibriumSizesEnergy/README.md
+!runs/campaigns/equilibriumSizesEnergy/family_definition.json
+!runs/campaigns/equilibriumSizesEnergy/design_1024.csv
 *.hdf5
 .mplconfig/
 build/

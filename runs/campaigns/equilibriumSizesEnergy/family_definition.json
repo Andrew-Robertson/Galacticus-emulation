@@ -1,0 +1,308 @@
+{
+  "schema_version": 1,
+  "family": "equilibriumSizesEnergy",
+  "seed": 42,
+  "master_size": 1024,
+  "ndim": 21,
+  "free_parameters": [
+    {
+      "short_name": "diskVelocityCharacteristic",
+      "path": "nodeOperator/nodeOperator[@value='stellarFeedbackDisks']/stellarFeedbackOutflows/stellarFeedbackOutflows/velocityCharacteristic",
+      "prior": {
+        "class": "TruncatedLogNormalPrior",
+        "parameters": {
+          "lower": 25.0,
+          "upper": 300.0,
+          "x0": 150.0,
+          "sigma": 0.5
+        }
+      }
+    },
+    {
+      "short_name": "diskExponent",
+      "path": "nodeOperator/nodeOperator[@value='stellarFeedbackDisks']/stellarFeedbackOutflows/stellarFeedbackOutflows/exponent",
+      "prior": {
+        "class": "UniformPrior",
+        "parameters": {
+          "lower": 0.0,
+          "upper": 4.0
+        }
+      }
+    },
+    {
+      "short_name": "coolingMultiplier",
+      "path": "coolingRate/multiplier",
+      "prior": {
+        "class": "TruncatedLogNormalPrior",
+        "parameters": {
+          "lower": 0.05,
+          "upper": 1.2,
+          "x0": 0.5,
+          "sigma": 1.0
+        }
+      }
+    },
+    {
+      "short_name": "BHefficiencyRadioMode",
+      "path": "blackHoleCGMHeating/efficiencyRadioMode",
+      "prior": {
+        "class": "TruncatedLogNormalPrior",
+        "parameters": {
+          "lower": 0.03,
+          "upper": 1.0,
+          "x0": 0.3,
+          "sigma": 0.5
+        }
+      }
+    },
+    {
+      "short_name": "spheroidSFREfficiency",
+      "path": "starFormationRateSpheroids/starFormationTimescale/efficiency",
+      "prior": {
+        "class": "TruncatedLogNormalPrior",
+        "parameters": {
+          "lower": 0.0001,
+          "upper": 1.0,
+          "x0": 0.01,
+          "sigma": 4.0
+        }
+      }
+    },
+    {
+      "short_name": "diskSFRFrequencyNorm",
+      "path": "starFormationRateSurfaceDensityDisks/starFormationFrequencyNormalization",
+      "prior": {
+        "class": "TruncatedLogNormalPrior",
+        "parameters": {
+          "lower": 1e-10,
+          "upper": 1e-08,
+          "x0": 1e-09,
+          "sigma": 2.0
+        }
+      }
+    },
+    {
+      "short_name": "blackHoleSeedMass",
+      "path": "nodeOperator/nodeOperator[@value='blackHolesSeed']/blackHoleSeeds/mass",
+      "prior": {
+        "class": "TruncatedLogNormalPrior",
+        "parameters": {
+          "lower": 100.0,
+          "upper": 100000.0,
+          "x0": 3000.0,
+          "sigma": 4.0
+        }
+      }
+    },
+    {
+      "short_name": "spheroidVelocityCharacteristic",
+      "path": "nodeOperator/nodeOperator[@value='stellarFeedbackSpheroids']/stellarFeedbackOutflows/stellarFeedbackOutflows/velocityCharacteristic",
+      "prior": {
+        "class": "TruncatedLogNormalPrior",
+        "parameters": {
+          "lower": 10.0,
+          "upper": 150.0,
+          "x0": 50.0,
+          "sigma": 1.0
+        }
+      }
+    },
+    {
+      "short_name": "henriquesGamma",
+      "path": "hotHaloOutflowReincorporation/gamma",
+      "prior": {
+        "class": "TruncatedLogNormalPrior",
+        "parameters": {
+          "lower": 1.0,
+          "upper": 25.0,
+          "x0": 5.0,
+          "sigma": 0.5
+        }
+      }
+    },
+    {
+      "short_name": "henriquesDelta1",
+      "path": "hotHaloOutflowReincorporation/delta1",
+      "prior": {
+        "class": "UniformPrior",
+        "parameters": {
+          "lower": -2.0,
+          "upper": 4.0
+        }
+      }
+    },
+    {
+      "short_name": "henriquesDelta2",
+      "path": "hotHaloOutflowReincorporation/delta2",
+      "prior": {
+        "class": "UniformPrior",
+        "parameters": {
+          "lower": -1.0,
+          "upper": 5.0
+        }
+      }
+    },
+    {
+      "short_name": "massRatioMajorMerger",
+      "path": "mergerMassMovements/massRatioMajorMerger",
+      "prior": {
+        "class": "TruncatedLogNormalPrior",
+        "parameters": {
+          "lower": 0.1,
+          "upper": 0.5,
+          "x0": 0.25,
+          "sigma": 0.5
+        }
+      }
+    },
+    {
+      "short_name": "energyOrbital",
+      "path": "mergerRemnantSize/energyOrbital",
+      "prior": {
+        "class": "TruncatedLogNormalPrior",
+        "parameters": {
+          "lower": 0.25,
+          "upper": 4.0,
+          "x0": 1.0,
+          "sigma": 0.5
+        }
+      }
+    },
+    {
+      "short_name": "bondiEnhancementSpheroid",
+      "path": "blackHoleAccretionRate/bondiHoyleAccretionEnhancementSpheroid",
+      "prior": {
+        "class": "TruncatedLogNormalPrior",
+        "parameters": {
+          "lower": 0.05,
+          "upper": 100.0,
+          "x0": 5.0,
+          "sigma": 2.0
+        }
+      }
+    },
+    {
+      "short_name": "bondiEnhancementHotHalo",
+      "path": "blackHoleAccretionRate/bondiHoyleAccretionEnhancementHotHalo",
+      "prior": {
+        "class": "TruncatedLogNormalPrior",
+        "parameters": {
+          "lower": 0.05,
+          "upper": 100.0,
+          "x0": 6.0,
+          "sigma": 2.0
+        }
+      }
+    },
+    {
+      "short_name": "coreRadiusOverVirialRadius",
+      "path": "hotHaloMassDistributionCoreRadius/coreRadiusOverVirialRadius",
+      "prior": {
+        "class": "TruncatedLogNormalPrior",
+        "parameters": {
+          "lower": 0.03,
+          "upper": 1.0,
+          "x0": 0.3,
+          "sigma": 1.0
+        }
+      }
+    },
+    {
+      "short_name": "barFractionAngularMomentumRetainedDisk",
+      "path": "nodeOperator/nodeOperator[@value='barInstability']/galacticDynamicsBarInstability/fractionAngularMomentumRetainedDisk",
+      "prior": {
+        "class": "ReflectedPrior",
+        "parameters": {
+          "constant": 1.0,
+          "base": {
+            "class": "TruncatedLogNormalPrior",
+            "parameters": {
+              "lower": 0.05,
+              "upper": 0.95,
+              "x0": 0.2,
+              "sigma": 0.5
+            }
+          }
+        }
+      }
+    },
+    {
+      "short_name": "BHefficiencyWind",
+      "path": "blackHoleWind/efficiencyWind",
+      "prior": {
+        "class": "TruncatedLogNormalPrior",
+        "parameters": {
+          "lower": 0.00024,
+          "upper": 0.024,
+          "x0": 0.0024,
+          "sigma": 1.0
+        }
+      }
+    },
+    {
+      "short_name": "thinDiskMaximum",
+      "path": "accretionDisks/accretionRateThinDiskMaximum",
+      "prior": {
+        "class": "TruncatedLogNormalPrior",
+        "parameters": {
+          "lower": 0.03,
+          "upper": 30.0,
+          "x0": 3.0,
+          "sigma": 2.0
+        }
+      }
+    },
+    {
+      "short_name": "stellarPopulationMetalYield",
+      "path": "stellarPopulation/metalYield",
+      "prior": {
+        "class": "TruncatedLogNormalPrior",
+        "parameters": {
+          "lower": 0.01,
+          "upper": 0.04,
+          "x0": 0.02,
+          "sigma": 0.5
+        }
+      }
+    },
+    {
+      "short_name": "barSpheroidFormFactor",
+      "path": "nodeOperator/nodeOperator[@value='barInstability']/barInstabilitySpheroidAngularMomentum/formFactorSpheroid",
+      "prior": {
+        "class": "LogUniformPrior",
+        "parameters": {
+          "lower": 0.25,
+          "upper": 1.0
+        }
+      }
+    }
+  ],
+  "source_campaign": "sobol_1024_20p_simpleSizes_moreHalos",
+  "source_design_sha256": "e5169c3fea366a5960362ba94b6079b6a22c29b815112793036446964b486f8d",
+  "design_sha256": "1c5d95e1e33588d9d0aa4240af8711e9d6f6fa12cd2f43c89311c768c801c58c",
+  "generation_versions": {
+    "numpy": "2.3.5",
+    "scipy": "1.17.1"
+  },
+  "fixed": {
+    "galacticStructureSolver": "equilibrium",
+    "bar_model": "bindingEnergy",
+    "fractionAngularMomentumRetainedSpheroid": 1.0,
+    "formFactorDisk": 0.5,
+    "interactionEnergyFactor": 1.0,
+    "transition": [
+      0.003,
+      0.01
+    ],
+    "finiteDifferenceStepRelative": 0.01,
+    "angularMomentumSpecificGrowthFromAccretionRate": false,
+    "Blitz2006PressureCharacteristic_K_cm3": 35000.0,
+    "Blitz2006PressureExponent": 0.92
+  },
+  "notes": [
+    "New 21-dimensional design, not the same points as the old 20-dimensional Sobol design.",
+    "Pilot and production use exact prefixes of the stored master table.",
+    "Disk prior is the full reflected old spheroid prior, not merely the same bounds.",
+    "c_s range is an exploratory modelling prior, not an observational constraint."
+  ]
+}
