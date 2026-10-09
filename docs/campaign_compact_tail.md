@@ -4,6 +4,9 @@
 from full Galacticus catalogs. It reads one run and one snapshot at a time,
 never modifies the catalogs, and uses dendros when available. The h5py fallback
 uses the same raw fields and explicitly checks completion, units and weights.
+Both modern compound `units` attributes and older scalar `unitsInSI` attributes
+are supported. Neither format requires guessing the mass or radius units.
+Missing or invalid SI conversion factors still cause a catalog to be rejected.
 Dependencies are numpy, h5py and matplotlib, already in the emulator environment.
 
 ## Definition

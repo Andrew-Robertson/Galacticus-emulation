@@ -73,13 +73,31 @@ def expand_weights(output, n):
 
 
 def unit_factor(dataset, expected_si):
-    """Galacticus units metadata: SI scale, descriptive name, unit name, h power."""
-    if 'units' not in dataset.attrs:
+    """Read modern compound or legacy scalar SI units; require physical units."""
+    if 'units' in dataset.attrs:
+        unit = np.asarray(dataset.attrs['units'])
+        if unit.dtype.names:
+            if unit.size != 1:
+                raise ValueError(f'Unsupported units metadata: {dataset.name}')
+            record = unit.reshape(-1)[0]
+            scale, comoving = record[0], record[3]
+        else:
+            if unit.shape != (4,):
+                raise ValueError(f'Unsupported units metadata: {dataset.name}')
+            scale, comoving = unit[0], unit[3]
+        if float(comoving) != 0:
+            raise ValueError(f'Unsupported comoving units for {dataset.name}')
+    elif 'unitsInSI' in dataset.attrs:
+        # Older standard snapshot outputters store physical SI scales separately.
+        scale = np.asarray(dataset.attrs['unitsInSI'])
+        if scale.size != 1:
+            raise ValueError(f'Unsupported units metadata: {dataset.name}')
+        scale = scale.item()
+        if float(dataset.attrs.get('isComoving', 0)) != 0:
+            raise ValueError(f'Unsupported comoving units for {dataset.name}')
+    else:
         raise ValueError(f'Missing units metadata: {dataset.name}')
-    unit = dataset.attrs['units']
-    if len(unit) != 4 or float(unit[3]) != 0:
-        raise ValueError(f'Unsupported units/h scaling for {dataset.name}: {unit}')
-    factor = float(unit[0]) / expected_si
+    factor = float(scale) / expected_si
     if not np.isfinite(factor) or factor <= 0:
         raise ValueError(f'Invalid unit scale for {dataset.name}')
     return factor

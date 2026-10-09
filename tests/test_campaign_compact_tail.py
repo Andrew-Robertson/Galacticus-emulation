@@ -72,9 +72,10 @@ def test_reduced_and_failed_catalogs_are_rejected(tmp_path):
         tail.read_catalog(p,reader='h5py')
 
 
-def test_snapshot_selection_and_conversion(tmp_path):
+@pytest.mark.parametrize('legacy', [False, True])
+def test_snapshot_selection_and_conversion(tmp_path, legacy):
     p = tmp_path/'catalog.hdf5'
-    unit_type = [('scale','f8'),('description','S16'),('unit','S16'),('h','i4')]
+    unit_type = [('unitsInSI','f8'),('description','S16'),('quantity','S16'),('isComoving','i4')]
     with h5py.File(p,'w') as f:
         f.attrs['statusCompletion'] = 0
         for name, a in [('Output2',.5),('Output1',1.)]:
@@ -87,7 +88,11 @@ def test_snapshot_selection_and_conversion(tmp_path):
             for key in ['spheroidMassStellar','diskMassStellar','spheroidRadius']:
                 radius = key == 'spheroidRadius'
                 d = g.create_dataset('nodeData/'+key,data=np.full(4,.001 if radius else 1e9))
-                d.attrs['units'] = np.array((3.08567758135e22 if radius else 1.98892e30,b'',b'',0),dtype=unit_type)
+                scale = 3.08567758135e22 if radius else 1.98892e30
+                if legacy:
+                    d.attrs['unitsInSI'] = scale
+                else:
+                    d.attrs['units'] = np.array((scale,b'',b'',0),dtype=unit_type)
     data,meta = tail.read_catalog(p,reader='h5py')
     assert meta['output'] == 'Output1' and meta['redshift'] == 0
     np.testing.assert_allclose(data['spheroidRadius'],1.)
@@ -96,14 +101,31 @@ def test_snapshot_selection_and_conversion(tmp_path):
         tail.read_catalog(p,redshift=3,reader='h5py')
 
 
-def test_units_require_explicit_scale_and_no_little_h():
+def test_units_require_explicit_scale_and_physical_coordinates():
     class Dataset:
         name = 'radius'
         attrs = {'units': (3.08567758135e22,b'Mpc',b'Mpc',0)}
     assert tail.unit_factor(Dataset(),3.08567758135e19) == pytest.approx(1000.)
-    Dataset.attrs['units'] = (3.08567758135e22,b'Mpc/h',b'Mpc',-1)
-    with pytest.raises(ValueError,match='h scaling'):
+    Dataset.attrs['units'] = (3.08567758135e22,b'Mpc',b'Mpc',1)
+    with pytest.raises(ValueError,match='comoving'):
         tail.unit_factor(Dataset(),3.08567758135e19)
+
+
+@pytest.mark.parametrize('scale', [0., -1., float('nan'), float('inf')])
+def test_invalid_legacy_unit_scale(scale):
+    class Dataset:
+        name = 'radius'
+        attrs = {'unitsInSI': scale}
+    with pytest.raises(ValueError, match='Invalid unit scale'):
+        tail.unit_factor(Dataset(), 1.)
+
+
+def test_missing_units_still_rejected():
+    class Dataset:
+        name = 'radius'
+        attrs = {}
+    with pytest.raises(ValueError, match='Missing units'):
+        tail.unit_factor(Dataset(), 1.)
 
 
 def test_sigma_diagnostic_excludes_compact_not_missing_residuals():
