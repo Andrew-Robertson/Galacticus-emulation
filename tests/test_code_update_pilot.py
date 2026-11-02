@@ -163,3 +163,35 @@ def test_comparison_binds_unknown_revision_to_output(tmp_path):
     output.write_bytes(b'changed result')
     with pytest.raises(ValueError, match='Output changed'):
         compare.validate_revision('unknown', 'expected', directory)
+
+
+def test_blanc_covariance_correction_preserves_both_scales(tmp_path):
+    a, b = tmp_path/'a.h5', tmp_path/'b.h5'
+    for path, values, variances in [(a, [8., 8.], [0.000025, 0.]),
+                                    (b, [8.065, 8.07], [0.004225, 0.0049])]:
+        make_output(path, values, logarithmic=False)
+        with h5py.File(path, 'r+') as f:
+            f.move('analyses/test', 'analyses/massMetallicityBlanc2019')
+            f['analyses/massMetallicityBlanc2019/cov'][...] = np.diag(variances)
+    with h5py.File(a) as old, h5py.File(b) as new:
+        rows = compare.direct_rows(old, new, 'model')
+    np.testing.assert_allclose([r['delta_over_updated_sigma'] for r in rows], [1., 1.])
+    assert rows[0]['delta_over_historical_sigma'] == pytest.approx(13.)
+    assert np.isnan(rows[1]['delta_over_historical_sigma'])
+    assert all(r['target_covariance_changed'] for r in rows)
+    with h5py.File(b, 'r+') as f:
+        f['analyses/massMetallicityBlanc2019/cov'][0, 1] = 0.001
+    with h5py.File(a) as old, h5py.File(b) as new:
+        with pytest.raises(AssertionError):
+            compare.direct_rows(old, new, 'model')
+
+
+def test_unreviewed_covariance_change_is_rejected(tmp_path):
+    a, b = tmp_path/'a.h5', tmp_path/'b.h5'
+    make_output(a, [1., 2.])
+    make_output(b, [1., 2.])
+    with h5py.File(b, 'r+') as f:
+        f['analyses/test/cov'][0, 0] = 5.
+    with h5py.File(a) as old, h5py.File(b) as new:
+        with pytest.raises(ValueError, match='Unreviewed'):
+            compare.direct_rows(old, new, 'model')

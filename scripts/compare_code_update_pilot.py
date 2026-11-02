@@ -66,6 +66,8 @@ def direct_rows(old, new, name):
         logarithmic = bool(a.attrs['yAxisIsLog'])
         delta = shifts(old_y, new_y, logarithmic)
         sigma = np.full(old_y.shape, np.nan)
+        new_sigma = np.full(old_y.shape, np.nan)
+        covariance_changed = False
         target = np.full(old_y.shape, np.nan)
         target_key = text(a.attrs.get('yDatasetTarget', ''))
         cov_key = text(a.attrs.get('yCovarianceTarget', ''))
@@ -74,18 +76,38 @@ def direct_rows(old, new, name):
             np.testing.assert_allclose(target, b[target_key][...], rtol=1e-12, atol=0, equal_nan=True)
         if cov_key in a:
             covariance = a[cov_key][...]
-            np.testing.assert_allclose(covariance, b[cov_key][...], rtol=1e-12, atol=0, equal_nan=True)
+            new_covariance = b[cov_key][...]
+            if covariance.shape != new_covariance.shape or covariance.shape != (len(x), len(x)):
+                raise ValueError(f'Changed covariance shape: {key}')
+            covariance_changed = not np.allclose(covariance, new_covariance, rtol=1e-12, atol=0, equal_nan=True)
+            if covariance_changed:
+                if key != 'massMetallicityBlanc2019':
+                    raise ValueError(f'Unreviewed target covariance change: {key}')
+                off_diagonal = ~np.eye(len(x), dtype=bool)
+                np.testing.assert_allclose(covariance[off_diagonal], new_covariance[off_diagonal],
+                                           rtol=1e-12, atol=0, equal_nan=True,
+                                           err_msg=f'Changed off-diagonal covariance: {key}')
+                if (not np.all(np.isfinite(np.diag(new_covariance))) or
+                    not np.all(np.diag(new_covariance) > 0) or
+                    not np.all(np.diag(new_covariance) >= np.diag(covariance))):
+                    raise ValueError(f'Unexpected Blanc variance change: {key}')
             with np.errstate(invalid='ignore'):
                 sigma = np.sqrt(np.diag(covariance))
+                new_sigma = np.sqrt(np.diag(new_covariance))
         # Native-space shift / historical observational sigma, not a likelihood change.
         ratio = np.divide(new_y-old_y, sigma, out=np.full(old_y.shape, np.nan),
                           where=np.isfinite(sigma) & (sigma > 0))
+        new_ratio = np.divide(new_y-old_y, new_sigma, out=np.full(old_y.shape, np.nan),
+                              where=np.isfinite(new_sigma) & (new_sigma > 0))
         for i in range(len(x)):
             result.append(dict(evaluation_id=name, observable=key, bin_index=i, x=float(x[i]),
                 old=float(old_y[i]), new=float(new_y[i]), shift=float(delta[i]),
                 shift_units='dex' if logarithmic else 'native_y',
                 delta_over_observational_sigma=float(ratio[i]), target=float(target[i]),
                 target_sigma=float(sigma[i]),
+                historical_target_sigma=float(sigma[i]), updated_target_sigma=float(new_sigma[i]),
+                delta_over_historical_sigma=float(ratio[i]), delta_over_updated_sigma=float(new_ratio[i]),
+                target_covariance_changed=covariance_changed,
                 status='valid' if np.isfinite(delta[i]) else 'nonpositive_or_nonfinite'))
     return result
 
@@ -166,6 +188,11 @@ def main():
             status.append(dict(evaluation_id=name, status='comparison_failed', detail=str(exc)))
     write_csv(args.output/'evaluation_status.csv', status)
     write_csv(args.output/'direct_observable_shifts.csv', direct)
+    uncertainty_fields = ['evaluation_id', 'observable', 'bin_index', 'x',
+                          'historical_target_sigma', 'updated_target_sigma',
+                          'delta_over_historical_sigma', 'delta_over_updated_sigma']
+    write_csv(args.output/'target_uncertainty_changes.csv',
+              [{k: row[k] for k in uncertainty_fields} for row in direct if row['target_covariance_changed']])
     write_csv(args.output/'dust_lf_shifts.csv', dust)
     summary = []
     for family, rows in [('direct',direct), ('dust',dust)]:
@@ -189,6 +216,11 @@ def main():
         'already-logarithmic relations retain native units. Zero/negative/nonfinite values\n'
         'remain in detailed tables and are counted as invalid, not silently floored.\n'
         'Observational-sigma ratios use native-space diagonal target covariance only;\n'
+        'Historical and updated sigma ratios are both reported. Legacy target_sigma and\n'
+        'delta_over_observational_sigma columns retain the historical convention. Zero\n'
+        'historical variance yields NaN, with no artificial floor. The reviewed Blanc2019\n'
+        'diagonal covariance correction (PR #1590) is allowed and reported separately;\n'
+        'other covariance changes, changed target means, and changed grids are rejected.\n'
         'they are not the paper likelihood and do not include model or emulator errors.\n'
         'Relation bins with sentinel zeros need their original calibration masks applied.\n'
         'Dust summaries include all 16 matched draws, not independent galaxy evaluations.\n'

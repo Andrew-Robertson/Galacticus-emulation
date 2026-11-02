@@ -1,5 +1,15 @@
 # Caltech pilot: 64 historical models with updated Galacticus
 
+The comparison now permits the reviewed Blanc2019 diagonal target-covariance
+correction from Galacticus PR #1590. It reports historical and updated target
+sigmas and prediction shifts divided by each; these are diagnostics, not the
+calibration likelihood. Zero historical variances give NaN without a floor.
+`target_uncertainty_changes.csv` lists the affected bins. Bin locations and
+target means must still match, other covariance changes are rejected, and
+the original simulation files are unchanged. New calibration likelihoods must
+use the corrected covariance, with their original masks and other error terms
+reviewed separately; this comparator does not modify calibration settings.
+
 ## Launcher distribution and current pilot status (2026-11-02)
 
 Pilot code is distributed on GitHub branch `codex/caltech-code-update-pilot`.
