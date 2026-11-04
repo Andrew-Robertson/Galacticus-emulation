@@ -195,3 +195,25 @@ def test_unreviewed_covariance_change_is_rejected(tmp_path):
     with h5py.File(a) as old, h5py.File(b) as new:
         with pytest.raises(ValueError, match='Unreviewed'):
             compare.direct_rows(old, new, 'model')
+
+
+def test_covariance_guard_threshold_and_patch_scope():
+    retry = load('prepare_pilot_covariance_retry')
+    source = '''outside-before
+  subroutine meanFunction1DFinalizeAnalysis(self)
+    character       (len=43                      )                                :: label
+             if (unweightedValue(j) > 0.0d0) then
+                covariance=unchanged
+  end subroutine meanFunction1DFinalizeAnalysis
+outside-after
+'''
+    patched = retry.patched_source(source)
+    assert patched.startswith('outside-before\n')
+    assert patched.endswith('outside-after\n')
+    assert 'covariance=unchanged' in patched
+    assert patched.count('COVARIANCE_WEIGHT_GUARD') == 1
+    threshold = np.sqrt(np.finfo(float).tiny)
+    with np.errstate(under='ignore'):
+        assert np.float64(1e-200)**2 == 0
+    assert 1e-200 <= threshold
+    assert not (1e-5 <= threshold)
