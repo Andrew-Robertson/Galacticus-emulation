@@ -229,6 +229,8 @@ def prepare(args):
         # The optional selector exists only on the separate energy-model branch.
         for key in ['outputFileName', 'outputScratchFileName']:
             set_child(root, key, str(dest/'galacticus.hdf5'))
+        if getattr(args, 'post_migration', None) is not None:
+            args.post_migration(root, row, specs)
         validate_parameters(root, row, specs, getattr(args, 'parameter_value_scales', None))
         write_xml(root, dest/'input.xml')
         checksums[name] = sha(dest/'input.xml')

@@ -78,6 +78,14 @@ def stage(args):
     print('Staged all 1024 inputs:', out)
 
 
+def retain_numerical_frequency_prior(root, row, specs):
+    # Verify the documented upstream conversion before deliberately overriding it.
+    pilot.validate_parameters(root, row, specs, {'diskSFRFrequencyNorm': 1.0/1.36})
+    spec = next(s for s in specs if s['short_name'] == 'diskSFRFrequencyNorm')
+    pilot.one(root, spec['path']).set('value', str(row['diskSFRFrequencyNorm']))
+    pilot.validate_parameters(root, row, specs)
+
+
 def prepare(args):
     root = args.pilot.resolve()
     inherited = json.loads((root/'inherited_environment.json').read_text())
@@ -92,26 +100,26 @@ def prepare(args):
         raise FileNotFoundError(unit)
     if json.loads((root/'pilot.json').read_text())['target_revision'] != REVISION:
         raise ValueError('This migration allowance is specific to the pinned campaign revision')
-    args.parameter_value_scales = {'diskSFRFrequencyNorm': 1.0/1.36}
+    args.post_migration = retain_numerical_frequency_prior
     pilot.prepare(args)
     config_path = root/'updated/prepared.json'
     config = json.loads(config_path.read_text())
     config['parameter_conventions'] = dict(
-        diskSFRFrequencyNorm=dict(input_scale_from_original=1.0/1.36,
+        diskSFRFrequencyNorm=dict(input_scale_from_original=1.0, upstream_migration_scale=1.0/1.36,
             migration_commit='4b5e7bf18d', physics_commit='ea6b55717d',
-            note='New frequency is per unit molecular gas including helium. Original samples.csv and emulator input coordinates retain the historical convention; migrated XML uses the upstream conversion.'))
+            note='Deliberately retain the original numerical prior under the new per-molecular-gas (including helium) definition. Upstream rescaling is checked then overridden. samples.csv, emulator inputs and final input.xml use the same original numbers; migrated.xml preserves the upstream conversion for audit.'))
     config['datasets_selection'] = inherited['datasets_selection']
     config['unit_xml_sha256'] = pilot.sha(unit)
     config['launcher_sha256'] = {name: pilot.sha(root/name) for name in ['campaign.py','prepare_code_update_pilot.py']}
     pilot.write_json(config_path, config)
     batch = root/'updated/submit.sbatch'
     text = batch.read_text().replace('galacticus-update64', 'galacticus-update1024')
-    text = text.replace('#SBATCH --array=0-63%8', '#SBATCH --array=26')
+    text = text.replace('#SBATCH --array=0-63%8', '#SBATCH --array=0-1023%128')
     text = text.replace(str(root/'pilot.py'), str(root/'campaign.py'))
     batch.write_text(text)
     pilot.verify_build(args)
-    print('Preparation complete. First submit evaluation 0026:')
-    print(f'sbatch --array=26 {batch}')
+    print('Preparation complete. Submit all 1024 models with a cap of 128:')
+    print(f"sbatch --array='0-1023%128' {batch}")
 
 
 def run(args):

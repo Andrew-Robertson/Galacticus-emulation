@@ -14,7 +14,7 @@ c = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(c)
 
 
-def test_prepare_submits_only_failed_pilot_case_and_records_dataset(tmp_path, monkeypatch):
+def test_prepare_submits_requested_full_array_and_records_dataset(tmp_path, monkeypatch):
     data = tmp_path/'datasets'
     unit = data/'static/simulations/UNIT.xml'
     unit.parent.mkdir(parents=True)
@@ -35,7 +35,7 @@ def test_prepare_submits_only_failed_pilot_case_and_records_dataset(tmp_path, mo
     monkeypatch.setattr(c.subprocess,'run',lambda *a,**k: None)
     c.prepare(SimpleNamespace(pilot=tmp_path,source=tmp_path/'source'))
     batch = (tmp_path/'updated/submit.sbatch').read_text()
-    assert '#SBATCH --array=26' in batch
+    assert '#SBATCH --array=0-1023%128' in batch
     assert str(tmp_path/'campaign.py') in batch
     assert 'update1024' in batch and 'pilot.py run' not in batch
     config = json.loads((tmp_path/'updated/prepared.json').read_text())
@@ -76,3 +76,17 @@ def test_only_documented_blitz_conversion_is_allowed():
     root.find('other').set('value','3')
     with pytest.raises(ValueError,match='other'):
         c.pilot.validate_parameters(root,row,specs,scales)
+
+
+def test_restore_original_prior_only_after_verified_migration():
+    import xml.etree.ElementTree as ET
+    old = '3.978380036836035e-9'
+    root = ET.fromstring('<parameters><galacticStructureSolver value="simple"/><frequency value="2.9252794388500254e-9"/><other value="2"/></parameters>')
+    row = {'diskSFRFrequencyNorm':old, 'other':2}
+    specs = [{'short_name':'diskSFRFrequencyNorm','path':'frequency'}, {'short_name':'other','path':'other'}]
+    c.retain_numerical_frequency_prior(root,row,specs)
+    assert root.find('frequency').get('value') == old
+    c.pilot.validate_parameters(root,row,specs)
+    # A repeated conversion/restoration must fail rather than silently hide an unexpected migration.
+    with pytest.raises(ValueError,match='diskSFRFrequencyNorm'):
+        c.retain_numerical_frequency_prior(root,row,specs)
