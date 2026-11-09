@@ -90,9 +90,16 @@ def prepare(args):
     unit = datasets/'static/simulations/UNIT.xml'
     if not unit.is_file():
         raise FileNotFoundError(unit)
+    if json.loads((root/'pilot.json').read_text())['target_revision'] != REVISION:
+        raise ValueError('This migration allowance is specific to the pinned campaign revision')
+    args.parameter_value_scales = {'diskSFRFrequencyNorm': 1.0/1.36}
     pilot.prepare(args)
     config_path = root/'updated/prepared.json'
     config = json.loads(config_path.read_text())
+    config['parameter_conventions'] = dict(
+        diskSFRFrequencyNorm=dict(input_scale_from_original=1.0/1.36,
+            migration_commit='4b5e7bf18d', physics_commit='ea6b55717d',
+            note='New frequency is per unit molecular gas including helium. Original samples.csv and emulator input coordinates retain the historical convention; migrated XML uses the upstream conversion.'))
     config['datasets_selection'] = inherited['datasets_selection']
     config['unit_xml_sha256'] = pilot.sha(unit)
     config['launcher_sha256'] = {name: pilot.sha(root/name) for name in ['campaign.py','prepare_code_update_pilot.py']}

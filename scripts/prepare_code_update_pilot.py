@@ -95,10 +95,12 @@ def set_child(root, name, value):
     node.set('value', str(value))
 
 
-def validate_parameters(root, row, specs):
+def validate_parameters(root, row, specs, value_scales=None):
+    value_scales = value_scales or {}
     for spec in specs:
         actual = float(one(root, spec['path']).get('value'))
-        if not math.isclose(actual, float(row[spec['short_name']]), rel_tol=2e-13):
+        expected = float(row[spec['short_name']]) * value_scales.get(spec['short_name'], 1.0)
+        if not math.isclose(actual, expected, rel_tol=2e-13):
             raise ValueError(f"Parameter changed: {spec['short_name']}: {actual}")
     if one(root, 'galacticStructureSolver').get('value') != 'simple':
         raise ValueError('Pilot must retain simple sizes')
@@ -227,7 +229,7 @@ def prepare(args):
         # The optional selector exists only on the separate energy-model branch.
         for key in ['outputFileName', 'outputScratchFileName']:
             set_child(root, key, str(dest/'galacticus.hdf5'))
-        validate_parameters(root, row, specs)
+        validate_parameters(root, row, specs, getattr(args, 'parameter_value_scales', None))
         write_xml(root, dest/'input.xml')
         checksums[name] = sha(dest/'input.xml')
         shutil.copy2(old/'galacticus_input_values.json', dest/'galacticus_input_values.json')

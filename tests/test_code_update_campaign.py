@@ -21,6 +21,7 @@ def test_prepare_submits_only_failed_pilot_case_and_records_dataset(tmp_path, mo
     unit.write_text('<simulation/>')
     inherited = dict(environment={'GALACTICUS_DATA_PATH':str(data)}, datasets_selection={'revision':c.DATASETS})
     (tmp_path/'inherited_environment.json').write_text(json.dumps(inherited))
+    (tmp_path/'pilot.json').write_text(json.dumps({'target_revision':c.REVISION}))
     for name in ['campaign.py','prepare_code_update_pilot.py']:
         (tmp_path/name).write_text('script')
     def prepare(args):
@@ -56,3 +57,22 @@ def test_cli_accepts_last_model(tmp_path, monkeypatch):
     monkeypatch.setattr(sys,'argv',['campaign.py','run',str(tmp_path),'1023'])
     c.main()
     assert seen == [1023]
+
+
+def test_only_documented_blitz_conversion_is_allowed():
+    import xml.etree.ElementTree as ET
+    old = 3.978380036836035e-9
+    root = ET.fromstring('<parameters><galacticStructureSolver value="simple"/><frequency value="2.9252794388500254e-9"/><other value="2"/></parameters>')
+    row = {'diskSFRFrequencyNorm':old, 'other':2}
+    specs = [{'short_name':'diskSFRFrequencyNorm','path':'frequency'}, {'short_name':'other','path':'other'}]
+    scales = {'diskSFRFrequencyNorm':1/1.36}
+    c.pilot.validate_parameters(root,row,specs,scales)
+    with pytest.raises(ValueError,match='diskSFRFrequencyNorm'):
+        c.pilot.validate_parameters(root,row,specs)
+    root.find('frequency').set('value',str(old/1.36**2))
+    with pytest.raises(ValueError,match='diskSFRFrequencyNorm'):
+        c.pilot.validate_parameters(root,row,specs,scales)
+    root.find('frequency').set('value',str(old/1.36))
+    root.find('other').set('value','3')
+    with pytest.raises(ValueError,match='other'):
+        c.pilot.validate_parameters(root,row,specs,scales)
