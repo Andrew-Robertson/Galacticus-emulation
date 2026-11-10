@@ -40,6 +40,17 @@ def check_design(source):
     return design, rows
 
 
+def original_version(path):
+    import h5py
+    with h5py.File(path, 'r') as f:
+        if f.attrs.get('statusCompletion', -1) != 0:
+            raise ValueError(f'Historical output incomplete: {path}')
+        version = {k: pilot.text(v) for k, v in f['Version'].attrs.items()}
+    if 'gitHashDatasets' not in version:
+        raise ValueError(f'Historical datasets revision missing: {path}')
+    return version
+
+
 def stage(args):
     source, out, previous = args.original.resolve(), args.pilot.resolve(), args.previous_pilot.resolve()
     if out.exists():
@@ -65,7 +76,8 @@ def stage(args):
         dst.mkdir(parents=True)
         for name_file in ['params.xml', 'galacticus_input_values.json']:
             shutil.copy2(src/name_file, dst/name_file)
-        records.append(dict(index=i, evaluation_id=name, parameters_sha256=pilot.sha(dst/'params.xml')))
+        records.append(dict(index=i, evaluation_id=name, parameters_sha256=pilot.sha(dst/'params.xml'),
+            original_version=original_version(src/'galacticus.hdf5')))
     pilot.write_json(out/'pilot.json', dict(target_revision=REVISION, required_fix_commits=fixes,
         required_pull_requests=list(pilot.REQUIRED_PRS), upstream_branch='master',
         selection='All 1024 original physical parameter vectors; no resampling',

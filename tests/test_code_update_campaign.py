@@ -90,3 +90,57 @@ def test_restore_original_prior_only_after_verified_migration():
     # A repeated conversion/restoration must fail rather than silently hide an unexpected migration.
     with pytest.raises(ValueError,match='diskSFRFrequencyNorm'):
         c.retain_numerical_frequency_prior(root,row,specs)
+
+
+def test_original_version_requires_completed_historical_output(tmp_path):
+    import h5py
+    fpath = tmp_path/'galacticus.hdf5'
+    with h5py.File(fpath,'w') as f:
+        f.attrs['statusCompletion'] = 0
+        f.create_group('Version').attrs['gitHashDatasets'] = 'historical-datasets'
+    assert c.original_version(fpath)['gitHashDatasets'] == 'historical-datasets'
+    with h5py.File(fpath,'r+') as f:
+        f.attrs['statusCompletion'] = 1
+    with pytest.raises(ValueError,match='incomplete'):
+        c.original_version(fpath)
+
+
+def test_finish_full_campaign_record_preserves_simulation(tmp_path):
+    import h5py
+    root=tmp_path
+    name='model0026'
+    dest=root/'updated/evaluations'/name
+    dest.mkdir(parents=True)
+    (dest/'input.xml').write_text('<parameters/>')
+    exe=root/'Galacticus.exe'
+    exe.write_bytes(b'executable')
+    dust_script=root/'scripts/process_emission_line_dust_evaluation.py'
+    dust_script.parent.mkdir()
+    dust_script.write_text('processor')
+    result=dest/'galacticus.hdf5'
+    with h5py.File(result,'w') as f:
+        f.attrs['statusCompletion']=0
+        v=f.create_group('Version')
+        v.attrs['gitHash']='new-code'
+        v.attrs['gitHashDatasets']='new-datasets'
+        f.create_group('Parameters/starFormationRateSurfaceDensityDisks').attrs['pressureCharacteristic']=35000.
+    before=c.pilot.sha(result)
+    config=dict(executable=str(exe),executable_sha256=c.pilot.sha(exe),
+        input_sha256={name:c.pilot.sha(dest/'input.xml')},emu_root=str(root),
+        dust_script_sha256=c.pilot.sha(dust_script),datasets_selection={'revision':'new-datasets'})
+    (root/'updated/prepared.json').write_text(json.dumps(config))
+    (root/'pilot.json').write_text(json.dumps(dict(target_revision='new-code',evaluations=[dict(
+        evaluation_id=name,original_version={'gitHashDatasets':'old-datasets'})])))
+    dust=dest/'emission_line_dust'
+    dust.mkdir()
+    (dust/'metadata.json').write_text(json.dumps(dict(evaluation_id=name,n_dust_draws=16,
+        scatter_mode='expected',z_pivot=1.,galacticus_file=str(result))))
+    (dust/'dust_draws.csv').write_text('dust_draw_index\n'+''.join(f'{i}\n' for i in range(16)))
+    for f in ['emission_line_dust_lf_long.csv','emission_line_dust_lf_emulator_table.csv','manifest.csv']:
+        (dust/f).write_text('data\n')
+    (dest/'dust.log').write_text(f'finished emission-line dust post-processing for {name}')
+    c.pilot.finish_model(SimpleNamespace(pilot=root,index=0))
+    done=json.loads((dest/'complete.json').read_text())
+    assert done['historical_datasets_revision']=='old-datasets'
+    assert done['datasets_revision']=='new-datasets'
+    assert before == c.pilot.sha(result)
