@@ -1,5 +1,12 @@
 # Equilibrium Sizes with Energy-Based Bar Spheroids
 
+**November 2026 numerical update:** use
+[the 128 + 32 precision-pilot instructions](../../../docs/energy_precision_pilot.md)
+for new runs. The commands and 1% finite-difference step below document the
+historical October pilot; its generator uses pre-merge parameter names. The new
+preparer retains this frozen physical design, uses the merged names and explicit
+tighter numerical settings, and writes a separate campaign.
+
 This campaign family tests the updated Galacticus model as a whole, then provides
 a reproducible parameter design for a future GP training campaign. It is not a
 set of one-change-at-a-time comparisons with the historical paper calibration.

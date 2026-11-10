@@ -1,0 +1,237 @@
+{
+  "schema_version": 1,
+  "master_design_sha256": "1c5d95e1e33588d9d0aa4240af8711e9d6f6fa12cd2f43c89311c768c801c58c",
+  "selection": "16 maximin points, then ODE failure, coefficient extremes, five compact-tail cases, three negative-slope cases; fill remaining slots by maximin",
+  "diagnostics": {
+    "analysis/compact_tail_z0/mass_bin_summary.csv": "74ba03287ea401cce72ec17fb2191a012f80dc6c9493bbe0035e900903400047",
+    "scratch/prior_observable_comparison/size_slopes/individual_model_slopes.csv": "59fa70e96fde286c7e1902050046538d285b75b3afb3c4b83cd635c7e6945598"
+  },
+  "records": [
+    {
+      "design_index": 0,
+      "group": "coverage",
+      "reasons": [
+        "space-filling seed"
+      ]
+    },
+    {
+      "design_index": 1,
+      "group": "coverage",
+      "reasons": [
+        "maximin distance in 21-dimensional prior-quantile coordinates"
+      ]
+    },
+    {
+      "design_index": 3,
+      "group": "coverage",
+      "reasons": [
+        "maximin distance in 21-dimensional prior-quantile coordinates"
+      ]
+    },
+    {
+      "design_index": 47,
+      "group": "coverage",
+      "reasons": [
+        "maximin distance in 21-dimensional prior-quantile coordinates"
+      ]
+    },
+    {
+      "design_index": 62,
+      "group": "coverage",
+      "reasons": [
+        "maximin distance in 21-dimensional prior-quantile coordinates"
+      ]
+    },
+    {
+      "design_index": 105,
+      "group": "coverage",
+      "reasons": [
+        "maximin distance in 21-dimensional prior-quantile coordinates",
+        "barFractionAngularMomentumRetainedDisk maximum"
+      ]
+    },
+    {
+      "design_index": 36,
+      "group": "coverage",
+      "reasons": [
+        "maximin distance in 21-dimensional prior-quantile coordinates"
+      ]
+    },
+    {
+      "design_index": 85,
+      "group": "coverage",
+      "reasons": [
+        "maximin distance in 21-dimensional prior-quantile coordinates"
+      ]
+    },
+    {
+      "design_index": 51,
+      "group": "coverage",
+      "reasons": [
+        "maximin distance in 21-dimensional prior-quantile coordinates"
+      ]
+    },
+    {
+      "design_index": 53,
+      "group": "coverage",
+      "reasons": [
+        "maximin distance in 21-dimensional prior-quantile coordinates"
+      ]
+    },
+    {
+      "design_index": 84,
+      "group": "coverage",
+      "reasons": [
+        "maximin distance in 21-dimensional prior-quantile coordinates"
+      ]
+    },
+    {
+      "design_index": 78,
+      "group": "coverage",
+      "reasons": [
+        "maximin distance in 21-dimensional prior-quantile coordinates"
+      ]
+    },
+    {
+      "design_index": 17,
+      "group": "coverage",
+      "reasons": [
+        "maximin distance in 21-dimensional prior-quantile coordinates"
+      ]
+    },
+    {
+      "design_index": 24,
+      "group": "coverage",
+      "reasons": [
+        "maximin distance in 21-dimensional prior-quantile coordinates",
+        "barFractionAngularMomentumRetainedDisk minimum"
+      ]
+    },
+    {
+      "design_index": 95,
+      "group": "coverage",
+      "reasons": [
+        "maximin distance in 21-dimensional prior-quantile coordinates"
+      ]
+    },
+    {
+      "design_index": 19,
+      "group": "coverage",
+      "reasons": [
+        "maximin distance in 21-dimensional prior-quantile coordinates"
+      ]
+    },
+    {
+      "design_index": 18,
+      "group": "targeted",
+      "reasons": [
+        "historical ODE failure"
+      ]
+    },
+    {
+      "design_index": 120,
+      "group": "targeted",
+      "reasons": [
+        "barSpheroidFormFactor minimum"
+      ]
+    },
+    {
+      "design_index": 123,
+      "group": "targeted",
+      "reasons": [
+        "barSpheroidFormFactor maximum"
+      ]
+    },
+    {
+      "design_index": 114,
+      "group": "targeted",
+      "reasons": [
+        "large compact fraction in spheroid mass bin 8.25-8.75: 0.22995105"
+      ]
+    },
+    {
+      "design_index": 70,
+      "group": "targeted",
+      "reasons": [
+        "large compact fraction in spheroid mass bin 8.25-8.75: 0.21110565"
+      ]
+    },
+    {
+      "design_index": 10,
+      "group": "targeted",
+      "reasons": [
+        "large compact fraction in spheroid mass bin 8.25-8.75: 0.12008897"
+      ]
+    },
+    {
+      "design_index": 98,
+      "group": "targeted",
+      "reasons": [
+        "large compact fraction in spheroid mass bin 8.25-8.75: 0.11339752"
+      ]
+    },
+    {
+      "design_index": 74,
+      "group": "targeted",
+      "reasons": [
+        "large compact fraction in spheroid mass bin 8.25-8.75: 0.086528757"
+      ]
+    },
+    {
+      "design_index": 86,
+      "group": "targeted",
+      "reasons": [
+        "negative star-forming size slope: minimum over three epochs -1.2702595"
+      ]
+    },
+    {
+      "design_index": 6,
+      "group": "targeted",
+      "reasons": [
+        "negative star-forming size slope: minimum over three epochs -1.0284467"
+      ]
+    },
+    {
+      "design_index": 90,
+      "group": "targeted",
+      "reasons": [
+        "negative star-forming size slope: minimum over three epochs -0.61496991"
+      ]
+    },
+    {
+      "design_index": 4,
+      "group": "targeted",
+      "reasons": [
+        "additional maximin coverage after targeted selection"
+      ]
+    },
+    {
+      "design_index": 21,
+      "group": "targeted",
+      "reasons": [
+        "additional maximin coverage after targeted selection"
+      ]
+    },
+    {
+      "design_index": 125,
+      "group": "targeted",
+      "reasons": [
+        "additional maximin coverage after targeted selection"
+      ]
+    },
+    {
+      "design_index": 99,
+      "group": "targeted",
+      "reasons": [
+        "additional maximin coverage after targeted selection"
+      ]
+    },
+    {
+      "design_index": 110,
+      "group": "targeted",
+      "reasons": [
+        "additional maximin coverage after targeted selection"
+      ]
+    }
+  ]
+}

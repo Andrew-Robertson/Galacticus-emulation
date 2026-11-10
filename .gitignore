@@ -31,6 +31,7 @@ runs/campaigns/equilibriumSizesEnergy/*
 !runs/campaigns/equilibriumSizesEnergy/README.md
 !runs/campaigns/equilibriumSizesEnergy/family_definition.json
 !runs/campaigns/equilibriumSizesEnergy/design_1024.csv
+!runs/campaigns/equilibriumSizesEnergy/precision_pilot_selection.json
 *.hdf5
 .mplconfig/
 build/
