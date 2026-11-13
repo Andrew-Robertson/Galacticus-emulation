@@ -366,7 +366,7 @@ def completion(path,revision):
     import h5py
     with h5py.File(path,'r') as f:
         if f.attrs.get('statusCompletion',-1)!=0:raise ValueError('Catalog did not complete successfully')
-        if 'Outputs' not in f or 'Analyses' not in f:raise ValueError('Missing catalogs or calibration analyses')
+        if 'Outputs' not in f or 'analyses' not in f:raise ValueError('Missing catalogs or calibration analyses')
         value=f['Version'].attrs['gitHash']
         if isinstance(value,bytes):value=value.decode()
         if str(value).strip()!=revision:raise ValueError(f'Executable was built from {value}, expected {revision}; rebuild it')

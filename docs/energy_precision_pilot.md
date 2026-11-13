@@ -182,3 +182,63 @@ python "$RUNS/pilot.py" analyze "$RUNS" --output "${RUNS}_reduced_retry"
 The original reduced output and all full catalogs are left intact. Before
 retrying an individual failed task, archive its previous output and log files;
 the runner refuses to overwrite a catalog, `RUNNING` or `SUCCESS` marker.
+
+## Recover outputs rejected by the original analysis-group check
+
+The original runner checked for an HDF5 group named `Analyses`; Galacticus writes
+`analyses`. This caused completed simulations to be recorded as failed with
+`Missing catalogs or calibration analyses`. The same capitalization error also
+occurred in the reduction script. Both checks are corrected.
+
+The survey of 117 archived finished tasks found 49 with this validation error,
+63 equilibrium-solver failures, three HDF5 cache-lock failures, and two ODE
+integration failures. All 49 validation-error logs report 1738 trees completed;
+the runner had already passed the `statusCompletion == 0` check. The other 43
+scheduled tasks were absent from that archive, so the census does not establish
+their final states.
+
+Use the updated repository scripts without editing the campaign's frozen runner:
+
+```bash
+cd /home/arobertson/Galacticus/Galacticus-emulation
+git pull --ff-only origin main
+conda activate galacticemu
+ROOT=/carnegie/nobackup/users/arobertson/Galacticus/Galacticus-emulation/equilibriumSizesEnergy/pilot_128_precision
+
+# Read-only validation of catalog contents and provenance; writes a small audit report.
+python scripts/revalidate_energy_precision_pilot.py "$ROOT"
+
+# Recover only candidates that pass every validation check.
+python scripts/revalidate_energy_precision_pilot.py "$ROOT" --recover
+```
+
+Recovery checks the original snapshot checksum, task manifest and family
+checksum, input XML checksum, processed physical/numerical parameters,
+`statusCompletion`, embedded executable revision and nonempty `Outputs` and
+`analyses` groups. It touches only runs with the specific historical check error,
+skipping running tasks and other failures. Each recovered run retains its original
+status in `run_status_before_validation_recovery.json`; its current status records
+the recovery, and a `SUCCESS` marker permits reduction. HDF5 data and frozen
+runner files are unchanged. Reports are in `$ROOT/validation_recovery`.
+
+Slurm's historical FAILED state remains unchanged. Do not rerun simulations merely
+to change that accounting state. A recovered subset is not an unbiased sample of
+the prior while other parameter combinations failed or remain unfinished.
+
+When ready to reduce, run the **updated repository** analysis script, not the
+old copy in the campaign directory, and use a fresh output destination. Submit
+this post-processing to a compute node, since it reads the full catalogs:
+
+```bash
+REPO=/home/arobertson/Galacticus/Galacticus-emulation
+PYTHON=$(command -v python)
+sbatch --partition=obs --nodes=1 --ntasks=1 --cpus-per-task=1 \
+  --mem=32G --time=08:00:00 \
+  --output="$ROOT/validation_recovery/reduce-%j.out" \
+  --error="$ROOT/validation_recovery/reduce-%j.err" \
+  --wrap="MPLBACKEND=Agg '$PYTHON' '$REPO/scripts/analyze_energy_precision_pilot.py' '$ROOT' --output '${ROOT}_reduced_recovered'"
+```
+
+The analysis still reports real failed/missing runs and can therefore exit nonzero
+while writing valid summaries for the recovered catalogs. Never replace missing
+models with zero-valued observations in prior-distribution plots.

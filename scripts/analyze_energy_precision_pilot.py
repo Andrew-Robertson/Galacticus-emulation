@@ -94,7 +94,7 @@ def analyze(args):
                 if f.attrs.get('statusCompletion',-1)!=0:raise ValueError('Catalog is incomplete')
                 revision=f['Version'].attrs['gitHash'];revision=revision.decode() if isinstance(revision,bytes) else str(revision)
                 if revision.strip()!=meta['source_revision']:raise ValueError('Unexpected executable revision')
-                if 'Analyses' not in f or 'Outputs' not in f:raise ValueError('Missing analyses or catalogs')
+                if 'analyses' not in f or 'Outputs' not in f:raise ValueError('Missing analyses or catalogs')
                 with h5py.File(dest/'galacticus.hdf5','w') as reduced:
                     for k,v in f.attrs.items():reduced.attrs[k]=v
                     for k in f:

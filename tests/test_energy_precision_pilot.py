@@ -100,7 +100,7 @@ E.ElementTree(root).write(out)
 if '--dry-run' not in sys.argv:
  with h5py.File(root.find('outputFileName').get('value'),'w') as f:
   f.attrs['statusCompletion']=0
-  f.create_group('Outputs');f.create_group('Analyses')
+  f.create_group('Outputs');f.create_group('analyses')
   f.create_group('Version').attrs['gitHash']=subprocess.check_output(['git','-C',os.environ['GALACTICUS_EXEC_PATH'],'rev-parse','HEAD'],text=True).strip()
 ''')
     exe.chmod(0o755)
@@ -166,4 +166,69 @@ def test_reduction_reports_failed_runs_without_zero_filling(staged,tmp_path):
     assert len(analysis.rows(dest/'analysis/population_differences.csv'))==0
     import h5py
     with h5py.File(dest/'practical/evaluations/pilot_128-eval-0000/galacticus.hdf5') as f:
-        assert 'Outputs' not in f and 'Analyses' in f
+        assert 'Outputs' not in f and 'analyses' in f
+
+
+def test_completion_requires_real_lowercase_analysis_group(tmp_path):
+    import h5py
+    path=tmp_path/'catalog.hdf5'
+    with h5py.File(path,'w') as f:
+        f.attrs['statusCompletion']=0
+        f.create_group('Version').attrs['gitHash']='revision'
+        f.create_group('Outputs')
+        f.create_group('Analyses')
+    with pytest.raises(ValueError,match='Missing catalogs'):
+        pilot.completion(path,'revision')
+    with h5py.File(path,'a') as f:f.move('Analyses','analyses')
+    pilot.completion(path,'revision')
+    with h5py.File(path,'a') as f:f.attrs['statusCompletion']=1
+    with pytest.raises(ValueError,match='did not complete'):
+        pilot.completion(path,'revision')
+
+
+def test_recovery_preserves_data_and_original_failure(staged):
+    import h5py
+    import revalidate_energy_precision_pilot as recovery
+    root=staged.output
+    pilot.run(SimpleNamespace(root=root,task=0))
+    task=json.loads((root/'tasks.json').read_text())[0]
+    folder=root/task['level']/'evaluations'/task['evaluation_id']
+    path=folder/'galacticus.hdf5'
+    with h5py.File(path,'a') as f:
+        f['Outputs'].create_group('Output1')
+        f['analyses'].create_group('exampleAnalysis')
+    status_path=folder/'run_status.json'
+    status=json.loads(status_path.read_text())
+    status.update(status='failed',error=recovery.OLD_ERROR)
+    pilot.dump(status_path,status)
+    original=status_path.read_bytes(); data_hash=pilot.sha(path)
+    frozen_hash=pilot.sha(root/'pilot.py')
+    (folder/'SUCCESS').unlink()
+    recovery.revalidate(SimpleNamespace(root=root,recover=False))
+    assert status_path.read_bytes()==original and not (folder/'SUCCESS').exists()
+    recovery.revalidate(SimpleNamespace(root=root,recover=True))
+    assert (folder/'SUCCESS').exists()
+    assert (folder/'run_status_before_validation_recovery.json').read_bytes()==original
+    assert json.loads(status_path.read_text())['status']=='ok'
+    assert pilot.sha(path)==data_hash and pilot.sha(root/'pilot.py')==frozen_hash
+    recovery.revalidate(SimpleNamespace(root=root,recover=True))
+    report=json.loads((root/'validation_recovery/recovery.json').read_text())
+    assert report['counts']['previously_recovered']==1
+
+
+def test_recovery_does_not_accept_incomplete_catalog(staged):
+    import h5py
+    import revalidate_energy_precision_pilot as recovery
+    root=staged.output
+    pilot.run(SimpleNamespace(root=root,task=0))
+    task=json.loads((root/'tasks.json').read_text())[0]
+    folder=root/task['level']/'evaluations'/task['evaluation_id']
+    with h5py.File(folder/'galacticus.hdf5','a') as f:f.attrs['statusCompletion']=1
+    status=json.loads((folder/'run_status.json').read_text())
+    status.update(status='failed',error=recovery.OLD_ERROR)
+    pilot.dump(folder/'run_status.json',status)
+    (folder/'SUCCESS').unlink()
+    with pytest.raises(SystemExit,match='failed validation'):
+        recovery.revalidate(SimpleNamespace(root=root,recover=True))
+    assert not (folder/'SUCCESS').exists()
+    assert json.loads((folder/'run_status.json').read_text())['status']=='failed'
