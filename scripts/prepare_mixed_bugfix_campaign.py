@@ -51,9 +51,9 @@ def xml_values(path):
     return signature(root)
 
 
-def check_sim(folder, revision):
+def check_sim(folder, revision, output=None):
     import h5py
-    with h5py.File(folder/'galacticus.hdf5', 'r') as f:
+    with h5py.File(output or folder/'galacticus.hdf5', 'r') as f:
         if f.attrs.get('statusCompletion', -1) != 0:
             raise ValueError('simulation incomplete')
         reported = f['Version'].attrs['gitHash']
@@ -81,7 +81,40 @@ def check_dust(folder, name):
         raise ValueError('dust draws incomplete')
 
 
-def prepare(campaign, view):
+def diagnostic_files(folder, proof):
+    # Match the exact input recorded by the successful diagnostic, regardless of name.
+    candidates = []
+    for directory, subdirs, files in os.walk(folder):
+        subdirs[:] = [d for d in subdirs if d not in ('source', 'cache', '.git')]
+        candidates.extend(Path(directory)/name for name in files if name.endswith('.xml'))
+    matches = [p for p in candidates if sha(p) == proof['input_sha256']]
+    if not matches:
+        raise ValueError('No diagnostic XML matches the successful run input checksum')
+    # Byte-identical archived copies are interchangeable for this read-only view.
+    input_file = sorted(matches, key=lambda p: (len(p.parts), str(p)))[0]
+    node = ET.parse(input_file).getroot().find('outputFileName')
+    if node is None or not node.get('value'):
+        raise ValueError('Diagnostic input has no outputFileName')
+    output = Path(node.get('value'))
+    if not output.is_absolute():
+        output = folder/output
+    output = output.resolve()
+    if not output.is_relative_to(folder.resolve()) or not output.is_file():
+        raise ValueError(f'Diagnostic output absent or outside diagnostic directory: {output}')
+    params = [p for p in candidates if p.name == 'params.xml' and p != input_file]
+    if len(params) > 1:
+        raise ValueError(f'Multiple diagnostic params.xml files: {params}')
+    print('Resolved eval0043 input:', input_file)
+    print('Resolved eval0043 output:', output)
+    files = {'input.xml': str(input_file), 'galacticus.hdf5': str(output)}
+    if params:
+        files['params.xml'] = str(params[0])
+    else:
+        print('No separate params.xml found; processed parameters remain in the HDF5 Parameters group.')
+    return files
+
+
+def prepare(campaign, view, exclude_indices=()):
     config = read(campaign/'updated/prepared.json')
     samples = list(csv.DictReader((campaign/'samples.csv').open()))
     meta = read(campaign/'pilot.json')
@@ -101,6 +134,9 @@ def prepare(campaign, view):
     records, status = [], []
     for index, row in enumerate(samples):
         name = row['evaluation_id']
+        if index in exclude_indices:
+            status.append(dict(index=index, evaluation_id=name, status='excluded', detail='explicitly excluded from frozen snapshot'))
+            continue
         original = campaign/'updated/evaluations'/name
         selected = None
         try:
@@ -126,18 +162,23 @@ def prepare(campaign, view):
                         proof.get('revision', proof.get('source_revision')) != NEW or
                         proof.get('executable_sha256') != NEW_SHA):
                         raise ValueError('retry provenance incomplete or mismatched')
-                    if proof.get('input_sha256') != sha(src/'input.xml'):
+                    files = (diagnostic_files(src, proof) if src == special else
+                             {file: str(src/file) for file in ('input.xml','params.xml','galacticus.hdf5')})
+                    input_file = Path(files['input.xml'])
+                    if proof.get('input_sha256') != sha(input_file):
                         raise ValueError('retry input checksum mismatch')
-                    if xml_values(src/'input.xml') != xml_values(original/'input.xml'):
+                    if xml_values(input_file) != xml_values(original/'input.xml'):
                         raise ValueError('retry input differs beyond output paths')
-                    check_sim(src, NEW)
+                    check_sim(src, NEW, Path(files['galacticus.hdf5']))
                     selected = dict(source=str(src), source_revision=NEW,
                         executable_sha256=NEW_SHA, kind='pr1785_retry',
-                        completion_record=str(src/'simulation_finished.json'))
+                        completion_record=str(src/'simulation_finished.json'), files=files)
             if selected:
+                selected.setdefault('files', {file: str(Path(selected['source'])/file)
+                                             for file in ('input.xml','params.xml','galacticus.hdf5')})
                 selected.update(index=index, evaluation_id=name,
                     input_values=str(original/'galacticus_input_values.json'),
-                    input_sha256=sha(Path(selected['source'])/'input.xml'))
+                    input_sha256=sha(selected['files']['input.xml']))
                 if not Path(selected['input_values']).is_file():
                     raise ValueError('missing input parameter JSON')
                 records.append(selected)
@@ -206,13 +247,15 @@ def build(view):
     warnings=[]
     for record in manifest['records']:
         name=record['evaluation_id'];src=Path(record['source']);dst=view/'evaluations'/name
-        check_sim(src,record['source_revision'])
-        if sha(src/'input.xml')!=record['input_sha256']:
+        files=record['files']
+        check_sim(src,record['source_revision'],Path(files['galacticus.hdf5']))
+        if sha(files['input.xml'])!=record['input_sha256']:
             raise ValueError(f'Input changed: {name}')
         dst.mkdir(parents=True,exist_ok=False)
-        for file in ('galacticus.hdf5','input.xml','params.xml'):
-            if not (src/file).is_file():raise FileNotFoundError(src/file)
-            (dst/file).symlink_to(src/file)
+        for file, source_path in files.items():
+            target=Path(source_path)
+            if not target.is_file():raise FileNotFoundError(target)
+            (dst/file).symlink_to(target)
         (dst/'galacticus_input_values.json').symlink_to(record['input_values'])
         shutil.copy2(record['completion_record'],dst/'source_completion.json')
         if record['kind']=='original':
@@ -273,8 +316,8 @@ def build(view):
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     subs=parser.add_subparsers(dest='command',required=True)
-    p=subs.add_parser('prepare');p.add_argument('campaign',type=Path);p.add_argument('view',type=Path)
+    p=subs.add_parser('prepare');p.add_argument('campaign',type=Path);p.add_argument('view',type=Path);p.add_argument('--exclude-index',type=int,action='append',default=[])
     p=subs.add_parser('build');p.add_argument('view',type=Path)
     args=parser.parse_args()
-    if args.command=='prepare':prepare(args.campaign.resolve(),args.view.resolve())
+    if args.command=='prepare':prepare(args.campaign.resolve(),args.view.resolve(),args.exclude_index)
     else:build(args.view.resolve())
