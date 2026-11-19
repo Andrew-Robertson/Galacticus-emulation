@@ -32,6 +32,7 @@ variables:
   # H-alpha sidecar LF training choice. The label controls output names; the
   # argument list controls which rows are used.
   HALPHA_OBSERVABLE: halpha_sobral
+  HALPHA_TARGET_ERROR_MODE: legacy_linear_propagation
   HALPHA_DUST_DRAW_LABEL: 1dustdraw
   HALPHA_DUST_DRAW_ARGS:
     - --dust-draw-index
@@ -277,6 +278,13 @@ variables:
     - --progress
 
 profiles:
+  paper_sobral_log_errors:
+    # Reproduce the final paper's retargeted Sobral bundle directly at training.
+    # This changes observational target errors, not GP training uncertainties.
+    variables:
+      HALPHA_TARGET_ERROR_MODE: sobral_log_table
+      HALPHA_TAG: ${HALPHA_OBSERVABLE}_${HALPHA_DUST_DRAW_LABEL}_${SIDECAR_LF_EMULATOR_NAME_TAG}_sobralLogErr
+
   standard_pca99:
     variables:
       STANDARD_PCA_VARIANCE_THRESHOLD: "0.99"
@@ -1131,6 +1139,8 @@ stages:
           - python
           - scripts/train_sidecar_lf_observables_demo.py
           - ${ROOT}
+          - --target-error-mode
+          - ${HALPHA_TARGET_ERROR_MODE}
           - --sidecar-dir
           - emission_line_dust
           - --table-filename
