@@ -1,5 +1,9 @@
 # Repeat the energy-size pilot at tested numerical accuracy
 
+For the November 20 repeat with the merged damping and virial-boundary fixes,
+use [the solver-fixed pilot instructions](energy_solver_fixed_pilot.md).
+The commands below document the earlier batch and its original code revision.
+
 This batch repeats all **128 physical parameter vectors** from the October
 21-parameter pilot and adds **32 tighter comparisons**. It uses the merged,
 uncapped `bindingEnergy` prescription, with 500 EPS trees per decade. Historical

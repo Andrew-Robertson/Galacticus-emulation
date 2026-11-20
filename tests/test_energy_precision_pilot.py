@@ -232,3 +232,50 @@ def test_recovery_does_not_accept_incomplete_catalog(staged):
         recovery.revalidate(SimpleNamespace(root=root,recover=True))
     assert not (folder/'SUCCESS').exists()
     assert json.loads((folder/'run_status.json').read_text())['status']=='failed'
+
+
+def test_fixed_solver_repeat_checks_revision_fixes_and_isolates_cache(staged, tmp_path, monkeypatch):
+    revision = pilot.git(staged.source, 'rev-parse', 'HEAD')
+    args = copy.copy(staged)
+    args.output = tmp_path/'fixed_runs'
+    args.expected_revision = 'wrong-revision'
+    args.require_solver_fixes = True
+    args.isolated_cache = True
+    (tmp_path/'datasets/dynamic').mkdir()
+    with pytest.raises(ValueError, match='Expected source revision'):
+        pilot.prepare(args)
+    assert not args.output.exists()
+    args.expected_revision = revision
+    monkeypatch.setattr(pilot, 'SOLVER_FIXES', {'1798': revision, '1802': revision})
+    pilot.prepare(args)
+    meta = json.loads((args.output/'manifest.json').read_text())
+    assert meta['required_solver_fix_merges'] == pilot.SOLVER_FIXES
+    assert meta['isolated_dynamic_cache']
+    assert meta['random_seeds'] == [{'generator': '1.0', 'seed': '42'}]
+    monkeypatch.setenv('GALACTICUS_DYNAMIC_DATA_PATH', '/unrelated/cache')
+    pilot.validate(SimpleNamespace(root=args.output, task=[0]))
+    pilot.run(SimpleNamespace(root=args.output, task=0))
+    case = args.output/'practical/evaluations/pilot_128-eval-0000'
+    assert (case/'dynamic').is_dir()
+    assert (args.output/'validation/0/dynamic').is_dir()
+    assert (case/'SUCCESS').is_file()
+    _, loaded, _, env = pilot.load_run(args.output)
+    assert 'GALACTICUS_DYNAMIC_DATA_PATH' not in env
+    one_env = pilot.case_environment(loaded, env, case)
+    assert one_env['GALACTICUS_DYNAMIC_DATA_PATH'] == str(case/'dynamic')
+    assert one_env['GALACTICUS_TOOLS_PATH'] == str(tmp_path/'datasets/dynamic')
+
+
+def test_seed_changes_during_migration_are_rejected(staged, tmp_path):
+    # A migration that silently alters the historical seed must not submit models.
+    migration = staged.source/'scripts/aux/parametersMigrate.py'
+    with migration.open('a') as handle:
+        handle.write("t.getroot().find('randomNumberGenerator/seed').set('value','99');t.write(sys.argv[2])\n")
+    subprocess.run(['git', 'add', '.'], cwd=staged.source, check=True)
+    subprocess.run(['git', '-c', 'user.name=Test', '-c', 'user.email=test@example.org',
+                    'commit', '-qm', 'change migration fixture'], cwd=staged.source, check=True)
+    args = copy.copy(staged)
+    args.output = tmp_path/'changed_seed'
+    with pytest.raises(ValueError, match='Migration changed the historical random seeds'):
+        pilot.prepare(args)
+    assert not (args.output/'submit.slurm').exists()

@@ -20,6 +20,8 @@ import xml.etree.ElementTree as ET
 REPO = Path(__file__).resolve().parents[1]
 FAMILY = REPO / 'runs/campaigns/equilibriumSizesEnergy'
 MERGE = 'c0c8731b0b689cf4827229ee8a66f6600f768e42'
+SOLVER_FIXES = {'1798': '9754ac45ed240e211d68e6c0bbcfc69bb54031dc',
+                '1802': '4f9fcca1f6ca90027f594a377fafbf266427bdc4'}
 BAR = "nodeOperator/nodeOperator[@value='barInstability']"
 DYNAMICS = BAR + '/galacticDynamicsBarInstability'
 ENERGY = BAR + '/barInstabilitySpheroidAngularMomentum'
@@ -77,6 +79,24 @@ def xml(root, path):
 
 def number(e):
     return float(e.get('value').replace('D', 'e').replace('d', 'e'))
+
+
+def seeds(root):
+    """Record explicit generator seeds without changing the historical streams."""
+    result = [dict(generator=g.get('value'), seed=one(g, 'seed').get('value'))
+              for g in root.iter('randomNumberGenerator') if g.find('seed') is not None]
+    if not result:
+        raise ValueError('Expected explicit random seeds')
+    return result
+
+
+def case_environment(meta, env, directory):
+    env = dict(env)
+    if meta.get('isolated_dynamic_cache'):
+        cache = directory/'dynamic'
+        cache.mkdir(exist_ok=True)
+        env['GALACTICUS_DYNAMIC_DATA_PATH'] = str(cache)
+    return env
 
 
 def design(family=FAMILY):
@@ -246,7 +266,12 @@ def prepare(args):
     if out.exists() or out.is_symlink():raise FileExistsError(out)
     if not exe.is_file() or not os.access(exe,os.X_OK):raise ValueError(f'Executable missing or not executable: {exe}')
     revision=git(source,'rev-parse','HEAD')
+    if getattr(args, 'expected_revision', None) and revision != args.expected_revision:
+        raise ValueError(f'Expected source revision {args.expected_revision}, found {revision}')
     subprocess.run(['git','-C',str(source),'merge-base','--is-ancestor',MERGE,'HEAD'],check=True)
+    required_fixes = SOLVER_FIXES if getattr(args, 'require_solver_fixes', False) else {}
+    for fix in required_fixes.values():
+        subprocess.run(['git','-C',str(source),'merge-base','--is-ancestor',fix,'HEAD'],check=True)
     if git(source,'diff','HEAD','--'):
         raise ValueError('Galacticus has tracked modifications; use the merged, unpatched implementation')
     energy_source=source/'source/galactic_dynamics/bar_instability/spheroid_angular_momentum/binding_energy.F90'
@@ -268,6 +293,11 @@ def prepare(args):
         environment[key]=str(Path(os.environ[key]).resolve())
     for key in ['GALACTICUS_SED_CALC_PATH','GALACTICUS_TOOLS_PATH']:
         if os.environ.get(key):environment[key]=os.environ[key]
+    isolated_cache = getattr(args, 'isolated_cache', False)
+    if isolated_cache:
+        environment.setdefault('GALACTICUS_TOOLS_PATH', str(Path(environment['GALACTICUS_DATA_PATH'])/'dynamic'))
+        if not Path(environment['GALACTICUS_TOOLS_PATH']).is_dir():
+            raise ValueError('GALACTICUS_TOOLS_PATH must point to the existing external tools')
     out.mkdir(parents=True)
     (out/'logs').mkdir();(out/'provenance').mkdir();(out/'executable').mkdir()
     for name in ['family_definition.json','design_1024.csv','precision_pilot_selection.json']:
@@ -284,6 +314,9 @@ def prepare(args):
             str(out/'provenance/historical_base.xml'),str(migrated),'--validate','no'],
             cwd=source,env=env,stdout=log,stderr=subprocess.STDOUT,check=True)
     base=ET.parse(migrated).getroot()
+    original_seeds = seeds(ET.parse(original/'base_parameters.xml').getroot())
+    if seeds(base) != original_seeds:
+        raise ValueError('Migration changed the historical random seeds; inspect migration before proceeding')
     # The legacy free-standing code-version tag is not a parameter; its value is
     # retained in the archived original. Current parsers reject its empty value.
     for e in base.findall('version'):
@@ -310,7 +343,7 @@ def prepare(args):
             xml(model(base,row,definition['free_parameters'],level,folder),folder/'params.xml')
             dump(folder/'galacticus_input_values.json',{k:(v if k=='evaluation_id' else float(v)) for k,v in row.items()})
             task=dict(task_index=len(tasks),level=level,design_index=i,evaluation_id=name,
-                      input_sha256=sha(folder/'params.xml'))
+                      input_sha256=sha(folder/'params.xml'), random_seeds=original_seeds)
             tasks.append(task)
         write_rows(dest/'samples.csv',selected)
         dump(dest/'campaign_design.json',dict(schema_version=2,campaign_name='energy_precision_'+level,
@@ -327,6 +360,8 @@ def prepare(args):
         family_definition_sha256=sha(args.family/'family_definition.json'),settings=SETTINGS,ac=1e-10,ode=1e-4,
         trees_per_decade=500,cpus=args.cpus,concurrency=args.concurrency,
         source_executable=str(exe),energy_source_sha256=sha(energy_source),
+        required_solver_fix_merges=required_fixes, random_seeds=original_seeds,
+        isolated_dynamic_cache=isolated_cache,
         parameter_convention='Use the frozen numerical values in current upstream definitions, including Blitz frequency; migrations can change unvaried physics.'))
     q=shlex.quote
     common=['#!/bin/bash',f'#SBATCH --partition={args.partition}','#SBATCH --nodes=1','#SBATCH --ntasks=1',
@@ -359,6 +394,8 @@ def load_run(root):
     env=dict(os.environ,**meta['environment'],GALACTICUS_EXEC_PATH=meta['source'])
     env['OMP_NUM_THREADS']=str(os.environ.get('SLURM_CPUS_PER_TASK',meta['cpus']))
     env['OMP_PLACES']='cores';env['OMP_PROC_BIND']='spread'
+    if meta.get('isolated_dynamic_cache'):
+        env.pop('GALACTICUS_DYNAMIC_DATA_PATH', None)
     return root,meta,json.loads((root/'tasks.json').read_text()),env
 
 
@@ -376,6 +413,7 @@ def run(args):
     root,meta,tasks,env=load_run(args.root)
     if not 0<=args.task<len(tasks):raise ValueError('Task index out of range')
     task=tasks[args.task];folder=root/task['level']/'evaluations'/task['evaluation_id']
+    env=case_environment(meta,env,folder)
     if sha(folder/'params.xml')!=task['input_sha256']:raise ValueError('Input XML changed')
     if any((folder/x).exists() for x in ['SUCCESS','RUNNING','galacticus.hdf5']):
         raise FileExistsError('Existing output/run marker; archive the failed evaluation before retrying')
@@ -389,6 +427,8 @@ def run(args):
             subprocess.run([meta['executable'],'params.xml','--output-processed-parameters','params_used.xml'],
                 cwd=folder,env=env,stdout=stdout,stderr=stderr,check=True)
         verify_parameters(ET.parse(folder/'params_used.xml').getroot(),row,definition['free_parameters'],task['level'])
+        if 'random_seeds' in task and seeds(ET.parse(folder/'params_used.xml').getroot()) != task['random_seeds']:
+            raise ValueError('Processed random seeds differ from the historical assignment')
         completion(folder/'galacticus.hdf5',meta['source_revision'])
         (folder/'SUCCESS').touch();result['status']='ok'
     except Exception as e:
@@ -407,15 +447,18 @@ def validate(args):
         task=tasks[i];folder=root/task['level']/'evaluations'/task['evaluation_id']
         if sha(folder/'params.xml')!=task['input_sha256']:raise ValueError('Input XML changed')
         dest=root/'validation'/str(i);dest.mkdir(parents=True,exist_ok=True)
+        case_env=case_environment(meta,env,dest)
         params=ET.parse(folder/'params.xml').getroot()
         child(params,'outputFileName',str(dest/'validation.hdf5'))
         for e in params.findall('outputScratchFileName'):e.set('value',str(dest/'validation.hdf5'))
         xml(params,dest/'params.xml')
         with (dest/'validation.log').open('w') as log:
             subprocess.run([meta['executable'],str(dest/'params.xml'),'--output-processed-parameters',str(dest/'params_used.xml'),'--dry-run'],
-                           cwd=dest,env=env,stdout=log,stderr=subprocess.STDOUT,check=True)
+                           cwd=dest,env=case_env,stdout=log,stderr=subprocess.STDOUT,check=True)
         row=next(r for r in read_rows(root/task['level']/'samples.csv') if r['evaluation_id']==task['evaluation_id'])
         verify_parameters(ET.parse(dest/'params_used.xml').getroot(),row,definition['free_parameters'],task['level'])
+        if 'random_seeds' in task and seeds(ET.parse(dest/'params_used.xml').getroot()) != task['random_seeds']:
+            raise ValueError('Processed random seeds differ from the historical assignment')
         print('Validated:',task['level'],task['evaluation_id'],flush=True)
 
 
@@ -430,6 +473,9 @@ def main():
     p.add_argument('--partition',choices=['obs','dmtheory'],default='obs')
     p.add_argument('--cpus',type=int,default=8);p.add_argument('--concurrency',type=int,default=0)
     p.add_argument('--walltime',default='72:00:00')
+    p.add_argument('--expected-revision', help='Require this exact Galacticus source revision')
+    p.add_argument('--require-solver-fixes', action='store_true', help='Require merged PRs 1798 and 1802')
+    p.add_argument('--isolated-cache', action='store_true', help='Give each evaluation a private dynamic cache')
     r=sub.add_parser('run');r.add_argument('root',type=Path);r.add_argument('--task',type=int,required=True)
     v=sub.add_parser('validate');v.add_argument('root',type=Path);v.add_argument('--task',type=int,action='append')
     a=sub.add_parser('analyze');a.add_argument('root',type=Path);a.add_argument('--output',type=Path,required=True)
