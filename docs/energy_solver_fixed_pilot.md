@@ -95,11 +95,11 @@ SETUP=/carnegie/nobackup/users/arobertson/Galacticus/launchers/energy_solver_fix
 (
   set -euo pipefail
   cd /home/arobertson/Galacticus/Galacticus-emulation
-  git fetch origin main
+  git fetch origin codex/energy-pilot-precision
   mkdir -p "$(dirname "$SETUP")"
   mkdir "$SETUP"
-  git rev-parse origin/main > "$SETUP/launcher_revision.txt"
-  git archive origin/main \
+  git rev-parse origin/codex/energy-pilot-precision > "$SETUP/launcher_revision.txt"
+  git archive origin/codex/energy-pilot-precision \
     scripts/prepare_energy_precision_pilot.py \
     scripts/submit_energy_solver_fixed_pilot.sh \
     scripts/analyze_energy_precision_pilot.py \
