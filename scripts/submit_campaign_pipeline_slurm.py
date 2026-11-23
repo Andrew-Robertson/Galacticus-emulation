@@ -87,6 +87,10 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="JSON submission manifest. Defaults to SCRIPT_DIR/slurm_submission_manifest.json.",
     )
+    parser.add_argument(
+        "--provenance-path", type=Path, default=None,
+        help="Submission provenance Markdown; override to preserve a previous submission record.",
+    )
     parser.add_argument("--submit", action="store_true", help="Call sbatch. Default is to write scripts and print commands.")
     return parser.parse_args()
 
@@ -575,7 +579,9 @@ def main() -> None:
     }
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
-    provenance_path = _pipeline_output_root(variables) / "SUBMISSION_PROVENANCE.md"
+    provenance_path = (args.provenance_path.expanduser().resolve()
+                       if args.provenance_path is not None
+                       else _pipeline_output_root(variables) / "SUBMISSION_PROVENANCE.md")
     _write_submission_provenance(provenance_path, manifest)
     print(f"manifest={manifest_path}")
     print(f"provenance={provenance_path}")

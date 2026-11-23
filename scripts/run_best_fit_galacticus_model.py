@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
+from datetime import datetime, timezone
 import os
 from pathlib import Path
 import shutil
@@ -37,7 +40,8 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Campaign root from which to derive the Galacticus command. When supplied, "
             "the first Galacticus command in a template evaluation run_eval.sh is used, "
-            "with model_changes.xml/output.xml/params.xml replaced for this MAP run."
+            "with model_changes.xml/output.xml/params.xml replaced for this MAP run. "
+            "Prepared campaigns without run_eval.sh use a local copy of input.xml."
         ),
     )
     parser.add_argument(
@@ -117,12 +121,33 @@ def _command_from_template(
     changes_filename: str,
     output_change_filename: str,
     processed_parameters: str,
+    output_dir: Path,
+    output_filename: str,
 ) -> list[str]:
     evaluation_dir = (
         template_evaluation_dir.expanduser().resolve()
         if template_evaluation_dir is not None
         else _template_evaluation_dir(campaign_root, template_evaluation_index).resolve()
     )
+    if not (evaluation_dir / "run_eval.sh").exists():
+        if not galacticus_executable:
+            raise ValueError("Prepared inputs require an explicit Galacticus executable")
+        original = evaluation_dir / "input.xml"
+        tree = ET.parse(original)
+        root = tree.getroot()
+        if root.tag != "parameters":
+            raise ValueError(f"Expected prepared parameters in {original}")
+        # Never retain absolute output/scratch paths into a training evaluation.
+        for tag in ("outputFileName", "outputScratchFileName"):
+            for node in root.findall(tag):
+                node.set("value", str(output_dir / output_filename))
+        if root.find("outputFileName") is None:
+            ET.SubElement(root, "outputFileName", value=str(output_dir / output_filename))
+        local_input = output_dir / "template_input.xml"
+        tree.write(local_input, encoding="UTF-8", xml_declaration=True)
+        return [_expand_path(galacticus_executable), str(local_input),
+                changes_filename, output_change_filename,
+                "--output-processed-parameters", processed_parameters]
     command = _read_template_galacticus_command(evaluation_dir / "run_eval.sh")
     if galacticus_executable:
         command[0] = galacticus_executable
@@ -164,9 +189,28 @@ def _command_from_parameter_files(args: argparse.Namespace, changes_filename: st
     ]
 
 
-def _run(command: list[str], *, cwd: Path) -> None:
+def _sha(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(8 * 1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _environment(campaign_root: Path | None, exe: Path, output_dir: Path) -> dict[str, str]:
+    environment = dict(os.environ)
+    if campaign_root is not None and (campaign_root / "assembly.json").is_file():
+        assembly = json.loads((campaign_root / "assembly.json").read_text())
+        environment.update(assembly["configuration"]["environment"])
+    environment["GALACTICUS_EXEC_PATH"] = str(exe.parent)
+    environment["GALACTICUS_DYNAMIC_DATA_PATH"] = str(output_dir / "cache")
+    environment["PYTHONPATH"] = str(exe.parent / "python") + os.pathsep + environment.get("PYTHONPATH", "")
+    return environment
+
+
+def _run(command: list[str], *, cwd: Path, environment: dict[str, str]) -> None:
     print(" ".join(command), flush=True)
-    subprocess.run(command, cwd=cwd, check=True)
+    subprocess.run(command, cwd=cwd, env=environment, check=True)
 
 
 def main() -> None:
@@ -177,6 +221,12 @@ def main() -> None:
     source_changes = mcmc_dir / args.model_changes_filename
     if not source_changes.exists():
         raise FileNotFoundError(source_changes)
+    if (output_dir / args.galacticus_output).exists():
+        raise FileExistsError(output_dir / args.galacticus_output)
+    # Exclusive claim also protects against accidentally submitting the stage twice.
+    with (output_dir / "started.json").open("x") as stream:
+        json.dump({"slurm_job_id": os.environ.get("SLURM_JOB_ID"),
+                   "started_utc": datetime.now(timezone.utc).isoformat()}, stream)
     changes_path = _copy_model_changes(source_changes, output_dir, args.model_changes_filename)
     output_change_path = _write_output_change(output_dir / "output.xml", args.galacticus_output)
 
@@ -189,10 +239,54 @@ def main() -> None:
             changes_filename=changes_path.name,
             output_change_filename=output_change_path.name,
             processed_parameters=args.processed_parameters,
+            output_dir=output_dir,
+            output_filename=args.galacticus_output,
         )
     else:
         galacticus_command = _command_from_parameter_files(args, changes_path.name)
-    _run(galacticus_command, cwd=output_dir)
+    exe = Path(galacticus_command[0]).resolve()
+    environment = _environment(args.campaign_root, exe, output_dir)
+    (output_dir / "cache").mkdir(exist_ok=True)
+    inputs = {}
+    for token in galacticus_command[1:]:
+        path = Path(token)
+        if not path.is_absolute():
+            path = output_dir / path
+        if path.suffix == ".xml" and path.is_file():
+            inputs[str(path)] = _sha(path)
+    if args.campaign_root is not None:
+        evaluation = (args.template_evaluation_dir or
+                      _template_evaluation_dir(args.campaign_root, args.template_evaluation_index))
+        for name in ("input.xml", "run_eval.sh"):
+            path = evaluation / name
+            if path.is_file():
+                inputs[str(path.resolve())] = _sha(path)
+    try:
+        source_revision = subprocess.check_output(
+            ["git", "-C", str(exe.parent), "rev-parse", "HEAD"], text=True,
+            stderr=subprocess.DEVNULL).strip()
+        source_status = subprocess.check_output(
+            ["git", "-C", str(exe.parent), "status", "--short", "--untracked-files=no"],
+            text=True, stderr=subprocess.DEVNULL).strip()
+    except (OSError, subprocess.CalledProcessError):
+        source_revision, source_status = None, None
+    provenance = {
+        "command": galacticus_command, "cwd": str(output_dir),
+        "executable": str(exe), "executable_sha256": _sha(exe),
+        "source_checkout_revision": source_revision, "source_checkout_status": source_status,
+        "input_sha256": inputs, "map_source": str(source_changes),
+        "map_source_sha256": _sha(source_changes),
+        "runner_sha256": _sha(Path(__file__)),
+        "environment": {k: v for k, v in environment.items()
+                        if k.startswith("GALACTICUS_") or k in
+                        ("SHMR_PATH", "PYTHONPATH", "OMP_NUM_THREADS")},
+    }
+    (output_dir / "run_provenance.json").write_text(json.dumps(provenance, indent=2) + "\n")
+    _run(galacticus_command, cwd=output_dir, environment=environment)
+    import h5py
+    with h5py.File(output_dir / args.galacticus_output, "r") as output:
+        if output.attrs.get("statusCompletion", -1) != 0:
+            raise RuntimeError("Galacticus output does not report successful completion")
 
     if args.postprocess_emission_line_dust:
         _run(
@@ -214,11 +308,17 @@ def main() -> None:
                 args.sidecar_output_dir,
             ],
             cwd=output_dir,
+            environment=environment,
         )
 
     if args.plot_mass_function_results:
-        _run([args.python_command, _expand_path(args.plot_mass_function_script)], cwd=output_dir)
+        _run([args.python_command, _expand_path(args.plot_mass_function_script)], cwd=output_dir, environment=environment)
 
+    (output_dir / "complete.json").write_text(json.dumps({
+        "statusCompletion": 0, "dust_processed": args.postprocess_emission_line_dust,
+        "processed_parameters_sha256": _sha(output_dir / args.processed_parameters),
+        "completed_utc": datetime.now(timezone.utc).isoformat(),
+    }, indent=2) + "\n")
     print(output_dir)
 
 
