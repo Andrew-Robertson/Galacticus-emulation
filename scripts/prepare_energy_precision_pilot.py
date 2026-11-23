@@ -19,6 +19,7 @@ import xml.etree.ElementTree as ET
 
 REPO = Path(__file__).resolve().parents[1]
 FAMILY = REPO / 'runs/campaigns/equilibriumSizesEnergy'
+SURVEY_MASK = Path('surveyGeometry/SDSS/sdss_dr72safe0_res6d.pol')
 MERGE = 'c0c8731b0b689cf4827229ee8a66f6600f768e42'
 SOLVER_FIXES = {'1798': '9754ac45ed240e211d68e6c0bbcfc69bb54031dc',
                 '1802': '4f9fcca1f6ca90027f594a377fafbf266427bdc4'}
@@ -96,6 +97,17 @@ def case_environment(meta, env, directory):
         cache = directory/'dynamic'
         cache.mkdir(exist_ok=True)
         env['GALACTICUS_DYNAMIC_DATA_PATH'] = str(cache)
+        mask = meta.get('survey_mask')
+        if mask:
+            target = cache/SURVEY_MASK
+            if not target.exists():
+                source = Path(mask['snapshot'])
+                if sha(source) != mask['sha256']:
+                    raise ValueError('Frozen survey mask changed')
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, target)
+            if sha(target) != mask['sha256']:
+                raise ValueError('Evaluation survey mask differs from frozen input')
     return env
 
 
@@ -182,7 +194,25 @@ def selection(family):
     return ids
 
 
-def model(base, row, specs, level, folder):
+def comparison_indices(family, n_practical, n_tighter):
+    """Preserve the old selection, or choose maximin coverage within a smaller pilot."""
+    if n_practical not in (16, 32, 64, 128) or not 1 <= n_tighter <= n_practical:
+        raise ValueError('Use 16, 32, 64 or 128 practical models and 1..n_practical tighter models')
+    if (n_practical, n_tighter) == (128, 32):
+        return selection(family)
+    import numpy as np
+    definition, rows = design(family)
+    coordinates = np.array([[float(r[s['short_name']+'_quantile'])
+                            for s in definition['free_parameters']] for r in rows[:n_practical]])
+    chosen = [0]
+    while len(chosen) < n_tighter:
+        distance = ((coordinates[:, None]-coordinates[chosen][None])**2).sum(axis=2).min(axis=1)
+        distance[chosen] = -1
+        chosen.append(int(np.argmax(distance)))
+    return chosen
+
+
+def model(base, row, specs, level, folder, iteration_limit=None):
     root = copy.deepcopy(base)
     if one(root, 'mergerTreeConstructor').get('value') != 'build':
         raise ValueError('Expected EPS mergerTreeConstructor=build')
@@ -194,6 +224,8 @@ def model(base, row, specs, level, folder):
         raise ValueError('Expected explicit random seeds')
     solver = one(root, 'galacticStructureSolver')
     solver.set('value','equilibrium')
+    if iteration_limit is not None:
+        child(solver,'countIterationsMaximum',iteration_limit)
     child(solver,'solutionTolerance',SETTINGS[level]['equilibrium'])
     child(solver,'includeBaryonGravity','true')
     child(solver,'convergenceFailureIsFatal','true')
@@ -221,11 +253,11 @@ def model(base, row, specs, level, folder):
             ET.SubElement(extractors,'nodePropertyExtractor',value=name)
     child(root,'outputFileName',str(folder/'galacticus.hdf5'))
     for e in root.findall('outputScratchFileName'):e.set('value',str(folder/'galacticus.hdf5'))
-    verify_parameters(root,row,specs,level)
+    verify_parameters(root,row,specs,level,iteration_limit)
     return root
 
 
-def verify_parameters(root, row, specs, level):
+def verify_parameters(root, row, specs, level, iteration_limit=None):
     import math
     for spec in specs:
         if not math.isclose(number(one(root,spec['path'])),float(row[spec['short_name']]),rel_tol=2e-12,abs_tol=0):
@@ -242,6 +274,8 @@ def verify_parameters(root, row, specs, level):
               'starFormationRateSurfaceDensityDisks/pressureExponent':.92,
               'mergerTreeNodeEvolver/odeToleranceAbsolute':1e-4,
               'mergerTreeNodeEvolver/odeToleranceRelative':1e-4}
+    if iteration_limit is not None:
+        expected['galacticStructureSolver/countIterationsMaximum'] = iteration_limit
     for path,value in expected.items():
         if not math.isclose(number(one(root,path)),value,rel_tol=2e-12): raise ValueError(f'Incorrect {path}')
     for path,value in [(ENERGY,'bindingEnergy'),('galacticStructureSolver','equilibrium'),
@@ -258,7 +292,23 @@ def git(path,*args):
 
 def prepare(args):
     definition, rows = design(args.family)
-    ids = selection(args.family)
+    n_practical = getattr(args, 'n_practical', 128)
+    n_tighter = getattr(args, 'n_tighter', 32)
+    ids = comparison_indices(args.family, n_practical, n_tighter)
+    iteration_limit = getattr(args, 'iteration_limit', None)
+    if iteration_limit is not None and iteration_limit < 2:
+        raise ValueError('countIterationsMaximum must be at least 2')
+    survey_mask = getattr(args, 'survey_mask', None)
+    if survey_mask is not None:
+        survey_mask = survey_mask.resolve()
+        if not getattr(args, 'isolated_cache', False):
+            raise ValueError('Staging a survey mask requires --isolated-cache')
+        if not survey_mask.is_file() or survey_mask.stat().st_size == 0:
+            raise ValueError('Supply an existing uncompressed SDSS polygon file with --survey-mask')
+        with survey_mask.open('rb') as handle:
+            header = handle.read(1024)
+        if header.startswith(b'\x1f\x8b') or b'polygon' not in header.lower():
+            raise ValueError('Expected an uncompressed polygon file, not a gzip archive or download error')
     original, source, exe = args.original.resolve(), args.source.resolve(), args.executable.resolve()
     out=args.output.absolute()
     if any(c.isspace() for c in str(out)):
@@ -278,6 +328,10 @@ def prepare(args):
     text=energy_source.read_text()
     if '<name>stepFiniteDifferenceRelative</name>' not in text or 'StepLimitSpheroid' in text:
         raise ValueError('Expected the merged uncapped bindingEnergy implementation')
+    if iteration_limit is not None:
+        solver_text = (source/'source/galactic_structure/radius_solver/equilibrium.F90').read_text()
+        if '<name>countIterationsMaximum</name>' not in solver_text:
+            raise ValueError('Build from the PR branch exposing countIterationsMaximum')
     old_manifest=json.loads((original/'run_manifest.json').read_text())
     if sha(original/'base_parameters.xml')!=old_manifest['base_parameters_sha256']:
         raise ValueError('Historical base XML checksum mismatch')
@@ -332,15 +386,23 @@ def prepare(args):
     runner=out/'pilot.py';shutil.copy2(__file__,runner)
     shutil.copy2(REPO/'scripts/analyze_campaign_compact_tail.py',out/'analyze_campaign_compact_tail.py')
     shutil.copy2(REPO/'scripts/analyze_energy_precision_pilot.py',out/'analyze_energy_precision_pilot.py')
+    mask_record = None
+    if survey_mask is not None:
+        snapshot_mask = out/'provenance'/SURVEY_MASK.name
+        shutil.copy2(survey_mask, snapshot_mask)
+        mask_record = dict(source=str(survey_mask), snapshot=str(snapshot_mask), sha256=sha(snapshot_mask),
+                           bytes=snapshot_mask.stat().st_size)
+        if mask_record['sha256'] != sha(survey_mask):
+            raise ValueError('Survey mask changed while copying')
     tasks=[]
-    for level,indices in [('practical',list(range(128))),('tighter',sorted(ids))]:
+    for level,indices in [('practical',list(range(n_practical))),('tighter',sorted(ids))]:
         dest=out/level;dest.mkdir()
         selected=[]
         for i in indices:
             name=f'pilot_128-eval-{i:04d}'
             folder=dest/'evaluations'/name;folder.mkdir(parents=True)
             row=dict(evaluation_id=name,**rows[i]);selected.append(row)
-            xml(model(base,row,definition['free_parameters'],level,folder),folder/'params.xml')
+            xml(model(base,row,definition['free_parameters'],level,folder,iteration_limit),folder/'params.xml')
             dump(folder/'galacticus_input_values.json',{k:(v if k=='evaluation_id' else float(v)) for k,v in row.items()})
             task=dict(task_index=len(tasks),level=level,design_index=i,evaluation_id=name,
                       input_sha256=sha(folder/'params.xml'), random_seeds=original_seeds)
@@ -349,8 +411,8 @@ def prepare(args):
         dump(dest/'campaign_design.json',dict(schema_version=2,campaign_name='energy_precision_'+level,
             n_eval=len(selected),seed=definition['seed'],free_parameters=definition['free_parameters'],
             free_parameter_short_names=[s['short_name'] for s in definition['free_parameters']],
-            master_design_sha256=definition['design_sha256'],numerics=dict(**SETTINGS[level],ac=1e-10,ode=1e-4),
-            selection='first 128' if level=='practical' else 'frozen 32-point comparison; not an independent prior sample'))
+            master_design_sha256=definition['design_sha256'],numerics=dict(**SETTINGS[level],ac=1e-10,ode=1e-4,iteration_limit=iteration_limit),
+            selection=f'first {n_practical}' if level=='practical' else ('frozen historical 32-point comparison' if (n_practical,n_tighter)==(128,32) else 'maximin prior-quantile coverage, starting at index zero; ties resolved by lowest index')))
     dump(out/'tasks.json',tasks)
     try: datasets_revision=git(Path(environment['GALACTICUS_DATA_PATH']),'rev-parse','HEAD')
     except subprocess.CalledProcessError:datasets_revision=None
@@ -361,7 +423,8 @@ def prepare(args):
         trees_per_decade=500,cpus=args.cpus,concurrency=args.concurrency,
         source_executable=str(exe),energy_source_sha256=sha(energy_source),
         required_solver_fix_merges=required_fixes, random_seeds=original_seeds,
-        isolated_dynamic_cache=isolated_cache,
+        isolated_dynamic_cache=isolated_cache, survey_mask=mask_record, iteration_limit=iteration_limit,
+        n_practical=n_practical, n_tighter=n_tighter, tighter_design_indices=ids,
         parameter_convention='Use the frozen numerical values in current upstream definitions, including Blitz frequency; migrations can change unvaried physics.'))
     q=shlex.quote
     common=['#!/bin/bash',f'#SBATCH --partition={args.partition}','#SBATCH --nodes=1','#SBATCH --ntasks=1',
@@ -369,7 +432,7 @@ def prepare(args):
     throttle=f'%{args.concurrency}' if args.concurrency else ''
     (out/'submit.slurm').write_text('\n'.join(common+['#SBATCH --job-name=energy-precision-pilot',
         f'#SBATCH --cpus-per-task={args.cpus}','#SBATCH --mem-per-cpu=10G',f'#SBATCH --time={args.walltime}',
-        f'#SBATCH --array=0-159{throttle}',f'#SBATCH --output={out}/logs/slurm-%A_%a.out',
+        f'#SBATCH --array=0-{len(tasks)-1}{throttle}',f'#SBATCH --output={out}/logs/slurm-%A_%a.out',
         f'#SBATCH --error={out}/logs/slurm-%A_%a.err','set -euo pipefail',
         f'exec {q(sys.executable)} {q(str(runner))} run {q(str(out))} --task "$SLURM_ARRAY_TASK_ID"','']))
     (out/'analyze.slurm').write_text('\n'.join(common+['#SBATCH --job-name=energy-pilot-analysis',
@@ -380,7 +443,7 @@ def prepare(args):
         folder=out/task['level']/'evaluations'/task['evaluation_id']
         (folder/'run_eval.sh').write_text('#!/bin/bash\nset -euo pipefail\n'+
             f'exec {q(sys.executable)} {q(str(runner))} run {q(str(out))} --task {task["task_index"]}\n')
-    print('Prepared 128 practical + 32 tighter runs:',out)
+    print(f'Prepared {n_practical} practical + {n_tighter} tighter runs:',out)
     print('Next: validate the generated inputs, then sbatch submit.slurm and dependent analyze.slurm')
 
 
@@ -426,7 +489,7 @@ def run(args):
         with (folder/'galacticus.out').open('w') as stdout,(folder/'galacticus.err').open('w') as stderr:
             subprocess.run([meta['executable'],'params.xml','--output-processed-parameters','params_used.xml'],
                 cwd=folder,env=env,stdout=stdout,stderr=stderr,check=True)
-        verify_parameters(ET.parse(folder/'params_used.xml').getroot(),row,definition['free_parameters'],task['level'])
+        verify_parameters(ET.parse(folder/'params_used.xml').getroot(),row,definition['free_parameters'],task['level'],meta.get('iteration_limit'))
         if 'random_seeds' in task and seeds(ET.parse(folder/'params_used.xml').getroot()) != task['random_seeds']:
             raise ValueError('Processed random seeds differ from the historical assignment')
         completion(folder/'galacticus.hdf5',meta['source_revision'])
@@ -440,7 +503,7 @@ def run(args):
 
 def validate(args):
     root,meta,tasks,env=load_run(args.root)
-    indices=args.task if args.task is not None else [0,128]
+    indices=args.task if args.task is not None else [next(t['task_index'] for t in tasks if t['level']==level) for level in ('practical','tighter')]
     definition=json.loads((root/'provenance/family_definition.json').read_text())
     for i in indices:
         if not 0<=i<len(tasks):raise ValueError('Task index out of range')
@@ -456,7 +519,7 @@ def validate(args):
             subprocess.run([meta['executable'],str(dest/'params.xml'),'--output-processed-parameters',str(dest/'params_used.xml'),'--dry-run'],
                            cwd=dest,env=case_env,stdout=log,stderr=subprocess.STDOUT,check=True)
         row=next(r for r in read_rows(root/task['level']/'samples.csv') if r['evaluation_id']==task['evaluation_id'])
-        verify_parameters(ET.parse(dest/'params_used.xml').getroot(),row,definition['free_parameters'],task['level'])
+        verify_parameters(ET.parse(dest/'params_used.xml').getroot(),row,definition['free_parameters'],task['level'],meta.get('iteration_limit'))
         if 'random_seeds' in task and seeds(ET.parse(dest/'params_used.xml').getroot()) != task['random_seeds']:
             raise ValueError('Processed random seeds differ from the historical assignment')
         print('Validated:',task['level'],task['evaluation_id'],flush=True)
@@ -472,6 +535,10 @@ def main():
     p.add_argument('--executable',type=Path,required=True);p.add_argument('--output',type=Path,required=True)
     p.add_argument('--partition',choices=['obs','dmtheory'],default='obs')
     p.add_argument('--cpus',type=int,default=8);p.add_argument('--concurrency',type=int,default=0)
+    p.add_argument('--n-practical',type=int,default=128)
+    p.add_argument('--n-tighter',type=int,default=32)
+    p.add_argument('--iteration-limit',type=int,help='Set and verify countIterationsMaximum in input and processed XML')
+    p.add_argument('--survey-mask',type=Path,help='Existing SDSS .pol file to copy into private caches')
     p.add_argument('--walltime',default='72:00:00')
     p.add_argument('--expected-revision', help='Require this exact Galacticus source revision')
     p.add_argument('--require-solver-fixes', action='store_true', help='Require merged PRs 1798 and 1802')

@@ -102,7 +102,7 @@ def analyze(args):
             item['status']='ok';good[(level,name)]=src/'galacticus.hdf5'
         except (OSError,ValueError,KeyError) as e:item['detail']=str(e)
         status.append(item)
-        print(f"{task['task_index']+1}/160 {level} {name}: {item['status']}",flush=True)
+        print(f"{task['task_index']+1}/{len(tasks)} {level} {name}: {item['status']}",flush=True)
         write_rows(out/'analysis/status.csv',status)
     # Use the established reader (dendros when installed) and compact-tail definition.
     for z in (0.,1.,2.):
@@ -147,9 +147,9 @@ def analyze(args):
         width68='(84th - 16th percentile)/2 in log radius',
         matched='Unique (mergerTreeIndex,nodeIndex); bins and weights from tighter run; no clipping; positive radii in both',
         compact='Own-model median log radius interpolated in 0.25 dex stellar spheroid-mass bins; no B/T or sigma cut',
-        caveat='Tighter subset is deliberately enriched in extremes and is not a prior sample; compare it only against its matching practical points'))
+        caveat='Tighter subset was selected for numerical comparisons, not as an independent prior sample; compare it against its matching practical points'))
     failed=[s for s in status+diagnostic_status if s['status']!='ok']
-    dump(out/'analysis/summary.json',dict(successful_runs=len(good),expected_runs=160,failures=failed))
+    dump(out/'analysis/summary.json',dict(successful_runs=len(good),expected_runs=len(tasks),failures=failed))
     print('Copy this entire reduced directory:',out)
     if failed:raise SystemExit('Some simulations or diagnostics failed; see analysis/summary.json and copied logs')
 

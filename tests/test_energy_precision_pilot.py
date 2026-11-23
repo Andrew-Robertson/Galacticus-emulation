@@ -279,3 +279,68 @@ def test_seed_changes_during_migration_are_rejected(staged, tmp_path):
     with pytest.raises(ValueError, match='Migration changed the historical random seeds'):
         pilot.prepare(args)
     assert not (args.output/'submit.slurm').exists()
+
+
+def test_small_pilot_selection_and_iteration_limit(tmp_path):
+    definition, rows = pilot.design()
+    ids = pilot.comparison_indices(pilot.FAMILY, 64, 16)
+    assert ids == pilot.comparison_indices(pilot.FAMILY, 64, 16)
+    assert len(ids) == len(set(ids)) == 16 and ids[0] == 0
+    assert all(0 <= i < 64 for i in ids)
+    for i in ids:
+        p = pilot.model(fixture_base(), rows[i], definition['free_parameters'], 'practical', tmp_path, 1000)
+        t = pilot.model(fixture_base(), rows[i], definition['free_parameters'], 'tighter', tmp_path, 1000)
+        assert pilot.one(p, 'galacticStructureSolver/countIterationsMaximum').get('value') == '1000'
+        assert pilot.seeds(p) == pilot.seeds(t) == pilot.seeds(fixture_base())
+        pilot.one(t, pilot.ENERGY+'/stepFiniteDifferenceRelative').set('value', str(pilot.SETTINGS['practical']['fd']))
+        pilot.one(t, 'galacticStructureSolver/solutionTolerance').set('value', '1e-07')
+        assert canonical(p) == canonical(t)
+        pilot.one(p, 'galacticStructureSolver/countIterationsMaximum').set('value', '100')
+        with pytest.raises(ValueError, match='countIterationsMaximum'):
+            pilot.verify_parameters(p, rows[i], definition['free_parameters'], 'practical', 1000)
+    with pytest.raises(ValueError):
+        pilot.comparison_indices(pilot.FAMILY, 64, 65)
+
+
+def test_small_pilot_staging_mask_validation_and_analysis(staged, tmp_path):
+    solver = staged.source/'source/galactic_structure/radius_solver/equilibrium.F90'
+    solver.parent.mkdir(parents=True)
+    solver.write_text('<name>countIterationsMaximum</name>')
+    subprocess.run(['git', 'add', '.'], cwd=staged.source, check=True)
+    subprocess.run(['git', '-c', 'user.name=Test', '-c', 'user.email=test@example.org',
+                    'commit', '-qm', 'add configurable iteration fixture'], cwd=staged.source, check=True)
+    args = copy.copy(staged)
+    args.output = tmp_path/'small_runs'
+    args.n_practical, args.n_tighter, args.iteration_limit = 64, 16, 1000
+    args.concurrency, args.isolated_cache = 8, True
+    (tmp_path/'datasets/dynamic').mkdir()
+    mask = tmp_path/'mask.pol'
+    mask.write_text('1 polygons\npolygon 0 ( 0 caps, 1 weight, 0 pixel, 0 str):\n')
+    args.survey_mask = mask
+    pilot.prepare(args)
+    tasks = json.loads((args.output/'tasks.json').read_text())
+    assert len(tasks) == 80
+    assert [t['design_index'] for t in tasks[:64]] == list(range(64))
+    assert len({t['design_index'] for t in tasks[64:]}) == 16
+    assert '#SBATCH --array=0-79%8' in (args.output/'submit.slurm').read_text()
+    meta = json.loads((args.output/'manifest.json').read_text())
+    assert meta['iteration_limit'] == 1000 and meta['survey_mask']['sha256'] == pilot.sha(mask)
+    pilot.validate(SimpleNamespace(root=args.output, task=None))
+    assert sorted(p.name for p in (args.output/'validation').iterdir()) == ['0', '64']
+    for i in (0, 64):
+        assert pilot.sha(args.output/f'validation/{i}/dynamic'/pilot.SURVEY_MASK) == pilot.sha(mask)
+    pilot.run(SimpleNamespace(root=args.output, task=64))
+    task = tasks[64]
+    folder = args.output/task['level']/'evaluations'/task['evaluation_id']
+    assert (folder/'SUCCESS').exists()
+    assert pilot.sha(folder/'dynamic'/pilot.SURVEY_MASK) == pilot.sha(mask)
+    with pytest.raises(SystemExit, match='failed'):
+        analysis.analyze(SimpleNamespace(root=args.output, output=tmp_path/'small_reduced'))
+    summary = json.loads((tmp_path/'small_reduced/analysis/summary.json').read_text())
+    assert summary['expected_runs'] == 80 and summary['successful_runs'] == 1
+    # Bad downloaded content must fail before an output directory is made.
+    args.output = tmp_path/'invalid_mask'
+    mask.write_text('<html>download failed</html>')
+    with pytest.raises(ValueError, match='polygon file'):
+        pilot.prepare(args)
+    assert not args.output.exists()
