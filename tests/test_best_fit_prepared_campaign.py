@@ -32,6 +32,8 @@ class PreparedCampaignTest(unittest.TestCase):
             mcmc.mkdir()
             changes = mcmc / 'maximum_a_posteriori_model_changes.xml'
             changes.write_text('<changes/>')
+            extra = root / 'unit_changes.xml'
+            extra.write_text('<changes/>')
             exe = root / 'source/Galacticus.exe'
             exe.parent.mkdir()
             exe.write_text('test executable')
@@ -40,6 +42,9 @@ class PreparedCampaignTest(unittest.TestCase):
 
             def simulate(command, *, cwd, environment):
                 calls.append(command)
+                self.assertEqual(Path(command[2]).name, 'additional_changes_00.xml')
+                self.assertEqual(command[3], changes.name)
+                self.assertEqual(Path(command[2]).read_bytes(), extra.read_bytes())
                 self.assertEqual(environment['GALACTICUS_DATA_PATH'], '/pinned/datasets')
                 self.assertEqual(environment['GALACTICUS_EXEC_PATH'], str(exe.parent))
                 params = ET.parse(command[1]).getroot()
@@ -52,7 +57,7 @@ class PreparedCampaignTest(unittest.TestCase):
 
             argv = ['runner', '--campaign-root', str(root), '--mcmc-dir', str(mcmc),
                     '--output-dir', str(out), '--galacticus-executable', str(exe),
-                    '--no-postprocess-emission-line-dust']
+                    '--no-postprocess-emission-line-dust', '--changes-file', str(extra)]
             with patch('sys.argv', argv), patch.object(runner, '_run', simulate):
                 runner.main()
                 with self.assertRaises(FileExistsError):

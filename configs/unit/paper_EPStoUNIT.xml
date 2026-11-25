@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Paper EPS-to-UNIT conversion, frozen for the corrected-code MAP validation.
+     Compatibility updates for PR1785: simulation/massParticle reference syntax;
+     relativePosition -> orbitalPosition (upstream migration fef23b1e).
+     The caller supplies the file list and batch weight normalization. -->
+<changes>
+
+
+
+<!-- Things to remove -->
+<change type="remove" path="chemicalReactionRate"/> <!-- If the inclusion of these is based on the mass resolution of the trees, should I either be using or not using this for both EPS and UNIT? -->
+<change type="remove" path="chemicalsToTrack"/>
+<change type="remove" path="nodeOperator/nodeOperator[@value='CGMChemistry']"/>
+
+<change type="remove" path="nodeOperator/nodeOperator[@value='subsubhaloPromotion']"/>
+<change type="remove" path="nodeOperator/nodeOperator[@value='satelliteOrbit']"/>
+<change type="remove" path="nodeOperator/nodeOperator[@value='satelliteDynamicalFriction']"/>
+<change type="remove" path="nodeOperator/nodeOperator[@value='satelliteTidalMassLoss']"/>
+<change type="remove" path="nodeOperator/nodeOperator[@value='satelliteTidalHeating']"/>
+<change type="remove" path="nodeOperator/nodeOperator[@value='satelliteMergingRadiusTrigger']"/>
+<change type="remove" path="nodeOperator/nodeOperator[@value='satelliteDestructionMassThreshold']"/>
+
+<change type="remove" path="mergerTreeEvolveTimestep/mergerTreeEvolveTimestep[@value='satelliteDestruction']"/>
+<change type="remove" path="mergerTreeEvolveTimestep/mergerTreeEvolveTimestep[@value='hostTidalMassLoss']"/>
+<change type="remove" path="mergerTreeOperator[@value='regridTimes']"/>
+
+
+
+
+<!-- Things to replace -->
+<change type="replace" path="coolingFunction">
+  <coolingFunction value="atomicCIECloudy"/> <!-- EPS runs include more cooling mechanisms, does this make sense? -->
+</change>
+
+<change type="replace" path="mergerTreeConstructor"> 
+  <mergerTreeConstructor value="read">
+    <!-- Specify the merger tree files to read. -->
+    <fileNames                            value="/carnegie/nobackup/groups/dmtheory/mergerTrees/UNIT/Tree_UNIT_001_SF10000_d1.hdf5"/>
+    <!-- Consistency checks and validation. -->
+    <outputTimeSnapTolerance              value="0.001"    />
+    <missingHostsAreFatal                 value="true     "/>
+    <!-- Specify tree structure options. -->
+    <allowSubhaloPromotions               value="true"     />
+    <allowBranchJumps                     value="true"     />
+    <!-- Ensure that the most massive progenitor is always the one to be promoted, even if it is a subhalo. -->
+    <alwaysPromoteMostMassive             value="true"     />
+    <!-- Preset the indices of subhalos to match those in the merger tree file. -->
+    <presetSubhaloIndices                 value="true"     />
+    <!-- Use merger tree node positions to compute orbits at the virial radius. -->
+    <presetMergerTimes                    value="true"     />
+    <presetMergerNodes                    value="true"     />
+    <presetOrbits                         value="true"     />
+    <presetOrbitsSetAll                   value="true"     />
+    <presetOrbitsAssertAllSet             value="true"     />
+    <presetOrbitsBoundOnly                value="true"     />
+    <!-- Preset structural properties of the halos. -->
+    <presetSubhaloMasses                  value="true"     />
+    <presetScaleRadii                     value="true"     />
+    <presetScaleRadiiConcentrationMinimum value=" 3"       />
+    <presetScaleRadiiConcentrationMaximum value="60"       />
+    <presetAngularMomenta                 value="false"    />
+    <scaleRadiiFailureIsFatal             value="false"    />
+    <!-- Preset the halo positions/velocities. -->
+    <presetPositions                      value="true"     />
+  </mergerTreeConstructor>
+  <mergerTreeOperator value="scaleWeight">
+    <scaleFactor value="10000.0" /> <!-- 1 / fraction of simulation merger tree files being used -->
+  </mergerTreeOperator>
+</change>
+
+<change type="replace" path="darkMatterProfileScaleRadius"> 
+  <darkMatterProfileScaleRadius value="concentrationLimiter">
+    <!-- Limit scale radii to keep concentrations within a reasonable range. -->
+    <concentrationMinimum value="  3.0"/>
+    <concentrationMaximum value="100.0"/>
+    <!-- Use the Diemer & Joyce (2019; ApJ; 871; 168; http://adsabs.harvard.edu/abs/2019ApJ...871..168D) model for concentrations. -->
+    <darkMatterProfileScaleRadius value="concentration">
+      <correctForConcentrationDefinition value="true"/>
+      <darkMatterProfileConcentration value="diemerJoyce2019">
+      </darkMatterProfileConcentration>
+    </darkMatterProfileScaleRadius>
+  </darkMatterProfileScaleRadius>
+</change>
+
+
+<!-- Things to update -->
+<change type="update" path="componentPosition" value="cartesian"/>
+<change type="update" path="componentSatellite" value="preset"/>
+<change type="update" path="hotHaloRamPressureForce" value="orbitalPosition"/>
+<change type="replaceOrAppend" path="mergerTreeEvolver/allTreesExistAtFinalTime" value="false"/>
+<change type="update" path="mergerTreeEvolveTimestep/mergerTreeEvolveTimestep[@value='satellite']/timeOffsetMaximumAbsolute" value="0.0"/>
+<change type="update" path="mergerTreeEvolveTimestep/mergerTreeEvolveTimestep[@value='satellite']/timeOffsetMaximumRelative" value="0.0"/>
+<change type="update" path="outputFileName" value="romanUNIT.hdf5"/>
+
+<!-- Things to add -->
+<change type="append" path="nodeOperator"> <!-- Does this work? I don't really understand the insert before/after stuff given that order doesn't matter (I thought) -->
+<nodeOperator value="assemblyHistoryHeuristics">
+  <exponentGrowth value="100.0"/>
+  <nbodyHaloMassError value="trenti2010">
+    <correlationMassExponent value="1.000e0"/>
+    <correlationNormalization value="1.000e0"/>
+    <correlationRedshiftExponent value="0.000e0"/>
+    <massParticle value="=[simulation/massParticle]"/>
+  </nbodyHaloMassError>
+  <sigmaThreshold value="5.0"/>
+</nodeOperator>
+</change>
+
+<change type="append" path="">
+  <mergerTreeImporter>
+    <fatalMismatches value="true" />
+    <reweightTrees value="false" />
+    <validateData value="false" />
+  </mergerTreeImporter>
+  <mergerTreeInitializor />
+</change>
+
+
+</changes>
+
+
+

@@ -51,6 +51,10 @@ def parse_args() -> argparse.Namespace:
         help="Template evaluation directory containing run_eval.sh. Overrides --template-evaluation-index.",
     )
     parser.add_argument("--template-evaluation-index", type=int, default=0)
+    parser.add_argument("--changes-file", type=Path, action="append", default=[],
+                        help="Additional changes applied after base inputs and before MAP/output changes.")
+    parser.add_argument("--dry-run-first", action="store_true")
+    parser.add_argument("--reduced-output", default=None)
     parser.add_argument("--root-host-mass-minimum", type=float, default=None,
                         help="Override the root-host minimum in a prepared input (Msun).")
     parser.add_argument("--processed-parameters", default="params.xml")
@@ -266,6 +270,14 @@ def main() -> None:
         )
     else:
         galacticus_command = _command_from_parameter_files(args, changes_path.name)
+    if args.changes_file:
+        insertion = galacticus_command.index(changes_path.name)
+        extras = []
+        for index, source in enumerate(args.changes_file):
+            dest = output_dir / f"additional_changes_{index:02d}.xml"
+            shutil.copy2(source.expanduser().resolve(), dest)
+            extras.append(str(dest))
+        galacticus_command[insertion:insertion] = extras
     host_override = None
     if args.root_host_mass_minimum is not None:
         prepared = output_dir / "template_input.xml"
@@ -311,6 +323,8 @@ def main() -> None:
                         ("SHMR_PATH", "PYTHONPATH", "OMP_NUM_THREADS")},
     }
     (output_dir / "run_provenance.json").write_text(json.dumps(provenance, indent=2) + "\n")
+    if args.dry_run_first:
+        _run(galacticus_command + ["--dry-run"], cwd=output_dir, environment=environment)
     _run(galacticus_command, cwd=output_dir, environment=environment)
     import h5py
     with h5py.File(output_dir / args.galacticus_output, "r") as output:
@@ -343,6 +357,10 @@ def main() -> None:
     if args.plot_mass_function_results:
         _run([args.python_command, _expand_path(args.plot_mass_function_script)], cwd=output_dir, environment=environment)
 
+    if args.reduced_output:
+        _run([args.python_command, str(REPO_ROOT / "scripts/extract_campaign_hdf5_groups.py"),
+              args.galacticus_output, "--output-filename", args.reduced_output],
+             cwd=output_dir, environment=environment)
     (output_dir / "complete.json").write_text(json.dumps({
         "statusCompletion": 0, "dust_processed": args.postprocess_emission_line_dust,
         "processed_parameters_sha256": _sha(output_dir / args.processed_parameters),
