@@ -124,3 +124,44 @@ The regression tests check the paired physical coordinates and seeds, all
 refusal to overwrite outputs, and the three Slurm dependency relationships.
 They use a fixture executable; actual Galacticus validation and evolution run
 on Caltech. The existing precision-pilot tests also remain applicable.
+
+## FSPS initialization failure and private retry (25 November)
+
+All twelve jobs in coefficient_sweep_20261125 failed while initializing FSPS.
+The logs show imf.f90 was already patched, but the shared FSPS installation had
+neither patched.status nor autosps.exe. This records an incomplete installation;
+these logs do not establish which earlier operation first failed.
+
+Our older local static patches also fail against pristine FSPS 4.0 (two of the
+three ssp_gen.f90 hunks). The current official patches apply cleanly to all five
+FSPS files. The retry pins datasets revision
+77d9aa7bf4eae9c01be89f0566b8eb6e3b46989e, downloads its five patches and IMF
+module, and records checksums. It does not update shared static datasets.
+
+With the same environment as the Galacticus build, set a fresh
+ENERGY_COEFFICIENT_OUTPUT and run:
+
+```bash
+bash "$SETUP/scripts/submit_energy_coefficients_fsps_retry.sh"
+```
+
+This queues a private FSPS build (one CPU, 16 GB, two hours), then preparation,
+the twelve simulations, and analysis with the existing dependency rules.
+The existing Galacticus.exe_energyCoefficients is reused. FSPS sources are
+extracted anew in ${ENERGY_COEFFICIENT_OUTPUT}_tools; other tools are symlinked
+from the existing tools directory. The shared FSPS installation is untouched.
+GALACTICUS_TOOLS_PATH is captured in the new campaign manifest. FSPS build logs
+and the copied bootstrap script are in ${ENERGY_COEFFICIENT_OUTPUT}_fsps_build.
+The source archive, patches, IMF module and build provenance remain in the
+private tools directory. The patched.status marker is written only after a
+successful compilation. If this job fails, dependent simulations cannot start.
+
+Reuse the previously staged mask by setting ENERGY_COEFFICIENT_SURVEY_MASK to
+coefficient_sweep_20261125/provenance/sdss_dr72safe0_res6d.pol under the campaign
+family directory. Use a fresh launcher export containing both new scripts.
+No model coefficients, seeds or numerical tolerances change in this retry.
+
+Local checks exercise patch application, failed patches, protection of the
+shared installation, and the four-job dependency chain using fixture tools.
+The official patches were separately checked against the actual FSPS v4.0
+sources. Fortran compilation and spectral generation require the Caltech run.

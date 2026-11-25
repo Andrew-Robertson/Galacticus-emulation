@@ -107,6 +107,9 @@ def prepare(args):
     out.mkdir(parents=True)
     for folder in ('provenance', 'executable', 'logs', 'practical', 'tighter'):
         (out/folder).mkdir()
+    fsps_provenance = Path(environment['GALACTICUS_TOOLS_PATH'])/'fsps_build_provenance.json'
+    if fsps_provenance.is_file():
+        shutil.copy2(fsps_provenance, out/'provenance/fsps_build_provenance.json')
     for name in ('family_definition.json', 'design_1024.csv'):
         shutil.copy2(p.FAMILY/name, out/'provenance'/name)
     shutil.copy2(base_path, out/'provenance/historical_base.xml')

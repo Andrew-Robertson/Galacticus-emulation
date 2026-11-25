@@ -58,12 +58,17 @@ def test_prepare_run_and_guards(staged, tmp_path, monkeypatch):
     mask.parent.mkdir(parents=True)
     mask.write_bytes(b'1 polygons\n'+b' '*1000000)
     root = tmp_path/'coefficients'
+    tools_dir = tmp_path/'private_tools'
+    tools_dir.mkdir()
+    (tools_dir/'fsps_build_provenance.json').write_text('{"fixture": true}\n')
+    monkeypatch.setenv('GALACTICUS_TOOLS_PATH', str(tools_dir))
     args = SimpleNamespace(root=root, source=staged.source, executable=staged.executable)
     sweep.prepare(args)
     migration = next(c for c in commands if any(str(x).endswith('parametersMigrate.py') for x in c))
     assert migration[migration.index('--lastModifiedRevision')+1] == sweep.MIGRATION_BASE
     assert json.loads((root/'provenance/migration_basis.json').read_text())['migration_base'] == sweep.MIGRATION_BASE
     assert (root/'PREPARED').exists()
+    assert (root/'provenance/fsps_build_provenance.json').read_bytes() == (tools_dir/'fsps_build_provenance.json').read_bytes()
     tasks = json.loads((root/'tasks.json').read_text())
     assert len(tasks) == 12
     assert all((root/'validation'/t['evaluation_id']/'SUCCESS').exists() for t in tasks)
@@ -107,3 +112,16 @@ def test_submission_dependencies_without_built_executable(tmp_path):
     calls = [json.loads(s) for s in (tmp_path/'submitted.jsonl').read_text().splitlines()]
     assert not any(arg.startswith('--dependency=') for arg in calls[3])
     assert '--dependency=afterok:104' in calls[4]
+    # The private-FSPS retry adds one build prerequisite, using the existing
+    # Galacticus executable. The fresh tools path is exported to every job.
+    shared = tmp_path/'shared_tools'
+    shared.mkdir()
+    env.update(ENERGY_COEFFICIENT_OUTPUT=str(tmp_path/'fsps_retry'),
+               GALACTICUS_TOOLS_PATH=str(shared), FCCOMPILER=str(executable))
+    subprocess.run(['bash', str(repo/'scripts/submit_energy_coefficients_fsps_retry.sh')], env=env, check=True)
+    calls = [json.loads(s) for s in (tmp_path/'submitted.jsonl').read_text().splitlines()]
+    assert '--job-name=energy-fsps-build' in calls[6]
+    assert calls[6][-2:] == [str(shared), str(tmp_path/'fsps_retry_tools')]
+    assert '--dependency=afterok:107' in calls[7]
+    assert '--dependency=afterok:108' in calls[8]
+    assert '--dependency=afterok:108,afterany:109' in calls[9]
