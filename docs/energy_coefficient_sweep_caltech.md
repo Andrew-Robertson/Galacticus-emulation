@@ -42,6 +42,14 @@ saved design values in current parameter definitions, as for the OBS pilot.
 It also enforces current Blitz parameters and the accretion angular-momentum
 setting. Original and migrated inputs, the design and final XML files are saved.
 
+The input's lastModified revision 400084ec432a2e9f437a5fd6618df97731c4d073
+is on the original bar-prescription fork. Migration explicitly starts from its
+verified upstream common ancestor ffecc960d43b861eddc701c496ac5f340e0e3f70,
+using --lastModifiedRevision, and records this in migration_basis.json. The
+two fork-only commits add the bar model and its transition, whose settings are
+replaced explicitly by this launcher. Merely fetching the old fork revision
+would yield an empty ancestry path to the pinned build and skip migrations.
+
 The legacy family_definition.json documents the earlier pilot defaults; the
 new tasks.json and final params.xml record the actual coefficients and tighter
 numerical settings used here. The six coefficients are not random prior draws.

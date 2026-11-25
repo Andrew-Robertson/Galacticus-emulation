@@ -46,6 +46,13 @@ def test_prepare_run_and_guards(staged, tmp_path, monkeypatch):
     shutil.copy2(staged.original/'base_parameters.xml', repo/'inputs/energy_coefficients/historical_base.xml')
     monkeypatch.setattr(sweep, 'BASE_SHA', p.sha(staged.original/'base_parameters.xml'))
     monkeypatch.setattr(sweep, 'REVISION', p.git(staged.source, 'rev-parse', 'HEAD'))
+    monkeypatch.setattr(sweep, 'MIGRATION_BASE', sweep.REVISION)
+    commands = []
+    real_run = subprocess.run
+    def recording_run(command, *args, **kwargs):
+        commands.append(command)
+        return real_run(command, *args, **kwargs)
+    monkeypatch.setattr(subprocess, 'run', recording_run)
     monkeypatch.setattr(p, 'REPO', repo)
     mask = Path(os.environ['GALACTICUS_DATA_PATH'])/'dynamic'/p.SURVEY_MASK
     mask.parent.mkdir(parents=True)
@@ -53,6 +60,9 @@ def test_prepare_run_and_guards(staged, tmp_path, monkeypatch):
     root = tmp_path/'coefficients'
     args = SimpleNamespace(root=root, source=staged.source, executable=staged.executable)
     sweep.prepare(args)
+    migration = next(c for c in commands if any(str(x).endswith('parametersMigrate.py') for x in c))
+    assert migration[migration.index('--lastModifiedRevision')+1] == sweep.MIGRATION_BASE
+    assert json.loads((root/'provenance/migration_basis.json').read_text())['migration_base'] == sweep.MIGRATION_BASE
     assert (root/'PREPARED').exists()
     tasks = json.loads((root/'tasks.json').read_text())
     assert len(tasks) == 12

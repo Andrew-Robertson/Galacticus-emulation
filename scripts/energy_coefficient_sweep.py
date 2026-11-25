@@ -20,6 +20,11 @@ import prepare_energy_precision_pilot as p
 
 REVISION = 'f6648df263bf65b582f44c29683b72ab3ad27db6'
 BASE_SHA = '43cae987c6139647554ab2a3f11f763759647aa13cf8192725ba9ad1f691bd4a'
+# The input names fork-only revision 400084ec. Its two commits since this
+# upstream ancestor add the bar prescription and transition, which model()
+# replaces explicitly. Migrating from that fork revision gives an empty
+# --ancestry-path even when its Git object is available.
+MIGRATION_BASE = 'ffecc960d43b861eddc701c496ac5f340e0e3f70'
 MASK_URL = 'https://zenodo.org/records/10998446/files/sdss_dr72safe0_res6d.pol.gz'
 
 
@@ -85,6 +90,7 @@ def prepare(args):
         raise FileExistsError(f'Use a fresh campaign directory: {out}')
     if p.git(source, 'rev-parse', 'HEAD') != REVISION or p.git(source, 'diff', 'HEAD', '--'):
         raise ValueError('Expected clean pinned Galacticus source')
+    subprocess.run(['git', '-C', str(source), 'merge-base', '--is-ancestor', MIGRATION_BASE, REVISION], check=True)
     if not exe.is_file() or not os.access(exe, os.X_OK):
         raise ValueError(f'Build is missing: {exe}')
     base_path = p.REPO/'inputs/energy_coefficients/historical_base.xml'
@@ -111,9 +117,14 @@ def prepare(args):
     env = dict(os.environ, **environment, GALACTICUS_EXEC_PATH=str(source))
     env['PYTHONPATH'] = str(source/'python')+os.pathsep+env.get('PYTHONPATH', '')
     migrated = out/'base_parameters.xml'
+    p.dump(out/'provenance/migration_basis.json', dict(
+        input_revision=ET.parse(base_path).getroot().find('lastModified').get('revision'),
+        migration_base=MIGRATION_BASE, target_revision=REVISION,
+        reason='Input revision is on the original bar-model fork; use its verified upstream common ancestor. The fork-only bar-model settings are explicitly replaced.'))
     with (out/'provenance/migration.log').open('w') as log:
         subprocess.run([sys.executable, str(source/'scripts/aux/parametersMigrate.py'),
-                        str(base_path), str(migrated), '--validate', 'no'], cwd=source, env=env,
+                        str(base_path), str(migrated), '--validate', 'no',
+                        '--lastModifiedRevision', MIGRATION_BASE], cwd=source, env=env,
                        stdout=log, stderr=subprocess.STDOUT, check=True)
     base = ET.parse(migrated).getroot()
     seeds = p.seeds(ET.parse(base_path).getroot())
