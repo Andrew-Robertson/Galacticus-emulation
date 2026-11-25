@@ -77,6 +77,12 @@ export SHMR_PATH=/home/arobert2/GalacticusEmu/make-SHMR-datasets
 bash "$SETUP/scripts/submit_energy_coefficients_caltech.sh" 8135663
 ```
 
+For a retry after the build has completed, pass `built` instead of its job ID.
+This requires an existing executable and submits preparation without a build
+dependency (old completed jobs can age out of Slurm's dependency records).
+Use a fresh ENERGY_COEFFICIENT_OUTPUT, preserving the failed preparation logs.
+The revision/clean-source checks and all simulation dependencies still apply.
+
 The setup submits three jobs immediately:
 
 1. Preparation afterok the build: migrate, freeze inputs and executable, stage

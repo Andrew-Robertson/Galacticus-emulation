@@ -98,3 +98,12 @@ def test_submission_dependencies_without_built_executable(tmp_path):
     assert '--array=0-11%4' in calls[1]
     assert '--dependency=afterok:101,afterany:102' in calls[2]
     assert all('--kill-on-invalid-dep=yes' in c for c in calls)
+    # A completed build may have aged out of Slurm's dependency records.
+    executable = tmp_path/'existing.exe'
+    executable.write_text('#!/bin/sh\nexit 0\n')
+    executable.chmod(0o755)
+    env.update(ENERGY_COEFFICIENT_OUTPUT=str(tmp_path/'retry'), ENERGY_COEFFICIENT_EXECUTABLE=str(executable))
+    subprocess.run(['bash', str(repo/'scripts/submit_energy_coefficients_caltech.sh'), 'built'], env=env, check=True)
+    calls = [json.loads(s) for s in (tmp_path/'submitted.jsonl').read_text().splitlines()]
+    assert not any(arg.startswith('--dependency=') for arg in calls[3])
+    assert '--dependency=afterok:104' in calls[4]
