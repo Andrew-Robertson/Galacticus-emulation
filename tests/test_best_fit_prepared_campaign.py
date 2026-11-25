@@ -70,6 +70,19 @@ class PreparedCampaignTest(unittest.TestCase):
             self.assertEqual(proof['executable_sha256'], runner._sha(exe))
             self.assertTrue((out / 'complete.json').is_file())
 
+    def test_final_overlay_uses_identical_absolute_output_names(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            overlay = runner._write_output_change(root / 'output.xml', 'romanUNIT.hdf5')
+            # Emulate the previous layers, including the relative UNIT output.
+            values = {'outputFileName': 'romanUNIT.hdf5',
+                      'outputScratchFileName': str(root / 'romanUNIT.hdf5')}
+            for change in ET.parse(overlay).getroot():
+                self.assertEqual(change.get('type'), 'replaceOrAppend')
+                values[change.get('path')] = change.get('value')
+            self.assertEqual(values['outputFileName'], values['outputScratchFileName'])
+            self.assertEqual(values['outputFileName'], str(root / 'romanUNIT.hdf5'))
+
     def test_host_extension_changes_only_lower_limit(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / 'input.xml'

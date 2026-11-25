@@ -87,7 +87,12 @@ def _copy_model_changes(source: Path, destination_dir: Path, filename: str) -> P
 
 def _write_output_change(path: Path, output_filename: str) -> Path:
     root = ET.Element("changes")
-    ET.SubElement(root, "change", type="update", path="outputFileName", value=output_filename)
+    # Galacticus compares these names as strings before renaming. An absolute
+    # scratch path and relative final path can alias the same inode, causing its
+    # overwrite-rename helper to delete the source. Set both in the LAST overlay.
+    final_path = str((path.parent / output_filename).resolve())
+    for parameter in ("outputFileName", "outputScratchFileName"):
+        ET.SubElement(root, "change", type="replaceOrAppend", path=parameter, value=final_path)
     tree = ET.ElementTree(root)
     ET.indent(tree, space="  ")
     tree.write(path, encoding="UTF-8", xml_declaration=True)

@@ -30,12 +30,13 @@ def main():
     parser.add_argument('--campaign-root', type=Path, required=True)
     parser.add_argument('--trees-dir', type=Path, default=Path(os.environ.get(
         'UNIT_MERGER_TREES_PATH', '/carnegie/nobackup/groups/dmtheory/mergerTrees/UNIT')))
+    parser.add_argument('--output-dir', type=Path, help='Separate destination for a retry; must not exist.')
     parser.add_argument('--submit', action='store_true')
     args = parser.parse_args()
     campaign = args.campaign_root.resolve()
     view = campaign / 'preliminary_mixed_1020_20261118T211707Z'
     mcmc = view / 'gp_mcmc_preliminary' / RUN
-    output = mcmc / 'bestFitModels_UNIT10_array'
+    output = (args.output_dir.resolve() if args.output_dir else mcmc / 'bestFitModels_UNIT10_array')
     exe = campaign / 'diagnostics/eval0043_pr1785_20261113T234018Z/source/Galacticus.exe'
     source_map = mcmc / 'maximum_a_posteriori_model_changes.xml'
     tree_files = [args.trees_dir.resolve() / f'Tree_UNIT_001_SF10000_d{i}.hdf5' for i in range(1,101)]
