@@ -77,6 +77,7 @@ variables:
   COMBINED_PREFIX: mcmc_all_standard_observables_plus_${HALPHA_TAG}
 
   BEST_FIT_GALACTICUS_EXECUTABLE: $GALACTICUS_EXEC_PATH/Galacticus.exe
+  COMBINED_BEST_FIT_EXTRA_ARGS: []
   BEST_FIT_GALACTICUS_OUTPUT: romanEPS_massFunction.hdf5
   BEST_FIT_PARAMETER_FILES:
     - $GALACTICUS_PARAMETER_FILES/hierarchicalParameters/romanEPS.xml
@@ -278,6 +279,12 @@ variables:
     - --progress
 
 profiles:
+  map_hosts_to_resolution:
+    variables:
+      COMBINED_BEST_FIT_EXTRA_ARGS:
+        - --root-host-mass-minimum
+        - "2e10"
+      COMBINED_BEST_FIT_RUN_DIR: ${COMBINED_MCMC_ROOT}/bestFitModel_GalacticusRun_hosts2e10
   paper_sobral_log_errors:
     # Reproduce the final paper's retargeted Sobral bundle directly at training.
     # This changes observational target errors, not GP training uncertainties.
@@ -1399,6 +1406,7 @@ stages:
           - --galacticus-output
           - ${BEST_FIT_GALACTICUS_OUTPUT}
           - --postprocess-emission-line-dust
+          - ${COMBINED_BEST_FIT_EXTRA_ARGS}
 
   - name: export_combined_posterior_draw_xmls
     description: Export changes.xml-style files for random posterior draws from the combined MCMC.

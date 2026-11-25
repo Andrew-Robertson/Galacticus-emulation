@@ -65,6 +65,26 @@ class PreparedCampaignTest(unittest.TestCase):
             self.assertEqual(proof['executable_sha256'], runner._sha(exe))
             self.assertTrue((out / 'complete.json').is_file())
 
+    def test_host_extension_changes_only_lower_limit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'input.xml'
+            text = ('<parameters><mergerTreeBuildMasses value="sampledDistributionUniform">'
+                    '<massTreeMinimum value="1e11"/><massTreeMaximum value="3e14"/>'
+                    '<treesPerDecade value="5000"/></mergerTreeBuildMasses>'
+                    '<mergerTreeMassResolution value="fixed"><massResolution value="2e10"/>'
+                    '</mergerTreeMassResolution><randomNumberGenerator><seed value="1234"/>'
+                    '</randomNumberGenerator></parameters>')
+            path.write_text(text)
+            with self.assertRaises(ValueError):
+                runner._extend_root_hosts(path, 1e10)
+            self.assertEqual(path.read_text(), text)
+            proof = runner._extend_root_hosts(path, 2e10)
+            actual = ET.parse(path).getroot()
+            expected = ET.fromstring(text)
+            expected.find('mergerTreeBuildMasses/massTreeMinimum').set('value', '20000000000')
+            self.assertEqual(ET.tostring(actual), ET.tostring(expected))
+            self.assertEqual(proof['old_minimum'], 1e11)
+
     def test_legacy_command_still_replaces_model_and_output(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve()

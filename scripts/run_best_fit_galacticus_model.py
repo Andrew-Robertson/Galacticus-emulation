@@ -51,6 +51,8 @@ def parse_args() -> argparse.Namespace:
         help="Template evaluation directory containing run_eval.sh. Overrides --template-evaluation-index.",
     )
     parser.add_argument("--template-evaluation-index", type=int, default=0)
+    parser.add_argument("--root-host-mass-minimum", type=float, default=None,
+                        help="Override the root-host minimum in a prepared input (Msun).")
     parser.add_argument("--processed-parameters", default="params.xml")
     parser.add_argument("--galacticus-output", default="romanEPS_massFunction.hdf5")
     parser.add_argument("--python-command", default=sys.executable)
@@ -189,6 +191,26 @@ def _command_from_parameter_files(args: argparse.Namespace, changes_filename: st
     ]
 
 
+def _extend_root_hosts(path: Path, minimum: float) -> dict:
+    tree = ET.parse(path)
+    root = tree.getroot()
+    masses = root.find("mergerTreeBuildMasses")
+    resolution = root.find("mergerTreeMassResolution/massResolution")
+    if masses is None or masses.get("value") != "sampledDistributionUniform" or resolution is None:
+        raise ValueError("Root-host override requires sampledDistributionUniform and fixed mass resolution")
+    lower = masses.find("massTreeMinimum")
+    if lower is None:
+        raise ValueError("Missing root-host mass minimum")
+    old = float(lower.get("value"))
+    if not float(resolution.get("value")) <= minimum < old:
+        raise ValueError("New minimum must be at least the resolution and below the original minimum")
+    lower.set("value", format(minimum, ".16g"))
+    tree.write(path, encoding="UTF-8", xml_declaration=True)
+    return {"old_minimum": old, "new_minimum": minimum,
+            "trees_per_decade": masses.find("treesPerDecade").get("value"),
+            "note": "Seed retained; changed sampling does not guarantee matching overlapping trees."}
+
+
 def _sha(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -244,6 +266,12 @@ def main() -> None:
         )
     else:
         galacticus_command = _command_from_parameter_files(args, changes_path.name)
+    host_override = None
+    if args.root_host_mass_minimum is not None:
+        prepared = output_dir / "template_input.xml"
+        if not prepared.is_file():
+            raise ValueError("Root-host override currently requires a prepared campaign input.xml")
+        host_override = _extend_root_hosts(prepared, args.root_host_mass_minimum)
     exe = Path(galacticus_command[0]).resolve()
     environment = _environment(args.campaign_root, exe, output_dir)
     (output_dir / "cache").mkdir(exist_ok=True)
@@ -272,6 +300,7 @@ def main() -> None:
         source_revision, source_status = None, None
     provenance = {
         "command": galacticus_command, "cwd": str(output_dir),
+        "root_host_override": host_override,
         "executable": str(exe), "executable_sha256": _sha(exe),
         "source_checkout_revision": source_revision, "source_checkout_status": source_status,
         "input_sha256": inputs, "map_source": str(source_changes),
